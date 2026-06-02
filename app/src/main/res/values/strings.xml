@@ -1,3 +1,18 @@
 <resources>
     <string name="app_name">MIDI Randomizer</string>
+    <string name="status_disconnected">Device disconnected</string>
+    <string name="status_playing">Playing…</string>
+    <string name="status_stopped">Stopped</string>
+    <string name="label_bpm">BPM: %1$d</string>
+    <string name="label_velocity">Velocity: %1$d</string>
+    <string name="label_octave">Octave: %1$d</string>
+    <string name="channel_format">Ch %1$d</string>
+    <string name="midi_not_supported">MIDI not supported on this device</string>
+    <string name="no_devices_found">No MIDI devices found</string>
+    <string name="connect_device_hint">Connect a MIDI device or use a MIDI app with virtual ports.</string>
+    <string name="tap_to_connect">Tap a device to connect.</string>
+    <string name="service_not_ready">Service not ready</string>
+    <string name="last_note_format">Last note: %1$s (MIDI %2$d, vel %3$d)</string>
+    <string name="btn_start">START</string>
+    <string name="btn_stop">STOP</string>
 </resources>
