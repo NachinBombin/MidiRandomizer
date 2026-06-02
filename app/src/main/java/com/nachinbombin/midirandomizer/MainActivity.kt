@@ -1,5 +1,6 @@
 package com.nachinbombin.midirandomizer
 
+import android.Manifest
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -7,13 +8,16 @@ import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.media.midi.MidiDeviceInfo
 import android.media.midi.MidiManager
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.view.View
 import android.widget.*
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 
 class MainActivity : AppCompatActivity(), MidiService.MidiEventListener {
 
@@ -70,6 +74,16 @@ class MainActivity : AppCompatActivity(), MidiService.MidiEventListener {
         }
     }
 
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        if (isGranted) {
+            startMidiService()
+        } else {
+            Toast.makeText(this, "Notification permission required for background playback", Toast.LENGTH_LONG).show()
+        }
+    }
+
     private val deviceCallback = object : MidiManager.DeviceCallback() {
         override fun onDeviceAdded(device: MidiDeviceInfo) {
             refreshDeviceList()
@@ -90,8 +104,28 @@ class MainActivity : AppCompatActivity(), MidiService.MidiEventListener {
         setupMidi()
         setupListeners()
 
+        checkPermissionsAndStartService()
+    }
+
+    private fun checkPermissionsAndStartService() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                startMidiService()
+            }
+        } else {
+            startMidiService()
+        }
+    }
+
+    private fun startMidiService() {
         val intent = Intent(this, MidiService::class.java)
-        startService(intent)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
         bindService(intent, connection, BIND_AUTO_CREATE)
     }
 
@@ -232,16 +266,22 @@ class MainActivity : AppCompatActivity(), MidiService.MidiEventListener {
     }
 
     override fun onNotePlayed(noteName: String, midiNote: Int, velocity: Int) {
-        tvLastNote.text = getString(R.string.last_note_format, noteName, midiNote, velocity)
+        mainHandler.post {
+            tvLastNote.text = getString(R.string.last_note_format, noteName, midiNote, velocity)
+        }
     }
 
     override fun onStatusChanged(status: String) {
-        tvStatus.text = status
+        mainHandler.post {
+            tvStatus.text = status
+        }
     }
 
     override fun onPlaybackStateChanged(playing: Boolean) {
-        btnStartStop.text = if (playing) getString(R.string.btn_stop) else getString(R.string.btn_start)
-        tvStatus.text = if (playing) getString(R.string.status_playing) else getString(R.string.status_stopped)
+        mainHandler.post {
+            btnStartStop.text = if (playing) getString(R.string.btn_stop) else getString(R.string.btn_start)
+            tvStatus.text = if (playing) getString(R.string.status_playing) else getString(R.string.status_stopped)
+        }
     }
 
     override fun onDestroy() {

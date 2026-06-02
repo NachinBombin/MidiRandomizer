@@ -90,6 +90,10 @@ class MidiService : Service() {
     }
 
     fun connectToDevice(info: MidiDeviceInfo) {
+        if (midiDevice?.info?.id == info.id) {
+            Log.d(TAG, "Already connected to device: ${info.id}")
+            return
+        }
         closeDevice()
         Log.d(TAG, "Connecting to device: ${info.id}")
         midiManager?.openDevice(info, { device ->
@@ -117,6 +121,7 @@ class MidiService : Service() {
                     closeDevice()
                 }
             } else {
+                Log.w(TAG, "Device has no input ports: ${info.id}")
                 notifyStatus("Device has no input ports")
             }
         }, mainHandler)
@@ -132,24 +137,28 @@ class MidiService : Service() {
         }
         inputPort = null
         midiDevice = null
-        notifyStatus("Disconnected")
     }
 
     fun togglePlayback() {
         Log.d(TAG, "togglePlayback: isPlaying=$isPlaying, inputPort=${inputPort != null}")
-        if (isPlaying) stopPlaying() else startPlaying()
+        if (isPlaying) {
+            stopPlaying()
+        } else {
+            startPlaying()
+        }
     }
 
     private fun startPlaying() {
-        if (inputPort == null) {
-            Log.w(TAG, "startPlaying: inputPort is null")
-            notifyStatus("No device connected")
-            return
-        }
         if (isPlaying) return
         isPlaying = true
         Log.i(TAG, "Starting playback")
-        startForeground(NOTIFICATION_ID, createNotification())
+        
+        // Ensure we are in foreground
+        try {
+            startForeground(NOTIFICATION_ID, createNotification())
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to ensure foreground service", e)
+        }
         
         scheduler = Executors.newSingleThreadExecutor()
         scheduler?.execute(noteLoop)
@@ -191,7 +200,6 @@ class MidiService : Service() {
     }
 
     private fun sendRandomNote() {
-        val port = inputPort ?: return
         if (currentNoteNumber >= 0) sendNoteOff(currentNoteNumber)
 
         val intervals = scaleIntervals.getOrNull(selectedScale) ?: return
@@ -206,29 +214,42 @@ class MidiService : Service() {
             clampedNote.toByte(),
             clampedVelocity.toByte()
         )
-        try {
-            port.send(noteOnMsg, 0, noteOnMsg.size)
-            currentNoteNumber = clampedNote
-            val noteName = noteNumberToName(clampedNote)
-            mainHandler.post { listener?.onNotePlayed(noteName, clampedNote, clampedVelocity) }
-        } catch (e: IOException) {
-            notifyStatus("Send error: ${e.message}")
-            stopPlaying()
+
+        // Send to physical/external port if connected
+        inputPort?.let { port ->
+            try {
+                port.send(noteOnMsg, 0, noteOnMsg.size)
+            } catch (e: IOException) {
+                Log.e(TAG, "IOException in sendRandomNote (physical port)", e)
+            }
         }
+
+        // Always send to virtual port if it exists
+        MidiOutputService.getInstance()?.sendMidiToClients(noteOnMsg, 0, noteOnMsg.size, 0)
+
+        currentNoteNumber = clampedNote
+        val noteName = noteNumberToName(clampedNote)
+        mainHandler.post { listener?.onNotePlayed(noteName, clampedNote, clampedVelocity) }
+        Log.v(TAG, "Sent Note ON: $clampedNote to ${if (inputPort != null) "physical" else "virtual only"}")
     }
 
     private fun sendNoteOff(noteNumber: Int) {
-        val port = inputPort ?: return
         val noteOffMsg = byteArrayOf(
             (0x80 or channel).toByte(),
             noteNumber.toByte(),
             0
         )
-        try {
-            port.send(noteOffMsg, 0, noteOffMsg.size)
-        } catch (e: IOException) {
-            Log.e(TAG, "Error sending note off", e)
+
+        inputPort?.let { port ->
+            try {
+                port.send(noteOffMsg, 0, noteOffMsg.size)
+            } catch (e: IOException) {
+                Log.e(TAG, "Error sending note off (physical port)", e)
+            }
         }
+
+        MidiOutputService.getInstance()?.sendMidiToClients(noteOffMsg, 0, noteOffMsg.size, 0)
+        Log.v(TAG, "Sent Note OFF: $noteNumber")
     }
 
     private fun noteNumberToName(midiNote: Int): String {
@@ -273,6 +294,12 @@ class MidiService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // We must call startForeground as soon as possible if we were started with startForegroundService
+        try {
+            startForeground(NOTIFICATION_ID, createNotification())
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in onStartCommand startForeground", e)
+        }
         return START_STICKY
     }
 
