@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <array name="initial_octave_values">
+    <array name="default_octave_range">
         <item>3.0</item>
         <item>5.0</item>
     </array>
