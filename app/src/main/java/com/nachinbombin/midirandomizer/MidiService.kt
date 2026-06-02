@@ -22,6 +22,10 @@ class MidiService : Service() {
         private const val TAG = "MidiService"
         private const val CHANNEL_ID = "midi_channel"
         private const val NOTIFICATION_ID = 1
+        
+        const val TIMING_METRONOME = 0
+        const val TIMING_MIXED = 1
+        const val TIMING_RANDOMIZED = 2
     }
 
     private val binder = LocalBinder()
@@ -36,9 +40,11 @@ class MidiService : Service() {
     private var isPlaying = false
     private var bpm = 120
     private var velocity = 100
-    private var octave = 4
+    private var minOctave = 3
+    private var maxOctave = 5
     private var channel = 0
     private var selectedScale = 0
+    private var timingMode = TIMING_METRONOME
     private var currentNoteNumber = -1
 
     private val scales = mapOf(
@@ -81,12 +87,14 @@ class MidiService : Service() {
         listener?.onPlaybackStateChanged(isPlaying)
     }
 
-    fun updateParameters(bpm: Int, velocity: Int, octave: Int, channel: Int, scale: Int) {
+    fun updateParameters(bpm: Int, velocity: Int, minOct: Int, maxOct: Int, chan: Int, scale: Int, timing: Int) {
         this.bpm = bpm
         this.velocity = velocity
-        this.octave = octave
-        this.channel = channel
+        this.minOctave = minOct
+        this.maxOctave = maxOct
+        this.channel = chan
         this.selectedScale = scale
+        this.timingMode = timing
     }
 
     fun connectToDevice(info: MidiDeviceInfo) {
@@ -191,11 +199,31 @@ class MidiService : Service() {
         while (isPlaying) {
             sendRandomNote()
             try {
-                val intervalMs = (60_000.0 / bpm).toLong()
+                val intervalMs = calculateInterval()
                 Thread.sleep(intervalMs)
             } catch (e: InterruptedException) {
                 break
             }
+        }
+    }
+
+    private fun calculateInterval(): Long {
+        val baseInterval = (60_000.0 / bpm).toLong()
+        return when (timingMode) {
+            TIMING_METRONOME -> baseInterval
+            TIMING_MIXED -> {
+                // 30% chance of a flurry/grace note (short delay)
+                if (Random.nextFloat() < 0.3f) {
+                    baseInterval / 2
+                } else {
+                    baseInterval
+                }
+            }
+            TIMING_RANDOMIZED -> {
+                // Range from 50% to 150% of base interval
+                (baseInterval * (0.5 + Random.nextDouble())).toLong()
+            }
+            else -> baseInterval
         }
     }
 
@@ -204,7 +232,12 @@ class MidiService : Service() {
 
         val intervals = scaleIntervals.getOrNull(selectedScale) ?: return
         val interval = intervals[Random.nextInt(intervals.size)]
-        val noteNumber = (octave + 1) * 12 + interval
+        
+        // Pick a random octave within the range
+        val range = maxOctave - minOctave + 1
+        val selectedOctave = minOctave + Random.nextInt(range)
+        
+        val noteNumber = (selectedOctave + 1) * 12 + interval
         val clampedNote = noteNumber.coerceIn(0, 127)
         val randomVelocity = if (velocity >= 127) 127 else (velocity - 10).coerceAtLeast(1) + Random.nextInt(20)
         val clampedVelocity = randomVelocity.coerceIn(1, 127)

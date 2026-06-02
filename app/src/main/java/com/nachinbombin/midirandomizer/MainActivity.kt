@@ -18,6 +18,7 @@ import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import com.google.android.material.slider.RangeSlider
 
 class MainActivity : AppCompatActivity(), MidiService.MidiEventListener {
 
@@ -32,8 +33,9 @@ class MainActivity : AppCompatActivity(), MidiService.MidiEventListener {
     private lateinit var tvBpm: TextView
     private lateinit var seekVelocity: SeekBar
     private lateinit var tvVelocity: TextView
-    private lateinit var seekOctave: SeekBar
     private lateinit var tvOctave: TextView
+    private lateinit var rangeOctave: RangeSlider
+    private lateinit var rgTiming: RadioGroup
     private lateinit var spinnerChannel: Spinner
     private lateinit var spinnerScale: Spinner
     private lateinit var deviceListView: ListView
@@ -41,9 +43,11 @@ class MainActivity : AppCompatActivity(), MidiService.MidiEventListener {
 
     private var bpm = 120
     private var velocity = 100
-    private var octave = 4
+    private var minOctave = 3
+    private var maxOctave = 5
     private var channel = 0
     private var selectedScale = 0
+    private var timingMode = MidiService.TIMING_METRONOME
 
     private val deviceAdapter by lazy { ArrayAdapter<String>(this, android.R.layout.simple_list_item_1) }
     private val deviceMap = mutableMapOf<String, MidiDeviceInfo>()
@@ -91,7 +95,7 @@ class MainActivity : AppCompatActivity(), MidiService.MidiEventListener {
         override fun onDeviceRemoved(device: MidiDeviceInfo) {
             if (selectedDeviceInfo?.id == device.id) {
                 selectedDeviceInfo = null
-                tvStatus.text = getString(R.string.status_disconnected)
+                runOnUiThread { tvStatus.text = getString(R.string.status_disconnected) }
             }
             refreshDeviceList()
         }
@@ -137,8 +141,9 @@ class MainActivity : AppCompatActivity(), MidiService.MidiEventListener {
         tvBpm = findViewById(R.id.tvBpm)
         seekVelocity = findViewById(R.id.seekVelocity)
         tvVelocity = findViewById(R.id.tvVelocity)
-        seekOctave = findViewById(R.id.seekOctave)
         tvOctave = findViewById(R.id.tvOctave)
+        rangeOctave = findViewById(R.id.rangeOctave)
+        rgTiming = findViewById(R.id.rgTiming)
         spinnerChannel = findViewById(R.id.spinnerChannel)
         spinnerScale = findViewById(R.id.spinnerScale)
         deviceListView = findViewById(R.id.listViewDevices)
@@ -152,9 +157,8 @@ class MainActivity : AppCompatActivity(), MidiService.MidiEventListener {
         seekVelocity.progress = velocity - 1
         tvVelocity.text = getString(R.string.label_velocity, velocity)
 
-        seekOctave.max = 8
-        seekOctave.progress = octave
-        tvOctave.text = getString(R.string.label_octave, octave)
+        // Initial octave label
+        tvOctave.text = getString(R.string.label_octave_range, minOctave, maxOctave)
 
         val channelAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item,
             (1..16).map { getString(R.string.channel_format, it) })
@@ -219,15 +223,34 @@ class MainActivity : AppCompatActivity(), MidiService.MidiEventListener {
             override fun onStopTrackingTouch(sb: SeekBar) {}
         })
 
-        seekOctave.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb: SeekBar, progress: Int, fromUser: Boolean) {
-                octave = progress
-                tvOctave.text = getString(R.string.label_octave, octave)
-                updateServiceParams()
+        rangeOctave.addOnChangeListener { slider, _, _ ->
+            val values = slider.values
+            var low = values[0].toInt()
+            var high = values[1].toInt()
+            
+            // Enforce minimum span of 1 octave (diff of 1 in the slider)
+            if (high - low < 1) {
+                // This shouldn't happen much with stepSize=1.0 and snaps, 
+                // but let's be safe.
+                if (low > 0) low = high - 1 else high = low + 1
+                slider.values = listOf(low.toFloat(), high.toFloat())
             }
-            override fun onStartTrackingTouch(sb: SeekBar) {}
-            override fun onStopTrackingTouch(sb: SeekBar) {}
-        })
+            
+            minOctave = low
+            maxOctave = high
+            tvOctave.text = getString(R.string.label_octave_range, minOctave, maxOctave)
+            updateServiceParams()
+        }
+
+        rgTiming.setOnCheckedChangeListener { _, checkedId ->
+            timingMode = when (checkedId) {
+                R.id.rbMetronome -> MidiService.TIMING_METRONOME
+                R.id.rbMixed -> MidiService.TIMING_MIXED
+                R.id.rbRandomized -> MidiService.TIMING_RANDOMIZED
+                else -> MidiService.TIMING_METRONOME
+            }
+            updateServiceParams()
+        }
 
         spinnerChannel.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>, view: View?, pos: Int, id: Long) {
@@ -262,7 +285,7 @@ class MainActivity : AppCompatActivity(), MidiService.MidiEventListener {
     }
 
     private fun updateServiceParams() {
-        midiService?.updateParameters(bpm, velocity, octave, channel, selectedScale)
+        midiService?.updateParameters(bpm, velocity, minOctave, maxOctave, channel, selectedScale, timingMode)
     }
 
     override fun onNotePlayed(noteName: String, midiNote: Int, velocity: Int) {

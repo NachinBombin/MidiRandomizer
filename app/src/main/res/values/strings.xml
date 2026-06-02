@@ -5,7 +5,7 @@
     <string name="status_stopped">Stopped</string>
     <string name="label_bpm">BPM: %1$d</string>
     <string name="label_velocity">Velocity: %1$d</string>
-    <string name="label_octave">Octave: %1$d</string>
+    <string name="label_octave_range">Octave Range: %1$d - %2$d</string>
     <string name="channel_format">Ch %1$d</string>
     <string name="midi_not_supported">MIDI not supported on this device</string>
     <string name="no_devices_found">No MIDI devices found</string>
@@ -15,4 +15,9 @@
     <string name="last_note_format">Last note: %1$s (MIDI %2$d, vel %3$d)</string>
     <string name="btn_start">START</string>
     <string name="btn_stop">STOP</string>
+
+    <string name="label_timing">TIMING MODE</string>
+    <string name="timing_metro">Metro</string>
+    <string name="timing_mixed">Mixed</string>
+    <string name="timing_random">Random</string>
 </resources>

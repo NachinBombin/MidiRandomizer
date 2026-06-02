@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#111318"
@@ -111,23 +112,73 @@
             android:thumbTint="#4F9AA5"
             android:layout_marginBottom="16dp"/>
 
-        <!-- Octave -->
+        <!-- Octave Range -->
         <TextView
             android:id="@+id/tvOctave"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Octave: 4"
+            android:text="@string/label_octave_range"
             android:textSize="14sp"
             android:textColor="#E8E6E1"
             android:layout_marginBottom="4dp"/>
 
-        <SeekBar
-            android:id="@+id/seekOctave"
+        <com.google.android.material.slider.RangeSlider
+            android:id="@+id/rangeOctave"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:progressTint="#4F9AA5"
-            android:thumbTint="#4F9AA5"
+            android:valueFrom="0.0"
+            android:valueTo="8.0"
+            android:stepSize="1.0"
+            app:values="@array/initial_octave_values"
+            app:thumbColor="#4F9AA5"
+            app:trackColorActive="#4F9AA5"
             android:layout_marginBottom="16dp"/>
+
+        <!-- Timing Mode -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/label_timing"
+            android:textSize="11sp"
+            android:textColor="#797876"
+            android:letterSpacing="0.12"
+            android:layout_marginBottom="6dp"/>
+
+        <RadioGroup
+            android:id="@+id/rgTiming"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="20dp">
+
+            <RadioButton
+                android:id="@+id/rbMetronome"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/timing_metro"
+                android:textColor="#E8E6E1"
+                android:checked="true"
+                android:buttonTint="#4F9AA5"/>
+
+            <RadioButton
+                android:id="@+id/rbMixed"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/timing_mixed"
+                android:textColor="#E8E6E1"
+                android:buttonTint="#4F9AA5"/>
+
+            <RadioButton
+                android:id="@+id/rbRandomized"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/timing_random"
+                android:textColor="#E8E6E1"
+                android:buttonTint="#4F9AA5"/>
+        </RadioGroup>
 
         <!-- MIDI Channel -->
         <TextView
