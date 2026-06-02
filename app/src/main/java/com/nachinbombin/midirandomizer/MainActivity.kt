@@ -42,9 +42,7 @@ class MainActivity : AppCompatActivity(),
             midiService = binder.getService()
             isBound = true
             mainFragment.onServiceReady()
-            midiService?.updateProSettings(proFragment.let {
-                ProSettings()  // defaults until user changes them
-            })
+            midiService?.updateProSettings(proFragment.buildSettings())
         }
         override fun onServiceDisconnected(arg0: ComponentName) {
             midiService = null; isBound = false

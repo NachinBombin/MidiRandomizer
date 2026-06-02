@@ -11,11 +11,25 @@
         android:orientation="vertical"
         android:padding="20dp">
 
+        <!-- Header -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/label_pro_features"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:textColor="#FFD700"
+            android:letterSpacing="0.05"
+            android:drawableStart="@drawable/ic_pro_badge"
+            android:drawablePadding="8dp"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="16dp"/>
+
         <!-- ═══ PRESETS ═══════════════════════════════════════════════════ -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="QUICK PRESETS"
+            android:text="@string/label_quick_presets"
             android:textSize="11sp"
             android:textColor="#797876"
             android:letterSpacing="0.12"
@@ -42,7 +56,7 @@
             android:id="@+id/tvJitterAmount"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Jitter: 0 %"
+            android:text="@string/label_jitter_amount"
             android:textSize="14sp"
             android:textColor="#E8E6E1"
             android:layout_marginBottom="4dp"/>
@@ -59,7 +73,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="JITTER DISTRIBUTION"
+            android:text="@string/label_jitter_distribution"
             android:textSize="11sp"
             android:textColor="#797876"
             android:letterSpacing="0.12"
@@ -76,7 +90,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="VELOCITY PATTERN"
+            android:text="@string/label_velocity_pattern"
             android:textSize="11sp"
             android:textColor="#797876"
             android:letterSpacing="0.12"
@@ -93,7 +107,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="TIER 2 — EUCLIDEAN RHYTHM"
+            android:text="@string/label_euclidean_rhythm"
             android:textSize="11sp"
             android:textColor="#4F9AA5"
             android:letterSpacing="0.12"
@@ -103,7 +117,7 @@
             android:id="@+id/switchEuclidean"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Enable Euclidean Mode"
+            android:text="@string/label_enable_euclidean"
             android:textColor="#E8E6E1"
             android:textSize="14sp"
             android:thumbTint="#4F9AA5"
@@ -121,7 +135,7 @@
                 android:id="@+id/tvEucSteps"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Steps: 16"
+                android:text="@string/label_euc_steps"
                 android:textSize="14sp"
                 android:textColor="#E8E6E1"
                 android:layout_marginBottom="4dp"/>
@@ -140,7 +154,7 @@
                 android:id="@+id/tvEucDensity"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Density: 5 / 16 pulses"
+                android:text="@string/label_euc_density"
                 android:textSize="14sp"
                 android:textColor="#E8E6E1"
                 android:layout_marginBottom="4dp"/>
@@ -159,7 +173,7 @@
                 android:id="@+id/tvEucRotation"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Rotation: 0"
+                android:text="@string/label_euc_rotation"
                 android:textSize="14sp"
                 android:textColor="#E8E6E1"
                 android:layout_marginBottom="4dp"/>
@@ -180,7 +194,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="TIER 2 — MELODIC LOGIC (MARKOV)"
+            android:text="@string/label_melodic_logic"
             android:textSize="11sp"
             android:textColor="#4F9AA5"
             android:letterSpacing="0.12"
@@ -191,7 +205,7 @@
             android:id="@+id/switchMarkov"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Enable Melodic Logic"
+            android:text="@string/label_enable_markov"
             android:textColor="#E8E6E1"
             android:textSize="14sp"
             android:thumbTint="#4F9AA5"
@@ -208,7 +222,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="LOGIC STYLE"
+                android:text="@string/label_logic_style"
                 android:textSize="11sp"
                 android:textColor="#797876"
                 android:letterSpacing="0.12"

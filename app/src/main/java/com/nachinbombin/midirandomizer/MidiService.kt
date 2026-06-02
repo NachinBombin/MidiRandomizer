@@ -113,7 +113,7 @@ class MidiService : Service() {
         this.channel       = chan
         this.selectedScale = scale
         this.timingMode    = timing
-        velocityShaper = VelocityShaper(proSettings.velocityPattern, velocity)
+        velocityShaper.baseVelocity = velocity
     }
 
     fun updateProSettings(settings: ProSettings) {

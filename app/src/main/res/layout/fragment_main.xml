@@ -137,7 +137,7 @@
             android:valueFrom="0"
             android:valueTo="8"
             app:values="@array/default_octave_range"
-            app:stepSize="1.0"
+            android:stepSize="1.0"
             app:thumbColor="#4F9AA5"
             app:trackColorActive="#4F9AA5"
             app:trackColorInactive="#393836"

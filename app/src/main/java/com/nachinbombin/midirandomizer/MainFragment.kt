@@ -82,6 +82,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
 
     fun onServiceReady() {
         host?.getMidiService()?.setListener(this)
+        push()
     }
 
     // ── Bind ──────────────────────────────────────────────────────────────────
@@ -155,7 +156,15 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         })
         rangeOctave.addOnChangeListener { slider, _, _ ->
             val vals = slider.values
-            minOctave = vals[0].toInt(); maxOctave = vals[1].toInt()
+            var low = vals[0].toInt()
+            var high = vals[1].toInt()
+            
+            if (high - low < 1) {
+                if (low > 0) low = high - 1 else high = low + 1
+                slider.values = listOf(low.toFloat(), high.toFloat())
+            }
+            
+            minOctave = low; maxOctave = high
             tvOctave.text = getString(R.string.label_octave_range, minOctave, maxOctave)
             push()
         }

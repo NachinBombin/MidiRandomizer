@@ -9,7 +9,7 @@ import kotlin.random.Random
  *
  * All outputs are in the range [1, 127].
  */
-class VelocityShaper(private val pattern: VelocityPattern, private val baseVelocity: Int) {
+class VelocityShaper(private val pattern: VelocityPattern, var baseVelocity: Int) {
 
     private var step = 0
     private val cycleLen = 8   // steps per full envelope cycle
@@ -36,8 +36,8 @@ class VelocityShaper(private val pattern: VelocityPattern, private val baseVeloc
                 val range = (baseVelocity * 0.5).toInt().coerceAtLeast(1)
                 val pos = step % cycleLen
                 val half = cycleLen / 2
-                if (pos <= half) lo + (range * pos / half)
-                else lo + (range * (cycleLen - pos) / half)
+                if (pos <= half) lo + (range * pos / (half.coerceAtLeast(1)))
+                else lo + (range * (cycleLen - pos) / (half.coerceAtLeast(1)))
             }
 
             VelocityPattern.ACCENT_BEATS -> {

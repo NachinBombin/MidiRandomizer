@@ -88,10 +88,10 @@ class ProSettingsFragment : Fragment() {
     }
 
     private fun populateSpinners() {
-        spinnerJitterType.adapter = simpleAdapter(JitterType.values().map { it.label })
-        spinnerVelPattern.adapter = simpleAdapter(VelocityPattern.values().map { it.label })
-        spinnerLogicStyle.adapter = simpleAdapter(MelodicLogicStyle.values().map { it.label })
-        spinnerPreset.adapter     = simpleAdapter(ProPreset.values().map { it.label })
+        spinnerJitterType.adapter = simpleAdapter(JitterType.entries.map { it.label })
+        spinnerVelPattern.adapter = simpleAdapter(VelocityPattern.entries.map { it.label })
+        spinnerLogicStyle.adapter = simpleAdapter(MelodicLogicStyle.entries.map { it.label })
+        spinnerPreset.adapter     = simpleAdapter(ProPreset.entries.map { it.label })
     }
 
     private fun restoreState() {
@@ -108,7 +108,7 @@ class ProSettingsFragment : Fragment() {
         seekEucDensity.max        = (current.euclideanSteps - 1).coerceAtLeast(1)
         seekEucDensity.progress   = current.euclideanDensity - 1
         tvEucDensity.text         = eucDensityLabel(current.euclideanDensity, current.euclideanSteps)
-        seekEucRotation.max       = current.euclideanSteps - 1
+        seekEucRotation.max       = (current.euclideanSteps - 1).coerceAtLeast(1)
         seekEucRotation.progress  = current.euclideanRotation
         tvEucRotation.text        = eucRotLabel(current.euclideanRotation)
 
@@ -125,53 +125,60 @@ class ProSettingsFragment : Fragment() {
         // Jitter amount
         seekJitter.setOnSeekBarChangeListener(simpleSeekListener { p ->
             tvJitter.text = jitterLabel(p)
-            notify()
+            notifySettings()
         })
 
         // Jitter type
-        spinnerJitterType.onItemSelectedListener = simpleSpinnerListener { notify() }
+        spinnerJitterType.onItemSelectedListener = simpleSpinnerListener { notifySettings() }
 
         // Velocity pattern
-        spinnerVelPattern.onItemSelectedListener = simpleSpinnerListener { notify() }
+        spinnerVelPattern.onItemSelectedListener = simpleSpinnerListener { notifySettings() }
 
         // Euclidean toggle
         switchEuclidean.setOnCheckedChangeListener { _, on ->
             layoutEuclidean.visibility = if (on) View.VISIBLE else View.GONE
-            notify()
+            notifySettings()
         }
 
         // Euclidean steps
         seekEucSteps.setOnSeekBarChangeListener(simpleSeekListener { p ->
             val steps = p + 2
             tvEucSteps.text = eucStepsLabel(steps)
-            // Clamp density
-            if (seekEucDensity.progress >= steps) seekEucDensity.progress = steps - 1
-            seekEucDensity.max = steps - 1
-            seekEucRotation.max = steps - 1
-            notify()
+            
+            // Adjust density max and progress
+            val newDensityMax = steps - 1
+            if (seekEucDensity.progress > newDensityMax) seekEucDensity.progress = newDensityMax
+            seekEucDensity.max = newDensityMax
+            
+            // Adjust rotation max and progress
+            val newRotMax = steps - 1
+            if (seekEucRotation.progress > newRotMax) seekEucRotation.progress = newRotMax
+            seekEucRotation.max = newRotMax
+            
+            notifySettings()
         })
 
         // Euclidean density
         seekEucDensity.setOnSeekBarChangeListener(simpleSeekListener { p ->
             val steps = seekEucSteps.progress + 2
             tvEucDensity.text = eucDensityLabel(p + 1, steps)
-            notify()
+            notifySettings()
         })
 
         // Euclidean rotation
         seekEucRotation.setOnSeekBarChangeListener(simpleSeekListener { p ->
             tvEucRotation.text = eucRotLabel(p)
-            notify()
+            notifySettings()
         })
 
         // Markov toggle
         switchMarkov.setOnCheckedChangeListener { _, on ->
             layoutMarkov.visibility = if (on) View.VISIBLE else View.GONE
-            notify()
+            notifySettings()
         }
 
         // Logic style
-        spinnerLogicStyle.onItemSelectedListener = simpleSpinnerListener { notify() }
+        spinnerLogicStyle.onItemSelectedListener = simpleSpinnerListener { notifySettings() }
 
         // Preset
         spinnerPreset.onItemSelectedListener = simpleSpinnerListener { applyPreset() }
@@ -180,7 +187,7 @@ class ProSettingsFragment : Fragment() {
     // ── Preset logic ──────────────────────────────────────────────────────────
 
     private fun applyPreset() {
-        val preset = ProPreset.values().getOrNull(spinnerPreset.selectedItemPosition)
+        val preset = ProPreset.entries.getOrNull(spinnerPreset.selectedItemPosition)
             ?: ProPreset.NONE
         when (preset) {
             ProPreset.AMBIENT_TEXTURE -> {
@@ -206,32 +213,33 @@ class ProSettingsFragment : Fragment() {
             }
             ProPreset.NONE -> { /* manual — don't override */ }
         }
-        notify()
+        notifySettings()
     }
 
     // ── Build & emit current settings ─────────────────────────────────────────
 
-    private fun notify() {
+    private fun notifySettings() {
         val settings = buildSettings()
         current = settings
         listener?.onProSettingsChanged(settings)
     }
 
-    private fun buildSettings(): ProSettings {
+    fun buildSettings(): ProSettings {
+        if (!::seekEucSteps.isInitialized) return current
         val steps    = seekEucSteps.progress + 2
         val density  = (seekEucDensity.progress + 1).coerceIn(1, steps)
         val rotation = seekEucRotation.progress
         return ProSettings(
             jitterAmount      = seekJitter.progress,
-            jitterType        = JitterType.values().getOrElse(spinnerJitterType.selectedItemPosition) { JitterType.UNIFORM },
-            velocityPattern   = VelocityPattern.values().getOrElse(spinnerVelPattern.selectedItemPosition) { VelocityPattern.RANDOM },
+            jitterType        = JitterType.entries.getOrElse(spinnerJitterType.selectedItemPosition) { JitterType.UNIFORM },
+            velocityPattern   = VelocityPattern.entries.getOrElse(spinnerVelPattern.selectedItemPosition) { VelocityPattern.RANDOM },
             euclideanEnabled  = switchEuclidean.isChecked,
             euclideanSteps    = steps,
             euclideanDensity  = density,
             euclideanRotation = rotation,
             markovEnabled     = switchMarkov.isChecked,
-            melodicLogicStyle = MelodicLogicStyle.values().getOrElse(spinnerLogicStyle.selectedItemPosition) { MelodicLogicStyle.STEPWISE },
-            activePreset      = ProPreset.values().getOrElse(spinnerPreset.selectedItemPosition) { ProPreset.NONE }
+            melodicLogicStyle = MelodicLogicStyle.entries.getOrElse(spinnerLogicStyle.selectedItemPosition) { MelodicLogicStyle.STEPWISE },
+            activePreset      = ProPreset.entries.getOrElse(spinnerPreset.selectedItemPosition) { ProPreset.NONE }
         )
     }
 
@@ -256,8 +264,8 @@ class ProSettingsFragment : Fragment() {
         }
 
     // ── Label helpers ─────────────────────────────────────────────────────────
-    private fun jitterLabel(v: Int)             = "Jitter: $v %"
-    private fun eucStepsLabel(s: Int)           = "Steps: $s"
-    private fun eucDensityLabel(d: Int, s: Int) = "Density: $d / $s pulses"
-    private fun eucRotLabel(r: Int)             = "Rotation: $r"
+    private fun jitterLabel(v: Int)             = getString(R.string.label_jitter_amount, v)
+    private fun eucStepsLabel(s: Int)           = getString(R.string.label_euc_steps, s)
+    private fun eucDensityLabel(d: Int, s: Int) = getString(R.string.label_euc_density, d, s)
+    private fun eucRotLabel(r: Int)             = getString(R.string.label_euc_rotation, r)
 }

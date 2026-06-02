@@ -20,4 +20,19 @@
     <string name="timing_metro">Metro</string>
     <string name="timing_mixed">Mixed</string>
     <string name="timing_random">Random</string>
+    <string name="timing_euclidean">Eucl.</string>
+
+    <string name="label_pro_features">PRO FEATURES</string>
+    <string name="label_quick_presets">QUICK PRESETS</string>
+    <string name="label_jitter_amount">Jitter: %1$d %%</string>
+    <string name="label_jitter_distribution">JITTER DISTRIBUTION</string>
+    <string name="label_velocity_pattern">VELOCITY PATTERN</string>
+    <string name="label_euclidean_rhythm">TIER 2 — EUCLIDEAN RHYTHM</string>
+    <string name="label_enable_euclidean">Enable Euclidean Mode</string>
+    <string name="label_euc_steps">Steps: %1$d</string>
+    <string name="label_euc_density">Density: %1$d / %2$d pulses</string>
+    <string name="label_euc_rotation">Rotation: %1$d</string>
+    <string name="label_melodic_logic">TIER 2 — MELODIC LOGIC (MARKOV)</string>
+    <string name="label_enable_markov">Enable Melodic Logic</string>
+    <string name="label_logic_style">LOGIC STYLE</string>
 </resources>
