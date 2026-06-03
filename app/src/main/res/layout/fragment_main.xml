@@ -1,0 +1,243 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#111318">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <!-- Title row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="4dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="MIDI Randomizer"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:textColor="#E8E6E1"/>
+
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="No device connected"
+            android:textSize="13sp"
+            android:textColor="#4F9AA5"
+            android:layout_marginBottom="20dp"/>
+
+        <!-- MIDI Devices -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="MIDI DEVICES"
+            android:textSize="11sp"
+            android:textColor="#797876"
+            android:letterSpacing="0.12"
+            android:layout_marginBottom="6dp"/>
+
+        <ListView
+            android:id="@+id/listViewDevices"
+            android:layout_width="match_parent"
+            android:layout_height="120dp"
+            android:background="#1C1B19"
+            android:divider="#262523"
+            android:dividerHeight="1dp"/>
+
+        <TextView
+            android:id="@+id/tvDeviceInfo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textSize="12sp"
+            android:textColor="#797876"
+            android:layout_marginTop="6dp"
+            android:layout_marginBottom="20dp"/>
+
+        <!-- Scale -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="SCALE"
+            android:textSize="11sp"
+            android:textColor="#797876"
+            android:letterSpacing="0.12"
+            android:layout_marginBottom="6dp"/>
+
+        <Spinner
+            android:id="@+id/spinnerScale"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="#1C1B19"
+            android:layout_marginBottom="16dp"/>
+
+        <!-- BPM -->
+        <TextView
+            android:id="@+id/tvBpm"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="BPM: 120"
+            android:textSize="14sp"
+            android:textColor="#E8E6E1"
+            android:layout_marginBottom="4dp"/>
+
+        <SeekBar
+            android:id="@+id/seekBpm"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="280"
+            android:progressTint="#4F9AA5"
+            android:thumbTint="#4F9AA5"
+            android:layout_marginBottom="16dp"/>
+
+        <!-- Velocity -->
+        <TextView
+            android:id="@+id/tvVelocity"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Velocity: 100"
+            android:textSize="14sp"
+            android:textColor="#E8E6E1"
+            android:layout_marginBottom="4dp"/>
+
+        <SeekBar
+            android:id="@+id/seekVelocity"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="126"
+            android:progressTint="#4F9AA5"
+            android:thumbTint="#4F9AA5"
+            android:layout_marginBottom="16dp"/>
+
+        <!-- Octave range -->
+        <TextView
+            android:id="@+id/tvOctave"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Octave range: 3 – 5"
+            android:textSize="14sp"
+            android:textColor="#E8E6E1"
+            android:layout_marginBottom="4dp"/>
+
+        <com.google.android.material.slider.RangeSlider
+            android:id="@+id/rangeOctave"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:valueFrom="0"
+            android:valueTo="8"
+            app:values="@array/default_octave_range"
+            android:stepSize="1.0"
+            app:thumbColor="#4F9AA5"
+            app:trackColorActive="#4F9AA5"
+            app:trackColorInactive="#393836"
+            android:layout_marginBottom="16dp"/>
+
+        <!-- MIDI Channel -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="MIDI CHANNEL"
+            android:textSize="11sp"
+            android:textColor="#797876"
+            android:letterSpacing="0.12"
+            android:layout_marginBottom="6dp"/>
+
+        <Spinner
+            android:id="@+id/spinnerChannel"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="#1C1B19"
+            android:layout_marginBottom="16dp"/>
+
+        <!-- Timing mode -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="TIMING MODE"
+            android:textSize="11sp"
+            android:textColor="#797876"
+            android:letterSpacing="0.12"
+            android:layout_marginBottom="6dp"/>
+
+        <RadioGroup
+            android:id="@+id/rgTiming"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="20dp">
+
+            <RadioButton
+                android:id="@+id/rbMetronome"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Metro"
+                android:textColor="#E8E6E1"
+                android:buttonTint="#4F9AA5"
+                android:checked="true"/>
+
+            <RadioButton
+                android:id="@+id/rbMixed"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Mixed"
+                android:textColor="#E8E6E1"
+                android:buttonTint="#4F9AA5"/>
+
+            <RadioButton
+                android:id="@+id/rbRandomized"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Random"
+                android:textColor="#E8E6E1"
+                android:buttonTint="#4F9AA5"/>
+
+            <RadioButton
+                android:id="@+id/rbEuclidean"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Eucl."
+                android:textColor="#E8E6E1"
+                android:buttonTint="#4F9AA5"/>
+
+        </RadioGroup>
+
+        <!-- Last note display -->
+        <TextView
+            android:id="@+id/tvLastNote"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Last note: —"
+            android:textSize="15sp"
+            android:textColor="#6DAA45"
+            android:layout_marginBottom="20dp"/>
+
+        <!-- Start / Stop -->
+        <Button
+            android:id="@+id/btnStartStop"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="START"
+            android:textSize="16sp"
+            android:textColor="#F7F6F2"
+            android:backgroundTint="#01696F"
+            android:layout_marginBottom="8dp"/>
+
+    </LinearLayout>
+</ScrollView>

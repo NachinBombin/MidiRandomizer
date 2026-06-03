@@ -1,3 +1,44 @@
 <resources>
     <string name="app_name">MIDI Randomizer</string>
+    <string name="status_disconnected">Device disconnected</string>
+    <string name="status_playing">Playing…</string>
+    <string name="status_stopped">Stopped</string>
+    <string name="label_bpm">BPM: %1$d</string>
+    <string name="label_velocity">Velocity: %1$d</string>
+    <string name="label_octave_range">Octave Range: %1$d - %2$d</string>
+    <string name="channel_format">Ch %1$d</string>
+    <string name="midi_not_supported">MIDI not supported on this device</string>
+    <string name="no_devices_found">No MIDI devices found</string>
+    <string name="connect_device_hint">Connect a MIDI device or use a MIDI app with virtual ports.</string>
+    <string name="tap_to_connect">Tap a device to connect.</string>
+    <string name="service_not_ready">Service not ready</string>
+    <string name="last_note_format">Last note: %1$s (MIDI %2$d, vel %3$d)</string>
+    <string name="btn_start">START</string>
+    <string name="btn_stop">STOP</string>
+
+    <string name="label_timing">TIMING MODE</string>
+    <string name="timing_metro">Metro</string>
+    <string name="timing_mixed">Mixed</string>
+    <string name="timing_random">Random</string>
+    <string name="timing_euclidean">Eucl.</string>
+
+    <string name="label_pro_features">PRO FEATURES</string>
+    <string name="label_quick_presets">QUICK PRESETS</string>
+    <string name="label_jitter_amount">Jitter: %1$d %%</string>
+    <string name="label_jitter_distribution">JITTER DISTRIBUTION</string>
+    <string name="label_velocity_pattern">VELOCITY PATTERN</string>
+    <string name="label_timing_humanization">TIER 1 — TIMING HUMANIZATION</string>
+    <string name="label_v1_vel">V1 VEL\n%1$d</string>
+    <string name="label_v2_vel">V2 VEL\n%1$d</string>
+    <string name="label_v3_vel">V3 VEL\n%1$d</string>
+    <string name="label_pitch_bend_val">PITCH BEND\n%1$d</string>
+    <string name="label_mod_cc1_val">MOD (CC 1)\n%1$d</string>
+    <string name="label_euclidean_rhythm">TIER 2 — EUCLIDEAN RHYTHM</string>
+    <string name="label_enable_euclidean">Enable Euclidean Mode</string>
+    <string name="label_euc_steps">Steps: %1$d</string>
+    <string name="label_euc_density">Density: %1$d / %2$d pulses</string>
+    <string name="label_euc_rotation">Rotation: %1$d</string>
+    <string name="label_melodic_logic">TIER 2 — MELODIC LOGIC (MARKOV)</string>
+    <string name="label_enable_markov">Enable Melodic Logic</string>
+    <string name="label_logic_style">LOGIC STYLE</string>
 </resources>
