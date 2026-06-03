@@ -4,9 +4,19 @@ import android.os.Parcelable
 import kotlinx.parcelize.Parcelize
 import kotlin.random.Random
 
+// ── Style ─────────────────────────────────────────────────────────────────────
+@Parcelize
+enum class VoiceStyle : Parcelable {
+    GENERATIVE,        // 0 – current random-note framework
+    SINGLE_NOTE_DRONE, // 1 – one sustained note held until stopped
+    EVOLVING_DRONE     // 2 – slow melodic drone that changes note on beat
+}
+
+// ── Mode (Harmony vs Independent) ────────────────────────────────────────────
 @Parcelize
 enum class VoiceMode : Parcelable { HARMONY, INDEPENDENT }
 
+// ── Harmony config ────────────────────────────────────────────────────────────
 @Parcelize
 data class HarmonyConfig(
     val toneStepOffset:  Int   = 2,
@@ -18,6 +28,7 @@ data class HarmonyConfig(
     val referenceVoice:  Int   = 1
 ) : Parcelable
 
+// ── Generative / Independent config ──────────────────────────────────────────
 @Parcelize
 data class IndependentConfig(
     val bpm:           Int = 120,
@@ -27,21 +38,55 @@ data class IndependentConfig(
     val midiChannel:   Int = 3,
     val selectedScale: Int = 1,
     val timingMode:    Int = 0,
-    val rootNote:      Int = 0,   // 0 = follow global root; 1..12 = C..B (semitone 0..11 stored as 1..12)
+    val rootNote:      Int = 0,   // 0=follow global; 1-12=C..B
     val proSettings:   ProSettings = ProSettings(),
     val useSharedPro:  Boolean = true
 ) : Parcelable
 
+// ── Single Note Drone config ──────────────────────────────────────────────────
+// droneNote: MIDI note number (0-127). UI lets user pick via chromatic buttons.
 @Parcelize
-data class VoiceConfig(
-    val enabled:           Boolean           = false,
-    val mode:              VoiceMode         = VoiceMode.HARMONY,
-    val harmonyConfig:     HarmonyConfig     = HarmonyConfig(),
-    val independentConfig: IndependentConfig = IndependentConfig()
+data class DroneConfig(
+    val droneNote:   Int = 60,   // middle C
+    val midiChannel: Int = 3
 ) : Parcelable
 
-object DiatonicHarmony {
+// ── Evolving Drone config ─────────────────────────────────────────────────────
+// holdType: 0=CONSTANT, 1=RANDOM
+// holdMs: used when holdType==CONSTANT (ms between note changes)
+// holdMinMs / holdMaxMs: range when holdType==RANDOM
+@Parcelize
+data class EvolvingDroneConfig(
+    val velocity:      Int = 90,
+    val minOctave:     Int = 3,
+    val maxOctave:     Int = 5,
+    val midiChannel:   Int = 3,
+    val selectedScale: Int = 1,
+    val rootNote:      Int = 0,   // 0=follow global; 1-12=C..B
+    val holdType:      Int = 0,   // 0=Constant, 1=Random
+    val holdMs:        Long = 8_000L,   // constant hold duration (ms)
+    val holdMinMs:     Long = 4_000L,   // random hold minimum (ms)
+    val holdMaxMs:     Long = 30_000L,  // random hold maximum (ms)
+    val useSharedPro:  Boolean = true,
+    val proSettings:   ProSettings = ProSettings()  // Markov + Velocity only
+) : Parcelable
 
+// ── Master VoiceConfig ────────────────────────────────────────────────────────
+@Parcelize
+data class VoiceConfig(
+    val enabled:             Boolean           = false,
+    val style:               VoiceStyle        = VoiceStyle.GENERATIVE,
+    // --- Generative sub-mode ---
+    val mode:                VoiceMode         = VoiceMode.HARMONY,
+    val harmonyConfig:       HarmonyConfig     = HarmonyConfig(),
+    val independentConfig:   IndependentConfig = IndependentConfig(),
+    // --- Drone configs ---
+    val droneConfig:         DroneConfig         = DroneConfig(),
+    val evolvingDroneConfig: EvolvingDroneConfig = EvolvingDroneConfig()
+) : Parcelable
+
+// ── Diatonic harmony helpers ──────────────────────────────────────────────────
+object DiatonicHarmony {
     fun allowedNotes(scaleIntervals: List<Int>, rootNote: Int = 0): IntArray {
         val result = mutableListOf<Int>()
         for (midi in 0..127) {
@@ -63,11 +108,11 @@ object DiatonicHarmony {
         wrapAround:   Boolean = false
     ): Int {
         if (allowedNotes.isEmpty()) return v1MidiNote
-        val idx = indexOf(v1MidiNote, allowedNotes)
+        val idx       = indexOf(v1MidiNote, allowedNotes)
         val targetIdx = idx + stepOffset
         val clampedIdx = when {
-            wrapAround  -> ((targetIdx % allowedNotes.size) + allowedNotes.size) % allowedNotes.size
-            else        -> targetIdx.coerceIn(0, allowedNotes.lastIndex)
+            wrapAround -> ((targetIdx % allowedNotes.size) + allowedNotes.size) % allowedNotes.size
+            else       -> targetIdx.coerceIn(0, allowedNotes.lastIndex)
         }
         return allowedNotes[clampedIdx]
     }
