@@ -121,7 +121,6 @@ class MidiService : Service() {
         l?.onVoiceParamsChanged(v1Params, v2Config, v3Config)
     }
 
-    // State accessors for manual polling
     fun isMidiPlaying() = isPlaying
     fun getV1Params() = v1Params
     fun getV2Config() = v2Config
@@ -132,7 +131,6 @@ class MidiService : Service() {
         v1Params = p
         v1VelocityShaper.baseVelocity = p.velocity
         rebuildV1ProHelpers()
-        
         updateVoice2Config(v2Config)
         updateVoice3Config(v3Config)
         notifyParamsChanged()
@@ -142,7 +140,6 @@ class MidiService : Service() {
     fun updateProSettings(settings: ProSettings) {
         v1Params = v1Params.copy(proSettings = settings)
         rebuildV1ProHelpers()
-        
         updateVoice2Config(v2Config)
         updateVoice3Config(v3Config)
         notifyParamsChanged()
@@ -239,11 +236,9 @@ class MidiService : Service() {
         scheduler?.shutdownNow()
         try { scheduler?.awaitTermination(500, TimeUnit.MILLISECONDS) } catch (e: InterruptedException) { Thread.currentThread().interrupt() }
         scheduler = null
-        
         allNotesOff()
         voice2Engine?.stop()
         voice3Engine?.stop()
-        
         stopForeground(STOP_FOREGROUND_REMOVE)
         notifyPlaybackState(false)
     }
@@ -314,7 +309,8 @@ class MidiService : Service() {
         val interval = intervals[degreeIdx]
         val range = (p.maxOctave - p.minOctave + 1).coerceAtLeast(1)
         val selectedOctave = p.minOctave + Random.nextInt(range)
-        val noteNumber = ((selectedOctave + 1) * 12 + interval).coerceIn(0, 127)
+        // Apply rootNote offset so the scale is transposed to the correct key
+        val noteNumber = ((selectedOctave + 1) * 12 + interval + p.rootNote).coerceIn(0, 127)
         val vel = v1VelocityShaper.next()
 
         sendNoteOnRaw(1, noteNumber, vel, p.channel)

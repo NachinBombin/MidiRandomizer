@@ -37,7 +37,7 @@ class VoiceEngine(
     private var euclideanPattern: BooleanArray = BooleanArray(0)
     private var euclideanStep = 0
 
-    // ── Harmony mode ─────────────────────────────────────────────────────────
+    // ── Harmony mode ─────────────────────────────────────────────────
 
     fun onV1NoteOn(v1Note: Int, v1Velocity: Int) {
         val cfg = config
@@ -58,7 +58,6 @@ class VoiceEngine(
             fireHarmonyNote(targetNote, vel, hc.midiChannel)
         } else {
             mainHandler.postDelayed({
-                // Check if still in harmony mode and service still active
                 if (MidiOutputService.getInstance() != null && config.mode == VoiceMode.HARMONY) {
                     fireHarmonyNote(targetNote, vel, hc.midiChannel)
                 }
@@ -67,14 +66,13 @@ class VoiceEngine(
     }
 
     private fun fireHarmonyNote(note: Int, vel: Int, ch: Int) {
-        // Harmony notes are usually short, but we should turn off the previous one if it exists
         if (currentNote >= 0) onNoteOffRaw(currentNote, ch)
         onNoteOnRaw(note, vel, ch)
         onNotePlayed(note)
         currentNote = note
     }
 
-    // ── Independent mode ─────────────────────────────────────────────────────
+    // ── Independent mode ───────────────────────────────────────────────
 
     fun startIndependent() {
         val cfg = config
@@ -95,9 +93,9 @@ class VoiceEngine(
             Thread.currentThread().interrupt()
         }
         scheduler = null
-        if (currentNote >= 0) { 
+        if (currentNote >= 0) {
             onNoteOffRaw(currentNote, config.independentConfig.midiChannel)
-            currentNote = -1 
+            currentNote = -1
         }
     }
 
@@ -130,7 +128,7 @@ class VoiceEngine(
 
     private fun fireIndependentNote(ic: IndependentConfig) {
         if (currentNote >= 0) onNoteOffRaw(currentNote, ic.midiChannel)
-        
+
         val intervals = getScales().getOrNull(ic.selectedScale) ?: return
         val ps = ic.proSettings
 
@@ -141,7 +139,8 @@ class VoiceEngine(
         val interval = intervals[degreeIdx]
         val range    = (ic.maxOctave - ic.minOctave + 1).coerceAtLeast(1)
         val oct      = ic.minOctave + Random.nextInt(range)
-        val noteNum  = ((oct + 1) * 12 + interval).coerceIn(0, 127)
+        // Apply global root offset so independent voices share the same key as V1
+        val noteNum  = ((oct + 1) * 12 + interval + getGlobalRoot()).coerceIn(0, 127)
         val vel      = velocityShaper.next()
 
         onNoteOnRaw(noteNum, vel, ic.midiChannel)
@@ -162,7 +161,7 @@ class VoiceEngine(
         return JitterEngine.applyJitter(modeMs, ps.jitterAmount, ps.jitterType)
     }
 
-    // ── Helper rebuild ────────────────────────────────────────────────────────
+    // ── Helper rebuild ────────────────────────────────────────────────
 
     private fun rebuildHelpers(ic: IndependentConfig) {
         val ps       = ic.proSettings
