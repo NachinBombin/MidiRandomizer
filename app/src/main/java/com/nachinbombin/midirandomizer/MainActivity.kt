@@ -1,21 +1,10 @@
 package com.nachinbombin.midirandomizer
 
-import android.Manifest
-import android.content.ComponentName
-import android.content.Context
-import android.content.Intent
-import android.content.ServiceConnection
-import android.content.pm.PackageManager
-import android.media.midi.MidiDeviceInfo
-import android.media.midi.MidiManager
-import android.os.Build
-import android.os.Bundle
-import android.os.Handler
-import android.os.IBinder
-import android.os.Looper
-import androidx.activity.result.contract.ActivityResultContracts
+import android.content.*
+import android.os.*
+import android.view.*
+import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import androidx.viewpager2.adapter.FragmentStateAdapter
@@ -24,108 +13,72 @@ import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 
 class MainActivity : AppCompatActivity(),
-    MainFragment.MainFragmentHost,
-    ProSettingsFragment.ProSettingsListener {
-
-    private lateinit var midiManager: MidiManager
-    private val mainHandler = Handler(Looper.getMainLooper())
+    MidiService.MidiEventListener,
+    VoicesFragment.ServiceProvider {
 
     private var midiService: MidiService? = null
-    private var isBound = false
-
-    private lateinit var mainFragment: MainFragment
-    private lateinit var proFragment:  ProSettingsFragment
+    private var bound = false
 
     private val connection = object : ServiceConnection {
-        override fun onServiceConnected(className: ComponentName, service: IBinder) {
-            val binder = service as MidiService.LocalBinder
-            midiService = binder.getService()
-            isBound = true
-            mainFragment.onServiceReady()
-            midiService?.updateProSettings(proFragment.buildSettings())
+        override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+            val svc = (binder as MidiService.LocalBinder).getService()
+            midiService = svc
+            svc.setListener(this@MainActivity)
+            bound = true
         }
-        override fun onServiceDisconnected(arg0: ComponentName) {
-            midiService = null; isBound = false
-        }
-    }
-
-    private val deviceCallback = object : MidiManager.DeviceCallback() {
-        override fun onDeviceAdded(device: MidiDeviceInfo) {
-            mainHandler.post { mainFragment.refreshDeviceList() }
-        }
-        override fun onDeviceRemoved(device: MidiDeviceInfo) {
-            mainHandler.post { mainFragment.refreshDeviceList() }
+        override fun onServiceDisconnected(name: ComponentName?) {
+            midiService = null; bound = false
         }
     }
 
-    private val requestPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) startMidiService()
-    }
+    // ── ServiceProvider impl ──────────────────────────────────────────────────
+    override fun getMidiService(): MidiService? = midiService
 
-    // ── Lifecycle ─────────────────────────────────────────────────────────────
-
+    // ── Activity lifecycle ────────────────────────────────────────────────────
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
 
-        midiManager = getSystemService(MIDI_SERVICE) as MidiManager
-
-        mainFragment = MainFragment()
-        proFragment  = ProSettingsFragment().also { it.setListener(this) }
-
-        val pager   = findViewById<ViewPager2>(R.id.viewPager)
-        val tabLayout = findViewById<TabLayout>(R.id.tabLayout)
-
-        pager.adapter = object : FragmentStateAdapter(this as FragmentActivity) {
-            override fun getItemCount() = 2
-            override fun createFragment(position: Int): Fragment =
-                if (position == 0) mainFragment else proFragment
+        val tabs   = TabLayout(this)
+        val pager  = ViewPager2(this)
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(tabs)
+            addView(pager, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         }
+        setContentView(layout)
 
-        TabLayoutMediator(tabLayout, pager) { tab, pos ->
-            tab.text = if (pos == 0) "Main" else "⚙ Pro"
+        pager.adapter = PagerAdapter(this)
+        TabLayoutMediator(tabs, pager) { tab, pos ->
+            tab.text = when (pos) {
+                0 -> "▶  Main"
+                1 -> "⚙  Pro"
+                2 -> "🎵  Voices"
+                else -> ""
+            }
         }.attach()
 
-        midiManager.registerDeviceCallback(deviceCallback, mainHandler)
-        checkPermissionsAndStartService()
-    }
-
-    private fun checkPermissionsAndStartService() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED) {
-                requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                return
-            }
-        }
-        startMidiService()
-    }
-
-    private fun startMidiService() {
         val intent = Intent(this, MidiService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
-        else startService(intent)
+        startService(intent)
         bindService(intent, connection, Context.BIND_AUTO_CREATE)
     }
 
-    // ── MainFragmentHost ──────────────────────────────────────────────────────
-
-    override fun getMidiService(): MidiService? = midiService
-    override fun getMidiManager(): MidiManager  = midiManager
-
-    // ── ProSettingsListener ───────────────────────────────────────────────────
-
-    override fun onProSettingsChanged(settings: ProSettings) {
-        midiService?.updateProSettings(settings)
+    override fun onDestroy() {
+        if (bound) { unbindService(connection); bound = false }
+        super.onDestroy()
     }
 
-    // ── Lifecycle cleanup ─────────────────────────────────────────────────────
+    // ── MidiEventListener ─────────────────────────────────────────────────────
+    override fun onNotePlayed(noteName: String, midiNote: Int, velocity: Int) {}
+    override fun onStatusChanged(status: String) {}
+    override fun onPlaybackStateChanged(playing: Boolean) {}
 
-    override fun onDestroy() {
-        if (isBound) { unbindService(connection); isBound = false }
-        midiManager.unregisterDeviceCallback(deviceCallback)
-        super.onDestroy()
+    // ── Pager adapter ─────────────────────────────────────────────────────────
+    private class PagerAdapter(fa: FragmentActivity) : FragmentStateAdapter(fa) {
+        override fun getItemCount() = 3
+        override fun createFragment(position: Int): Fragment = when (position) {
+            0    -> MainFragment()
+            1    -> ProSettingsFragment()
+            else -> VoicesFragment()
+        }
     }
 }

@@ -18,14 +18,14 @@ import kotlin.random.Random
 class MidiService : Service() {
 
     companion object {
-        private const val TAG = "MidiService"
-        private const val CHANNEL_ID = "midi_channel"
+        private const val TAG           = "MidiService"
+        private const val CHANNEL_ID    = "midi_channel"
         private const val NOTIFICATION_ID = 1
 
         const val TIMING_METRONOME  = 0
         const val TIMING_MIXED      = 1
         const val TIMING_RANDOMIZED = 2
-        const val TIMING_EUCLIDEAN  = 3   // Pro
+        const val TIMING_EUCLIDEAN  = 3
     }
 
     inner class LocalBinder : Binder() {
@@ -42,41 +42,49 @@ class MidiService : Service() {
 
     @Volatile private var isPlaying = false
 
-    // ── Base parameters ───────────────────────────────────────────────────────
+    // ── Voice 1 base parameters ───────────────────────────────────────────────
     private var bpm           = 120
     private var velocity      = 100
     private var minOctave     = 3
     private var maxOctave     = 5
     private var channel       = 0
     private var selectedScale = 0
+    private var rootNote      = 0   // C by default
     private var timingMode    = TIMING_METRONOME
 
-    // ── Pro parameters ────────────────────────────────────────────────────────
+    // ── Pro parameters (Voice 1) ──────────────────────────────────────────────
     @Volatile private var proSettings = ProSettings()
+
+    // ── Voice 2 / Voice 3 configs ─────────────────────────────────────────────
+    @Volatile private var voice2Config = VoiceConfig()
+    @Volatile private var voice3Config = VoiceConfig()
+
+    private var voice2Engine: VoiceEngine? = null
+    private var voice3Engine: VoiceEngine? = null
+
+    // Last note played by each voice (for V3 cascade)
+    @Volatile private var lastV2Note = 60
 
     // ── Scale definitions ─────────────────────────────────────────────────────
     private val scales = listOf(
-        listOf(0,1,2,3,4,5,6,7,8,9,10,11), // Chromatic
-        listOf(0,2,4,5,7,9,11),             // Major
-        listOf(0,2,3,5,7,8,10),             // Minor Natural
-        listOf(0,2,3,5,7,8,11),             // Minor Harmonic
-        listOf(0,2,4,7,9),                  // Pentatonic Major
-        listOf(0,3,5,7,10),                 // Pentatonic Minor
-        listOf(0,3,5,6,7,10),               // Blues
-        listOf(0,2,3,5,7,9,10),             // Dorian
-        listOf(0,2,4,5,7,9,10),             // Mixolydian
-        listOf(0,2,4,6,8,10)                // Whole Tone
+        listOf(0,1,2,3,4,5,6,7,8,9,10,11),
+        listOf(0,2,4,5,7,9,11),
+        listOf(0,2,3,5,7,8,10),
+        listOf(0,2,3,5,7,8,11),
+        listOf(0,2,4,7,9),
+        listOf(0,3,5,7,10),
+        listOf(0,3,5,6,7,10),
+        listOf(0,2,3,5,7,9,10),
+        listOf(0,2,4,5,7,9,10),
+        listOf(0,2,4,6,8,10)
     )
 
-    // ── Stateful helpers (re-created when pro settings change) ────────────────
+    // ── Stateful helpers (Voice 1) ────────────────────────────────────────────
     private var velocityShaper: VelocityShaper = VelocityShaper(VelocityPattern.RANDOM, 100)
-    private var markovChain:   MarkovMelody?   = null
-
-    // Euclidean pattern state
+    private var markovChain: MarkovMelody?     = null
     private var euclideanPattern: BooleanArray = BooleanArray(0)
-    private var euclideanStep   = 0
-
-    private var currentNoteNumber = -1
+    private var euclideanStep                  = 0
+    private var currentNoteNumber              = -1
 
     // ── Listener ──────────────────────────────────────────────────────────────
     interface MidiEventListener {
@@ -92,6 +100,7 @@ class MidiService : Service() {
         super.onCreate()
         midiManager = getSystemService(MIDI_SERVICE) as MidiManager
         createNotificationChannel()
+        buildVoiceEngines()
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -104,7 +113,8 @@ class MidiService : Service() {
     fun updateParameters(
         bpm: Int, velocity: Int,
         minOct: Int, maxOct: Int,
-        chan: Int, scale: Int, timing: Int
+        chan: Int, scale: Int, timing: Int,
+        root: Int = 0
     ) {
         this.bpm           = bpm
         this.velocity      = velocity
@@ -113,12 +123,33 @@ class MidiService : Service() {
         this.channel       = chan
         this.selectedScale = scale
         this.timingMode    = timing
+        this.rootNote      = root
         velocityShaper.baseVelocity = velocity
     }
 
     fun updateProSettings(settings: ProSettings) {
         proSettings = settings
         rebuildProHelpers()
+    }
+
+    /** Update Voice 2 configuration at runtime (thread-safe). */
+    fun updateVoice2Config(cfg: VoiceConfig) {
+        voice2Config = cfg
+        voice2Engine?.config = cfg
+        if (isPlaying) {
+            voice2Engine?.stopIndependent()
+            if (cfg.enabled && cfg.mode == VoiceMode.INDEPENDENT) voice2Engine?.startIndependent()
+        }
+    }
+
+    /** Update Voice 3 configuration at runtime (thread-safe). */
+    fun updateVoice3Config(cfg: VoiceConfig) {
+        voice3Config = cfg
+        voice3Engine?.config = cfg
+        if (isPlaying) {
+            voice3Engine?.stopIndependent()
+            if (cfg.enabled && cfg.mode == VoiceMode.INDEPENDENT) voice3Engine?.startIndependent()
+        }
     }
 
     fun connectToDevice(info: MidiDeviceInfo) {
@@ -136,9 +167,7 @@ class MidiService : Service() {
                     notifyStatus("Error opening port: ${e.message}")
                     closeDevice()
                 }
-            } else {
-                notifyStatus("Device has no input ports")
-            }
+            } else notifyStatus("Device has no input ports")
         }, mainHandler)
     }
 
@@ -148,9 +177,7 @@ class MidiService : Service() {
         inputPort = null; midiDevice = null
     }
 
-    fun togglePlayback() {
-        if (isPlaying) stopPlaying() else startPlaying()
-    }
+    fun togglePlayback() { if (isPlaying) stopPlaying() else startPlaying() }
 
     private fun startPlaying() {
         if (isPlaying) return
@@ -158,6 +185,11 @@ class MidiService : Service() {
         rebuildProHelpers()
         try { startForeground(NOTIFICATION_ID, createNotification()) }
         catch (e: Exception) { Log.e(TAG, "startForeground failed", e) }
+
+        // Start independent-mode secondary voices
+        voice2Engine?.let { if (voice2Config.enabled && voice2Config.mode == VoiceMode.INDEPENDENT) it.startIndependent() }
+        voice3Engine?.let { if (voice3Config.enabled && voice3Config.mode == VoiceMode.INDEPENDENT) it.startIndependent() }
+
         scheduler = Executors.newSingleThreadExecutor()
         scheduler?.execute(noteLoop)
         notifyPlaybackState(true)
@@ -167,22 +199,22 @@ class MidiService : Service() {
         if (!isPlaying) return
         isPlaying = false
         scheduler?.shutdownNow()
-        try { scheduler?.awaitTermination(500, TimeUnit.MILLISECONDS) }
-        catch (e: InterruptedException) { Thread.currentThread().interrupt() }
+        try { scheduler?.awaitTermination(500, TimeUnit.MILLISECONDS) } catch (e: InterruptedException) { Thread.currentThread().interrupt() }
         scheduler = null
         if (currentNoteNumber >= 0) { sendNoteOff(currentNoteNumber); currentNoteNumber = -1 }
+        voice2Engine?.stop()
+        voice3Engine?.stop()
         stopForeground(STOP_FOREGROUND_REMOVE)
         notifyPlaybackState(false)
     }
 
-    // ── Note loop ─────────────────────────────────────────────────────────────
+    // ── Voice 1 note loop ─────────────────────────────────────────────────────
 
     private val noteLoop = Runnable {
         while (isPlaying) {
-            // Euclidean: advance step, skip if not an onset
-            val ps = proSettings
+            val ps       = proSettings
             val euclidOn = ps.euclideanEnabled && timingMode == TIMING_EUCLIDEAN
-            val isOnset = if (euclidOn) {
+            val isOnset  = if (euclidOn) {
                 val hit = euclideanPattern.getOrElse(euclideanStep) { false }
                 euclideanStep = (euclideanStep + 1) % euclideanPattern.size.coerceAtLeast(1)
                 hit
@@ -195,83 +227,95 @@ class MidiService : Service() {
         }
     }
 
-    // ── Interval calculation ──────────────────────────────────────────────────
-
     private fun calculateInterval(): Long {
         val base = (60_000.0 / bpm).toLong()
         val ps   = proSettings
-
         val modeInterval = when (timingMode) {
             TIMING_METRONOME  -> base
             TIMING_MIXED      -> if (Random.nextFloat() < 0.3f) base / 2 else base
             TIMING_RANDOMIZED -> (base * (0.5 + Random.nextDouble())).toLong()
-            TIMING_EUCLIDEAN  -> base  // each step = one beat
+            TIMING_EUCLIDEAN  -> base
             else              -> base
         }
-        // Apply jitter
         return JitterEngine.applyJitter(modeInterval, ps.jitterAmount, ps.jitterType)
     }
-
-    // ── Note generation ───────────────────────────────────────────────────────
 
     private fun sendRandomNote() {
         if (currentNoteNumber >= 0) sendNoteOff(currentNoteNumber)
 
-        val ps         = proSettings
-        val intervals  = scales.getOrNull(selectedScale) ?: return
-        val scaleSize  = intervals.size
+        val ps        = proSettings
+        val intervals = scales.getOrNull(selectedScale) ?: return
 
-        // Pitch selection
-        val degreeIndex = if (ps.markovEnabled) {
-            markovChain?.nextDegree() ?: Random.nextInt(scaleSize)
-        } else {
-            Random.nextInt(scaleSize)
-        }
-        val interval = intervals[degreeIndex]
+        val degreeIdx = if (ps.markovEnabled) {
+            markovChain?.nextDegree() ?: Random.nextInt(intervals.size)
+        } else Random.nextInt(intervals.size)
 
+        val interval       = intervals[degreeIdx]
         val range          = (maxOctave - minOctave + 1).coerceAtLeast(1)
         val selectedOctave = minOctave + Random.nextInt(range)
         val noteNumber     = ((selectedOctave + 1) * 12 + interval).coerceIn(0, 127)
+        val vel            = velocityShaper.next()
 
-        // Velocity
-        val vel = velocityShaper.next()
-
-        val noteOnMsg = byteArrayOf(
-            (0x90 or channel).toByte(),
-            noteNumber.toByte(),
-            vel.toByte()
-        )
-
-        inputPort?.let { port ->
-            try { port.send(noteOnMsg, 0, noteOnMsg.size) }
-            catch (e: IOException) { Log.e(TAG, "Send error", e) }
+        // Route with Omni support
+        val channels = if (channel == 0) (0..15).toList() else listOf(channel - 1)
+        channels.forEach { ch ->
+            val msg = byteArrayOf((0x90 or ch).toByte(), noteNumber.toByte(), vel.toByte())
+            inputPort?.let { p ->
+                try { p.send(msg, 0, msg.size) } catch (e: IOException) { Log.e(TAG, "Send error", e) }
+            }
+            MidiOutputService.getInstance()?.sendMidiToClients(msg, 0, msg.size, 0)
         }
-        MidiOutputService.getInstance()?.sendMidiToClients(noteOnMsg, 0, noteOnMsg.size, 0)
 
         currentNoteNumber = noteNumber
+        lastV2Note        = noteNumber  // Voice 3 cascade seed before V2 updates it
+
+        // Notify secondary voices
+        voice2Engine?.onV1NoteOn(noteNumber, vel)
+        voice3Engine?.onV1NoteOn(noteNumber, vel)
+
         val noteName = noteNumberToName(noteNumber)
         mainHandler.post { listener?.onNotePlayed(noteName, noteNumber, vel) }
     }
 
     private fun sendNoteOff(noteNumber: Int) {
-        val msg = byteArrayOf((0x80 or channel).toByte(), noteNumber.toByte(), 0)
-        try { inputPort?.send(msg, 0, msg.size) } catch (e: IOException) { /* ignore */ }
-        MidiOutputService.getInstance()?.sendMidiToClients(msg, 0, msg.size, 0)
+        val channels = if (channel == 0) (0..15).toList() else listOf(channel - 1)
+        channels.forEach { ch ->
+            val msg = byteArrayOf((0x80 or ch).toByte(), noteNumber.toByte(), 0)
+            try { inputPort?.send(msg, 0, msg.size) } catch (e: IOException) { /* ignore */ }
+            MidiOutputService.getInstance()?.sendMidiToClients(msg, 0, msg.size, 0)
+        }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
+    private fun buildVoiceEngines() {
+        voice2Engine = VoiceEngine(
+            voiceId      = 2,
+            mainHandler  = mainHandler,
+            getInputPort = { inputPort },
+            getScales    = { scales },
+            getGlobalScale = { selectedScale },
+            getGlobalRoot  = { rootNote },
+            getV2Note    = { lastV2Note }
+        ).also { it.config = voice2Config }
+
+        voice3Engine = VoiceEngine(
+            voiceId      = 3,
+            mainHandler  = mainHandler,
+            getInputPort = { inputPort },
+            getScales    = { scales },
+            getGlobalScale = { selectedScale },
+            getGlobalRoot  = { rootNote },
+            getV2Note    = { lastV2Note }
+        ).also { it.config = voice3Config }
+    }
+
     private fun rebuildProHelpers() {
-        val ps = proSettings
+        val ps       = proSettings
         val scaleSize = scales.getOrNull(selectedScale)?.size ?: 7
-
-        velocityShaper = VelocityShaper(ps.velocityPattern, velocity)
-        velocityShaper.reset()
-
-        markovChain = if (ps.markovEnabled) {
-            MarkovMelody(scaleSize, ps.melodicLogicStyle).also { it.reset() }
-        } else null
-
+        velocityShaper = VelocityShaper(ps.velocityPattern, velocity).also { it.reset() }
+        markovChain    = if (ps.markovEnabled)
+            MarkovMelody(scaleSize, ps.melodicLogicStyle).also { it.reset() } else null
         if (ps.euclideanEnabled) {
             euclideanPattern = EuclideanRhythm.generate(
                 ps.euclideanSteps.coerceIn(2, 32),
@@ -307,7 +351,7 @@ class MidiService : Service() {
             .build()
     }
 
-    private fun notifyStatus(s: String)        { mainHandler.post { listener?.onStatusChanged(s) } }
+    private fun notifyStatus(s: String)         { mainHandler.post { listener?.onStatusChanged(s) } }
     private fun notifyPlaybackState(p: Boolean) { mainHandler.post { listener?.onPlaybackStateChanged(p) } }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -316,9 +360,5 @@ class MidiService : Service() {
         return START_STICKY
     }
 
-    override fun onDestroy() {
-        closeDevice()
-        scheduler?.shutdownNow()
-        super.onDestroy()
-    }
+    override fun onDestroy() { closeDevice(); scheduler?.shutdownNow(); super.onDestroy() }
 }
