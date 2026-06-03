@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.MidiRandomizer" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#01696F</item>
+        <item name="colorPrimaryVariant">#0C4E54</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="android:windowBackground">#111318</item>
+        <item name="android:statusBarColor">#111318</item>
+    </style>
+</resources>
