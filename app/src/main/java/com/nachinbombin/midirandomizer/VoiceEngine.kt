@@ -139,9 +139,13 @@ class VoiceEngine(
         val interval = intervals[degreeIdx]
         val range    = (ic.maxOctave - ic.minOctave + 1).coerceAtLeast(1)
         val oct      = ic.minOctave + Random.nextInt(range)
-        // Apply global root offset so independent voices share the same key as V1
-        val noteNum  = ((oct + 1) * 12 + interval + getGlobalRoot()).coerceIn(0, 127)
-        val vel      = velocityShaper.next()
+
+        // If voice has its own root set (rootNote 1..12 = semitones 0..11), use it.
+        // rootNote == 0 means "follow global root" (same key as Voice 1).
+        val root = if (ic.rootNote > 0) ic.rootNote - 1 else getGlobalRoot()
+        val noteNum = ((oct + 1) * 12 + interval + root).coerceIn(0, 127)
+
+        val vel = velocityShaper.next()
 
         onNoteOnRaw(noteNum, vel, ic.midiChannel)
         onNotePlayed(noteNum)

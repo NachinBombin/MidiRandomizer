@@ -27,6 +27,7 @@ data class IndependentConfig(
     val midiChannel:   Int = 3,
     val selectedScale: Int = 1,
     val timingMode:    Int = 0,
+    val rootNote:      Int = 0,   // 0 = follow global root; 1..12 = C..B (semitone 0..11 stored as 1..12)
     val proSettings:   ProSettings = ProSettings(),
     val useSharedPro:  Boolean = true
 ) : Parcelable
