@@ -120,7 +120,6 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         fun syncConfig() {
             if (isUpdatingFromSync) return
             val svc = serviceProvider?.getMidiService() ?: return
-
             val cfg = VoiceConfig(
                 enabled = enableSwitch.isChecked,
                 mode = if (harmonyBtn.isChecked) VoiceMode.HARMONY else VoiceMode.INDEPENDENT,
@@ -147,8 +146,10 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         harmonyBtn.setOnClickListener     { switchMode(true)  }
         independentBtn.setOnClickListener { switchMode(false) }
 
+        // attachSyncListeners skips spinners that already have listeners set
+        // (those wired in buildIndependentPanel with visibility logic).
         attachSyncListeners(harmonyPanel, { syncConfig() }, skipSeekBars = true)
-        attachSyncListeners(independentPanel, { syncConfig() }, skipSeekBars = true)
+        attachSyncListeners(independentPanel, { syncConfig() }, skipSeekBars = true, skipTaggedSpinners = setOf("indStyle", "indDroneTiming"))
 
         return panel
     }
@@ -157,11 +158,11 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         val ctx   = requireContext()
         val panel = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; setPadding(16, 8, 0, 0) }
 
-        panel.addView(labeledSeekBar(ctx, "Tone Step Offset", -7, 7, 2,   tag = "toneStep", onSync))
+        panel.addView(labeledSeekBar(ctx, "Tone Step Offset", -7, 7, 2,    tag = "toneStep",  onSync))
         panel.addView(labeledSeekBar(ctx, "Time Drift (ms)",   0, 45, 10,  tag = "timeDrift", onSync))
-        panel.addView(labeledSeekBar(ctx, "Skip % (0-100)",    0, 100, 0,  tag = "skipPct", onSync))
+        panel.addView(labeledSeekBar(ctx, "Skip % (0-100)",    0, 100, 0,  tag = "skipPct",   onSync))
         panel.addView(labeledSeekBar(ctx, "Master Velocity",   0, 127, 100,tag = "masterVel", onSync))
-        panel.addView(labeledSeekBar(ctx, "Velocity Drift ±",  0, 20, 8,   tag = "velDrift", onSync))
+        panel.addView(labeledSeekBar(ctx, "Velocity Drift ±",  0, 20, 8,   tag = "velDrift",  onSync))
         panel.addView(labeledSeekBar(ctx, "MIDI Channel (0=Omni)", 0, 16, voiceId, tag = "midiCh", onSync))
 
         if (voiceId == 3) {
@@ -181,13 +182,13 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         val ctx   = requireContext()
         val panel = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; setPadding(16, 8, 0, 0) }
 
-        panel.addView(labeledSeekBar(ctx, "BPM",            20,  300, 120, tag = "indBpm", onSync))
-        panel.addView(labeledSeekBar(ctx, "Velocity",        0,  127,  90, tag = "indVel", onSync))
+        panel.addView(labeledSeekBar(ctx, "BPM",            20,  300, 120, tag = "indBpm",    onSync))
+        panel.addView(labeledSeekBar(ctx, "Velocity",        0,  127,  90, tag = "indVel",    onSync))
         panel.addView(labeledSeekBar(ctx, "Min Octave",      0,    8,   3, tag = "indMinOct", onSync))
         panel.addView(labeledSeekBar(ctx, "Max Octave",      0,    8,   5, tag = "indMaxOct", onSync))
         panel.addView(labeledSeekBar(ctx, "MIDI Channel (0=Omni)", 0, 16, voiceId + 1, tag = "indMidiCh", onSync))
 
-        // Scale dropdown
+        // Scale
         val scaleNames = listOf(
             "Chromatic", "Major", "Minor Natural", "Minor Harmonic",
             "Pentatonic Maj", "Pentatonic Min", "Blues", "Dorian", "Mixolydian", "Whole Tone",
@@ -202,14 +203,8 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         scaleRow.addView(scaleSpinner)
         panel.addView(scaleRow)
 
-        // Root note dropdown
-        // Position 0 = "Follow Main" (rootNote stored as 0)
-        // Positions 1-12 = C..B     (rootNote stored as 1..12; semitone = rootNote-1)
-        val rootNames = listOf(
-            "Follow Main",
-            "C", "C#", "D", "D#", "E", "F",
-            "F#", "G", "G#", "A", "A#", "B"
-        )
+        // Root note
+        val rootNames = listOf("Follow Main", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
         val rootRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 8, 0, 0) }
         rootRow.addView(TextView(ctx).apply { text = "Root Note: "; setTextColor(0xFFE8E6E1.toInt()) })
         val rootSpinner = Spinner(ctx).apply { tag = "indRoot" }
@@ -218,16 +213,17 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         rootRow.addView(rootSpinner)
         panel.addView(rootRow)
 
-        // Style dropdown
+        // Style
         val styleRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 8, 0, 0) }
         styleRow.addView(TextView(ctx).apply { text = "Style: "; setTextColor(0xFFE8E6E1.toInt()) })
         val styleSpinner = Spinner(ctx).apply { tag = "indStyle" }
-        styleSpinner.adapter = ArrayAdapter(ctx, android.R.layout.simple_spinner_item, listOf("Generative", "Single note Drone", "Evolving Drone"))
+        styleSpinner.adapter = ArrayAdapter(ctx, android.R.layout.simple_spinner_item,
+            listOf("Generative", "Single note Drone", "Evolving Drone"))
             .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
         styleRow.addView(styleSpinner)
         panel.addView(styleRow)
 
-        // Timing dropdown
+        // Timing (Generative only)
         val timingRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 8, 0, 0); tag = "indTimingRow" }
         timingRow.addView(TextView(ctx).apply { text = "Timing: "; setTextColor(0xFFE8E6E1.toInt()) })
         val timingSpinner = Spinner(ctx).apply { tag = "indTiming" }
@@ -237,7 +233,7 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         timingRow.addView(timingSpinner)
         panel.addView(timingRow)
 
-        // Drone Timing dropdown
+        // Drone Timing (Evolving Drone only)
         val droneTimingRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 8, 0, 0); tag = "indDroneTimingRow"; visibility = View.GONE }
         droneTimingRow.addView(TextView(ctx).apply { text = "Drone Timing: "; setTextColor(0xFFE8E6E1.toInt()) })
         val droneTimingSpinner = Spinner(ctx).apply { tag = "indDroneTiming" }
@@ -246,18 +242,15 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         droneTimingRow.addView(droneTimingSpinner)
         panel.addView(droneTimingRow)
 
+        // Drone Range (Evolving Drone + Random timing only)
         val droneRangeRow = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 8, 0, 0); tag = "indDroneRangeRow"; visibility = View.GONE }
         val tvDroneRange = TextView(ctx).apply { text = "Drone beat range: 16 - 64"; setTextColor(0xFFE8E6E1.toInt()); tag = "tvDroneRange" }
         droneRangeRow.addView(tvDroneRange)
-        val sbMin = SeekBar(ctx).apply { tag = "droneMin"; max = 127; progress = 15 } // 1..128
-        val sbMax = SeekBar(ctx).apply { tag = "droneMax"; max = 127; progress = 63 } // 1..128
-        
+        val sbMin = SeekBar(ctx).apply { tag = "droneMin"; max = 127; progress = 15 }
+        val sbMax = SeekBar(ctx).apply { tag = "droneMax"; max = 127; progress = 63 }
         fun updateRangeText() {
-            val min = sbMin.progress + 1
-            val max = sbMax.progress + 1
-            tvDroneRange.text = "Drone beat range: $min - $max"
+            tvDroneRange.text = "Drone beat range: ${sbMin.progress + 1} - ${sbMax.progress + 1}"
         }
-        
         sbMin.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(s: SeekBar?, p: Int, f: Boolean) {
                 if (sbMax.progress < p) sbMax.progress = p
@@ -276,35 +269,44 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             override fun onStartTrackingTouch(s: SeekBar?) {}
             override fun onStopTrackingTouch(s: SeekBar?) {}
         })
-        
-        droneRangeRow.addView(LinearLayout(ctx).apply { 
+        droneRangeRow.addView(LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             addView(TextView(ctx).apply { text = "Min: "; setTextColor(0xFF797876.toInt()) })
             addView(sbMin, LinearLayout.LayoutParams(0, -2, 1f))
         })
-        droneRangeRow.addView(LinearLayout(ctx).apply { 
+        droneRangeRow.addView(LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             addView(TextView(ctx).apply { text = "Max: "; setTextColor(0xFF797876.toInt()) })
             addView(sbMax, LinearLayout.LayoutParams(0, -2, 1f))
         })
         panel.addView(droneRangeRow)
 
+        // Visibility logic — called whenever style or drone timing changes
         fun updateIndVisibility() {
-            val style = VoiceStyle.entries[styleSpinner.selectedItemPosition]
-            val isSingle = style == VoiceStyle.SINGLE_NOTE_DRONE
+            val style      = VoiceStyle.entries[styleSpinner.selectedItemPosition]
+            val isSingle   = style == VoiceStyle.SINGLE_NOTE_DRONE
             val isEvolving = style == VoiceStyle.EVOLVING_DRONE
             val isRandomDrone = isEvolving && droneTimingSpinner.selectedItemPosition == 1
-            
-            panel.findViewWithTag<View>("indBpm")?.visibility = if (isSingle) View.GONE else View.VISIBLE
-            panel.findViewWithTag<View>("indBpm")?.parent?.let { (it as View).visibility = if (isSingle) View.GONE else View.VISIBLE }
-            panel.findViewWithTag<View>("indMinOct")?.parent?.let { (it as View).visibility = if (isSingle) View.GONE else View.VISIBLE }
-            panel.findViewWithTag<View>("indMaxOct")?.parent?.let { (it as View).visibility = if (isSingle) View.GONE else View.VISIBLE }
-            
-            timingRow.visibility = if (isSingle || isEvolving) View.GONE else View.VISIBLE
-            droneTimingRow.visibility = if (isEvolving) View.VISIBLE else View.GONE
-            droneRangeRow.visibility = if (isRandomDrone) View.VISIBLE else View.GONE
+
+            // BPM / octave rows — hide when single note drone (no loop)
+            val hideBpm = isSingle
+            panel.findViewWithTag<SeekBar>("indBpm")?.let {
+                (it.parent as? View)?.visibility = if (hideBpm) View.GONE else View.VISIBLE
+            }
+            panel.findViewWithTag<SeekBar>("indMinOct")?.let {
+                (it.parent as? View)?.visibility = if (hideBpm) View.GONE else View.VISIBLE
+            }
+            panel.findViewWithTag<SeekBar>("indMaxOct")?.let {
+                (it.parent as? View)?.visibility = if (hideBpm) View.GONE else View.VISIBLE
+            }
+
+            // Timing rows
+            timingRow.visibility      = if (isSingle || isEvolving) View.GONE else View.VISIBLE
+            droneTimingRow.visibility = if (isEvolving)             View.VISIBLE else View.GONE
+            droneRangeRow.visibility  = if (isRandomDrone)          View.VISIBLE else View.GONE
         }
 
+        // Style spinner — owns its own listener (NOT overwritten by attachSyncListeners)
         styleSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(p0: AdapterView<*>?, p1: View?, pos: Int, p3: Long) {
                 updateIndVisibility()
@@ -312,13 +314,17 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             }
             override fun onNothingSelected(p0: AdapterView<*>?) {}
         }
+
+        // Drone timing spinner — also owns its listener
         droneTimingSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(p0: AdapterView<*>?, p1: View?, p2: Int, p3: Long) {
+                updateIndVisibility()
                 if (!isUpdatingFromSync) onSync()
             }
             override fun onNothingSelected(p0: AdapterView<*>?) {}
         }
 
+        // Pro settings
         val proRow = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 12, 0, 0) }
         val sharedProBtn = radioButton(ctx, "Use Shared Pro Settings", true).apply { tag = "sharedPro" }
         val customProBtn = radioButton(ctx, "Use Custom Pro Settings", false).apply { tag = "customPro" }
@@ -332,7 +338,6 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             setPadding(16, 8, 0, 0)
             tag = "customProPanel"
         }
-
         customProPanel.addView(labeledSeekBar(ctx, "Jitter %", 0, 100, 0, tag = "jitAmt", onSync))
 
         val jitterRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 8, 0, 0) }
@@ -351,16 +356,16 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
 
         val eSwitch = Switch(ctx).apply { text = "Enable Euclidean"; tag = "eEnabled"; setTextColor(0xFFE8E6E1.toInt()) }
         customProPanel.addView(eSwitch)
-        val eLayout = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE; setPadding(16,0,0,0); tag = "eLayout" }
-        eLayout.addView(labeledSeekBar(ctx, "E-Steps",   2, 32, 16, "eSteps",   onSync))
-        eLayout.addView(labeledSeekBar(ctx, "E-Density", 1, 16,  5, "eDensity", onSync))
-        eLayout.addView(labeledSeekBar(ctx, "E-Rotation",0, 16,  0, "eRot",     onSync))
+        val eLayout = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE; setPadding(16, 0, 0, 0); tag = "eLayout" }
+        eLayout.addView(labeledSeekBar(ctx, "E-Steps",    2, 32, 16, "eSteps",   onSync))
+        eLayout.addView(labeledSeekBar(ctx, "E-Density",  1, 16,  5, "eDensity", onSync))
+        eLayout.addView(labeledSeekBar(ctx, "E-Rotation", 0, 16,  0, "eRot",     onSync))
         customProPanel.addView(eLayout)
         eSwitch.setOnCheckedChangeListener { _, on -> eLayout.visibility = if (on) View.VISIBLE else View.GONE; if (!isUpdatingFromSync) onSync() }
 
         val mSwitch = Switch(ctx).apply { text = "Enable Markov"; tag = "mEnabled"; setTextColor(0xFFE8E6E1.toInt()) }
         customProPanel.addView(mSwitch)
-        val mLayout = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE; setPadding(16,0,0,0); tag = "mLayout" }
+        val mLayout = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE; setPadding(16, 0, 0, 0); tag = "mLayout" }
         val mSpinner = Spinner(ctx).apply { tag = "mStyle" }
         mSpinner.adapter = ArrayAdapter(ctx, android.R.layout.simple_spinner_item, MelodicLogicStyle.entries.map { it.label })
         mLayout.addView(mSpinner)
@@ -383,43 +388,42 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
     private fun readHarmonyConfig(panel: LinearLayout, voiceId: Int): HarmonyConfig {
         fun seekVal(tag: String): Int = panel.findViewWithTag<SeekBar>(tag)?.progress ?: 0
         return HarmonyConfig(
-            toneStepOffset = seekVal("toneStep") - 7,
-            timeDriftMs = seekVal("timeDrift").toLong(),
+            toneStepOffset  = seekVal("toneStep") - 7,
+            timeDriftMs     = seekVal("timeDrift").toLong(),
             skipProbability = seekVal("skipPct") / 100f,
-            masterVelocity = seekVal("masterVel"),
-            velocityDrift = seekVal("velDrift"),
-            midiChannel = seekVal("midiCh"),
-            referenceVoice = if (voiceId == 3) (panel.findViewWithTag<Spinner>("refVoice")?.selectedItemPosition ?: 0) + 1 else 1
+            masterVelocity  = seekVal("masterVel"),
+            velocityDrift   = seekVal("velDrift"),
+            midiChannel     = seekVal("midiCh"),
+            referenceVoice  = if (voiceId == 3) (panel.findViewWithTag<Spinner>("refVoice")?.selectedItemPosition ?: 0) + 1 else 1
         )
     }
 
     private fun readIndependentConfig(panel: LinearLayout): IndependentConfig {
         fun seekVal(tag: String): Int = panel.findViewWithTag<SeekBar>(tag)?.progress ?: 0
-        val shared = panel.findViewWithTag<RadioButton>("sharedPro")?.isChecked ?: true
-        // rootSpinner position 0 = Follow Main (stored as 0), positions 1-12 = C..B (stored as 1..12)
-        val rootPos = panel.findViewWithTag<Spinner>("indRoot")?.selectedItemPosition ?: 0
-        val styleIdx = panel.findViewWithTag<Spinner>("indStyle")?.selectedItemPosition ?: 0
+        val shared         = panel.findViewWithTag<RadioButton>("sharedPro")?.isChecked ?: true
+        val rootPos        = panel.findViewWithTag<Spinner>("indRoot")?.selectedItemPosition ?: 0
+        val styleIdx       = panel.findViewWithTag<Spinner>("indStyle")?.selectedItemPosition ?: 0
         val droneTimingIdx = panel.findViewWithTag<Spinner>("indDroneTiming")?.selectedItemPosition ?: 0
-        val minBeats = (panel.findViewWithTag<SeekBar>("droneMin")?.progress ?: 15) + 1
-        val maxBeats = (panel.findViewWithTag<SeekBar>("droneMax")?.progress ?: 63) + 1
+        val minBeats       = (panel.findViewWithTag<SeekBar>("droneMin")?.progress ?: 15) + 1
+        val maxBeats       = (panel.findViewWithTag<SeekBar>("droneMax")?.progress ?: 63) + 1
         return IndependentConfig(
-            bpm          = seekVal("indBpm") + 20,
-            velocity     = seekVal("indVel"),
-            minOctave    = seekVal("indMinOct"),
-            maxOctave    = seekVal("indMaxOct"),
-            midiChannel  = seekVal("indMidiCh"),
+            bpm           = seekVal("indBpm") + 20,
+            velocity      = seekVal("indVel"),
+            minOctave     = seekVal("indMinOct"),
+            maxOctave     = seekVal("indMaxOct"),
+            midiChannel   = seekVal("indMidiCh"),
             selectedScale = panel.findViewWithTag<Spinner>("indScale")?.selectedItemPosition ?: 0,
-            rootNote     = rootPos,
-            timingMode   = panel.findViewWithTag<Spinner>("indTiming")?.selectedItemPosition ?: 0,
-            useSharedPro = shared,
-            style        = VoiceStyle.entries.getOrElse(styleIdx) { VoiceStyle.GENERATIVE },
-            droneTiming  = DroneTimingMode.entries.getOrElse(droneTimingIdx) { DroneTimingMode.CONSTANT },
+            rootNote      = rootPos,
+            timingMode    = panel.findViewWithTag<Spinner>("indTiming")?.selectedItemPosition ?: 0,
+            useSharedPro  = shared,
+            style         = VoiceStyle.entries.getOrElse(styleIdx) { VoiceStyle.GENERATIVE },
+            droneTiming   = DroneTimingMode.entries.getOrElse(droneTimingIdx) { DroneTimingMode.CONSTANT },
             droneMinBeats = minBeats,
             droneMaxBeats = maxBeats,
-            proSettings  = ProSettings(
-                jitterAmount    = seekVal("jitAmt"),
-                jitterType      = JitterType.entries[panel.findViewWithTag<Spinner>("jitType")?.selectedItemPosition ?: 0],
-                velocityPattern = VelocityPattern.entries[panel.findViewWithTag<Spinner>("velPattern")?.selectedItemPosition ?: 0],
+            proSettings   = ProSettings(
+                jitterAmount      = seekVal("jitAmt"),
+                jitterType        = JitterType.entries[panel.findViewWithTag<Spinner>("jitType")?.selectedItemPosition ?: 0],
+                velocityPattern   = VelocityPattern.entries[panel.findViewWithTag<Spinner>("velPattern")?.selectedItemPosition ?: 0],
                 euclideanEnabled  = panel.findViewWithTag<Switch>("eEnabled")?.isChecked ?: false,
                 euclideanSteps    = seekVal("eSteps") + 2,
                 euclideanDensity  = seekVal("eDensity") + 1,
@@ -445,8 +449,8 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         panel.findViewWithTag<RadioButton>("rbHarmony")?.isChecked     = cfg.mode == VoiceMode.HARMONY
         panel.findViewWithTag<RadioButton>("rbIndependent")?.isChecked = cfg.mode == VoiceMode.INDEPENDENT
 
-        panel.findViewWithTag<View>("harmonyPanel")?.visibility     = if (cfg.mode == VoiceMode.HARMONY)      View.VISIBLE else View.GONE
-        panel.findViewWithTag<View>("independentPanel")?.visibility = if (cfg.mode == VoiceMode.INDEPENDENT)  View.VISIBLE else View.GONE
+        panel.findViewWithTag<View>("harmonyPanel")?.visibility     = if (cfg.mode == VoiceMode.HARMONY)     View.VISIBLE else View.GONE
+        panel.findViewWithTag<View>("independentPanel")?.visibility = if (cfg.mode == VoiceMode.INDEPENDENT) View.VISIBLE else View.GONE
 
         if (cfg.mode == VoiceMode.HARMONY) {
             panel.findViewWithTag<SeekBar>("masterVel")?.progress = cfg.harmonyConfig.masterVelocity
@@ -459,19 +463,18 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             panel.findViewWithTag<SeekBar>("indMaxOct")?.progress = ic.maxOctave
             panel.findViewWithTag<SeekBar>("indMidiCh")?.progress = ic.midiChannel
             panel.findViewWithTag<Spinner>("indScale")?.setSelection(ic.selectedScale)
-            // Sync root spinner: rootNote 0 -> position 0; 1..12 -> positions 1..12
             panel.findViewWithTag<Spinner>("indRoot")?.setSelection(ic.rootNote.coerceIn(0, 12))
             panel.findViewWithTag<Spinner>("indTiming")?.setSelection(ic.timingMode)
+            // These two spinners have their own listeners; setting selection here
+            // triggers updateIndVisibility() via isUpdatingFromSync guard.
             panel.findViewWithTag<Spinner>("indStyle")?.setSelection(ic.style.ordinal)
             panel.findViewWithTag<Spinner>("indDroneTiming")?.setSelection(ic.droneTiming.ordinal)
-
             panel.findViewWithTag<SeekBar>("droneMin")?.progress = ic.droneMinBeats - 1
             panel.findViewWithTag<SeekBar>("droneMax")?.progress = ic.droneMaxBeats - 1
             panel.findViewWithTag<TextView>("tvDroneRange")?.text = "Drone beat range: ${ic.droneMinBeats} - ${ic.droneMaxBeats}"
-
-            panel.findViewWithTag<RadioButton>("sharedPro")?.isChecked  = ic.useSharedPro
-            panel.findViewWithTag<RadioButton>("customPro")?.isChecked  = !ic.useSharedPro
-            panel.findViewWithTag<View>("customProPanel")?.visibility   = if (ic.useSharedPro) View.GONE else View.VISIBLE
+            panel.findViewWithTag<RadioButton>("sharedPro")?.isChecked = ic.useSharedPro
+            panel.findViewWithTag<RadioButton>("customPro")?.isChecked = !ic.useSharedPro
+            panel.findViewWithTag<View>("customProPanel")?.visibility  = if (ic.useSharedPro) View.GONE else View.VISIBLE
         }
     }
 
@@ -485,8 +488,8 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
 
     private fun labeledSeekBar(ctx: Context, label: String, min: Int, max: Int, default: Int, tag: String, onSync: () -> Unit): LinearLayout {
         val row = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 8, 0, 4) }
-        val tv = TextView(ctx).apply { text = "$label: $default"; minWidth = 350; setTextColor(0xFFE8E6E1.toInt()) }
-        val sb = SeekBar(ctx).apply {
+        val tv  = TextView(ctx).apply { text = "$label: $default"; minWidth = 350; setTextColor(0xFFE8E6E1.toInt()) }
+        val sb  = SeekBar(ctx).apply {
             this.tag = tag; this.max = max - min; this.progress = default - min
             layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -509,7 +512,17 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         }
     }
 
-    private fun attachSyncListeners(group: ViewGroup, onChange: () -> Unit, skipSeekBars: Boolean) {
+    /**
+     * Walk the view tree and attach generic sync listeners.
+     * Spinners listed in [skipTaggedSpinners] are skipped because they
+     * already have dedicated listeners with visibility logic attached.
+     */
+    private fun attachSyncListeners(
+        group: ViewGroup,
+        onChange: () -> Unit,
+        skipSeekBars: Boolean,
+        skipTaggedSpinners: Set<String> = emptySet()
+    ) {
         for (i in 0 until group.childCount) {
             when (val c = group.getChildAt(i)) {
                 is SeekBar -> if (!skipSeekBars) c.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -517,12 +530,17 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
                     override fun onStartTrackingTouch(s: SeekBar?) {}
                     override fun onStopTrackingTouch(s: SeekBar?) {}
                 })
-                is Spinner -> c.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                    override fun onItemSelected(a: AdapterView<*>?, v: View?, p: Int, id: Long) { if (!isUpdatingFromSync) onChange() }
-                    override fun onNothingSelected(a: AdapterView<*>?) {}
+                is Spinner -> {
+                    val spinnerTag = c.tag as? String
+                    if (spinnerTag !in skipTaggedSpinners) {
+                        c.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                            override fun onItemSelected(a: AdapterView<*>?, v: View?, p: Int, id: Long) { if (!isUpdatingFromSync) onChange() }
+                            override fun onNothingSelected(a: AdapterView<*>?) {}
+                        }
+                    }
                 }
                 is RadioButton -> c.setOnCheckedChangeListener { _, checked -> if (checked && !isUpdatingFromSync) onChange() }
-                is ViewGroup -> attachSyncListeners(c, onChange, skipSeekBars)
+                is ViewGroup -> attachSyncListeners(c, onChange, skipSeekBars, skipTaggedSpinners)
             }
         }
     }

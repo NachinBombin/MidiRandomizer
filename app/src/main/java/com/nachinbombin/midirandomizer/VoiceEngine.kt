@@ -3,25 +3,23 @@ package com.nachinbombin.midirandomizer
 import android.media.midi.MidiInputPort
 import android.os.Handler
 import android.util.Log
-import java.io.IOException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
 import kotlin.random.Random
 
 /**
  * Self-contained execution engine for one secondary voice (V2 or V3).
  */
 class VoiceEngine(
-    private val voiceId:    Int,
+    private val voiceId:     Int,
     private val mainHandler: Handler,
     private val getInputPort: () -> MidiInputPort?,
-    private val getScales: () -> List<List<Int>>,
+    private val getScales:    () -> List<List<Int>>,
     private val getGlobalScale: () -> Int,
     private val getGlobalRoot:  () -> Int,
-    private val getV2Note: () -> Int,
+    private val getV2Note:    () -> Int,
     private val onNotePlayed: (Int) -> Unit,
-    private val onNoteOnRaw: (Int, Int, Int) -> Unit,
+    private val onNoteOnRaw:  (Int, Int, Int) -> Unit,
     private val onNoteOffRaw: (Int, Int) -> Unit
 ) {
     companion object { private const val TAG = "VoiceEngine" }
@@ -30,14 +28,18 @@ class VoiceEngine(
 
     private var scheduler: ExecutorService? = null
     @Volatile private var running = false
-    private var currentNote = -1
+
+    // Track the note AND the channel it was started on so noteOff always
+    // goes to the right channel even if config is updated mid-flight.
+    private var currentNote    = -1
+    private var currentNoteCh  = 0
 
     private var velocityShaper: VelocityShaper = VelocityShaper(VelocityPattern.RANDOM, 90)
-    private var markovChain: MarkovMelody? = null
-    private var euclideanPattern: BooleanArray = BooleanArray(0)
+    private var markovChain:    MarkovMelody?   = null
+    private var euclideanPattern: BooleanArray  = BooleanArray(0)
     private var euclideanStep = 0
 
-    // ── Harmony mode ─────────────────────────────────────────────────
+    // ── Harmony mode ───────────────────────────────────────────────────────
 
     fun onV1NoteOn(v1Note: Int, v1Velocity: Int) {
         val cfg = config
@@ -47,32 +49,32 @@ class VoiceEngine(
         if (hc.skipProbability > 0f && Random.nextFloat() < hc.skipProbability) return
 
         val scaleIntervals = getScales().getOrNull(getGlobalScale()) ?: return
-        val allowed = DiatonicHarmony.allowedNotes(scaleIntervals, getGlobalRoot())
-        val refNote = if (voiceId == 3 && hc.referenceVoice == 2) getV2Note() else v1Note
+        val allowed  = DiatonicHarmony.allowedNotes(scaleIntervals, getGlobalRoot())
+        val refNote  = if (voiceId == 3 && hc.referenceVoice == 2) getV2Note() else v1Note
         val targetNote = DiatonicHarmony.applyOffset(refNote, hc.toneStepOffset, allowed)
-
-        val vel = DiatonicHarmony.applyVelocity(v1Velocity, hc)
+        val vel   = DiatonicHarmony.applyVelocity(v1Velocity, hc)
         val delay = if (hc.timeDriftMs > 0) Random.nextLong(0, hc.timeDriftMs + 1) else 0L
 
         if (delay <= 0) {
             fireHarmonyNote(targetNote, vel, hc.midiChannel)
         } else {
             mainHandler.postDelayed({
-                if (MidiOutputService.getInstance() != null && config.mode == VoiceMode.HARMONY) {
+                if (config.mode == VoiceMode.HARMONY)
                     fireHarmonyNote(targetNote, vel, hc.midiChannel)
-                }
             }, delay)
         }
     }
 
     private fun fireHarmonyNote(note: Int, vel: Int, ch: Int) {
-        if (currentNote >= 0) onNoteOffRaw(currentNote, ch)
+        // Use the channel the PREVIOUS note was opened on for its noteOff.
+        if (currentNote >= 0) onNoteOffRaw(currentNote, currentNoteCh)
         onNoteOnRaw(note, vel, ch)
         onNotePlayed(note)
-        currentNote = note
+        currentNote   = note
+        currentNoteCh = ch
     }
 
-    // ── Independent mode ───────────────────────────────────────────────
+    // ── Independent mode ──────────────────────────────────────────────────
 
     fun startIndependent() {
         val cfg = config
@@ -86,34 +88,37 @@ class VoiceEngine(
 
     fun stopIndependent() {
         running = false
-        val s = scheduler
+        val s  = scheduler
         scheduler = null
         s?.shutdownNow()
-        // Removed blocking awaitTermination on main thread
-        if (currentNote >= 0) {
-            onNoteOffRaw(currentNote, config.independentConfig.midiChannel)
-            currentNote = -1
+        // Capture channel now before any config change races us.
+        val note = currentNote
+        val ch   = currentNoteCh
+        if (note >= 0) {
+            onNoteOffRaw(note, ch)
+            currentNote   = -1
+            currentNoteCh = 0
         }
     }
 
+    /** Full stop — used when global playback stops. */
     fun stop() {
-        running = false
         stopIndependent()
-        scheduler?.shutdownNow() // Double tap for safety
     }
 
     private val independentLoop = Runnable {
         try {
             while (running) {
-                if (!running) break
-                val ic  = config.independentConfig
+                val ic = config.independentConfig
+
                 if (ic.style == VoiceStyle.SINGLE_NOTE_DRONE) {
                     fireIndependentNote(ic)
+                    // Hold forever; will be interrupted by stopIndependent().
+                    try { Thread.sleep(Long.MAX_VALUE) } catch (_: InterruptedException) {}
                     break
                 }
 
-                val ps  = ic.proSettings
-
+                val ps       = ic.proSettings
                 val euclidOn = ps.euclideanEnabled && ic.timingMode == MidiService.TIMING_EUCLIDEAN
                 val isOnset  = if (euclidOn) {
                     val hit = euclideanPattern.getOrElse(euclideanStep) { false }
@@ -124,24 +129,33 @@ class VoiceEngine(
                 if (isOnset) fireIndependentNote(ic)
 
                 try {
-                    Thread.sleep(calcInterval(ic))
+                    Thread.sleep(calcInterval(ic).coerceAtLeast(10L))
                 } catch (_: InterruptedException) {
                     break
                 }
             }
         } finally {
+            // Safety: ensure any held note is released when loop exits for any reason.
+            val note = currentNote
+            val ch   = currentNoteCh
+            if (note >= 0) {
+                onNoteOffRaw(note, ch)
+                currentNote   = -1
+                currentNoteCh = 0
+            }
             running = false
         }
     }
 
     private fun fireIndependentNote(ic: IndependentConfig) {
-        val isDrone = ic.style == VoiceStyle.SINGLE_NOTE_DRONE || ic.style == VoiceStyle.EVOLVING_DRONE
+        val isDrone  = ic.style == VoiceStyle.SINGLE_NOTE_DRONE || ic.style == VoiceStyle.EVOLVING_DRONE
         val prevNote = currentNote
+        val prevCh   = currentNoteCh
 
-        if (!isDrone && prevNote >= 0) onNoteOffRaw(prevNote, ic.midiChannel)
+        if (!isDrone && prevNote >= 0) onNoteOffRaw(prevNote, prevCh)
 
         val intervals = getScales().getOrNull(ic.selectedScale) ?: return
-        val ps = ic.proSettings
+        val ps        = ic.proSettings
 
         val degreeIdx = if (ps.markovEnabled) {
             markovChain?.nextDegree() ?: Random.nextInt(intervals.size)
@@ -150,20 +164,17 @@ class VoiceEngine(
         val interval = intervals[degreeIdx]
         val range    = (ic.maxOctave - ic.minOctave + 1).coerceAtLeast(1)
         val oct      = ic.minOctave + Random.nextInt(range)
-
-        // If voice has its own root set (rootNote 1..12 = semitones 0..11), use it.
-        // rootNote == 0 means "follow global root" (same key as Voice 1).
-        val root = if (ic.rootNote > 0) ic.rootNote - 1 else getGlobalRoot()
-        val noteNum = ((oct + 1) * 12 + interval + root).coerceIn(0, 127)
-
-        val vel = velocityShaper.next()
+        val root     = if (ic.rootNote > 0) ic.rootNote - 1 else getGlobalRoot()
+        val noteNum  = ((oct + 1) * 12 + interval + root).coerceIn(0, 127)
+        val vel      = velocityShaper.next()
 
         onNoteOnRaw(noteNum, vel, ic.midiChannel)
         onNotePlayed(noteNum)
-        currentNote = noteNum
+        currentNote   = noteNum
+        currentNoteCh = ic.midiChannel
 
         if (isDrone && prevNote >= 0 && prevNote != noteNum) {
-            onNoteOffRaw(prevNote, ic.midiChannel)
+            onNoteOffRaw(prevNote, prevCh)
         }
     }
 
@@ -174,10 +185,10 @@ class VoiceEngine(
                 val max = ic.droneMaxBeats.coerceIn(min, 256)
                 Random.nextInt(min, max + 1)
             } else 32
-            return (60000L / ic.bpm.coerceAtLeast(1)) * beats
+            return (60_000L / ic.bpm.coerceAtLeast(1)) * beats
         }
-        val base = (60_000.0 / ic.bpm).toLong()
-        val ps   = ic.proSettings
+        val base   = (60_000.0 / ic.bpm.coerceAtLeast(1)).toLong()
+        val ps     = ic.proSettings
         val modeMs = when (ic.timingMode) {
             MidiService.TIMING_METRONOME  -> base
             MidiService.TIMING_MIXED      -> if (Random.nextFloat() < 0.3f) base / 2 else base
@@ -188,13 +199,11 @@ class VoiceEngine(
         return JitterEngine.applyJitter(modeMs, ps.jitterAmount, ps.jitterType)
     }
 
-    // ── Helper rebuild ────────────────────────────────────────────────
-
     private fun rebuildHelpers(ic: IndependentConfig) {
-        val ps       = ic.proSettings
-        val scSz     = getScales().getOrNull(ic.selectedScale)?.size ?: 7
+        val ps   = ic.proSettings
+        val scSz = getScales().getOrNull(ic.selectedScale)?.size ?: 7
         velocityShaper = VelocityShaper(ps.velocityPattern, ic.velocity).also { it.reset() }
-        markovChain  = if (ps.markovEnabled)
+        markovChain    = if (ps.markovEnabled)
             MarkovMelody(scSz, ps.melodicLogicStyle).also { it.reset() } else null
         if (ps.euclideanEnabled) {
             euclideanPattern = EuclideanRhythm.generate(
