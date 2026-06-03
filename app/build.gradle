@@ -1,6 +1,7 @@
 plugins {
     id 'com.android.application'
     id 'kotlin-android'
+    id 'kotlin-parcelize'
 }
 
 android {
@@ -9,7 +10,7 @@ android {
 
     defaultConfig {
         applicationId "com.nachinbombin.midirandomizer"
-        minSdk 23
+        minSdk 24
         targetSdk 34
         versionCode 2
         versionName "2.0-pro"

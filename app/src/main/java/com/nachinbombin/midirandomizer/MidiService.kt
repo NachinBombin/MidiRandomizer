@@ -10,9 +10,11 @@ import android.os.*
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.random.Random
 
 class MidiService : Service() {
@@ -42,30 +44,29 @@ class MidiService : Service() {
 
     @Volatile private var isPlaying = false
 
-    // ── Voice 1 base parameters ───────────────────────────────────────────────
-    private var bpm           = 120
-    private var velocity      = 100
-    private var minOctave     = 3
-    private var maxOctave     = 5
-    private var channel       = 0
-    private var selectedScale = 0
-    private var rootNote      = 0   // C by default
-    private var timingMode    = TIMING_METRONOME
+    // ── Voice parameters (Shared for sync) ───────────────────────────────────
+    @Volatile private var v1Params = Voice1Params()
+    @Volatile private var v2Config = VoiceConfig()
+    @Volatile private var v3Config = VoiceConfig()
 
-    // ── Pro parameters (Voice 1) ──────────────────────────────────────────────
-    @Volatile private var proSettings = ProSettings()
-
-    // ── Voice 2 / Voice 3 configs ─────────────────────────────────────────────
-    @Volatile private var voice2Config = VoiceConfig()
-    @Volatile private var voice3Config = VoiceConfig()
+    data class Voice1Params(
+        val bpm: Int = 120,
+        val velocity: Int = 100,
+        val minOctave: Int = 3,
+        val maxOctave: Int = 5,
+        val channel: Int = 0,
+        val scale: Int = 0,
+        val rootNote: Int = 0,
+        val timingMode: Int = TIMING_METRONOME,
+        val proSettings: ProSettings = ProSettings()
+    )
 
     private var voice2Engine: VoiceEngine? = null
     private var voice3Engine: VoiceEngine? = null
 
-    // Last note played by each voice (for V3 cascade)
-    @Volatile private var lastV2Note = 60
+    private val activeNotes = ConcurrentHashMap<Int, MutableSet<Int>>()
+    private val lastV2Note = AtomicInteger(60)
 
-    // ── Scale definitions ─────────────────────────────────────────────────────
     private val scales = listOf(
         listOf(0,1,2,3,4,5,6,7,8,9,10,11),
         listOf(0,2,4,5,7,9,11),
@@ -79,18 +80,17 @@ class MidiService : Service() {
         listOf(0,2,4,6,8,10)
     )
 
-    // ── Stateful helpers (Voice 1) ────────────────────────────────────────────
-    private var velocityShaper: VelocityShaper = VelocityShaper(VelocityPattern.RANDOM, 100)
-    private var markovChain: MarkovMelody?     = null
-    private var euclideanPattern: BooleanArray = BooleanArray(0)
-    private var euclideanStep                  = 0
-    private var currentNoteNumber              = -1
+    private var v1VelocityShaper: VelocityShaper = VelocityShaper(VelocityPattern.RANDOM, 100)
+    private var v1MarkovChain:    MarkovMelody?   = null
+    private var v1Euclidean:     BooleanArray    = BooleanArray(0)
+    private var v1EuclideanStep                  = 0
+    private var v1CurrentNote                    = -1
 
-    // ── Listener ──────────────────────────────────────────────────────────────
     interface MidiEventListener {
         fun onNotePlayed(noteName: String, midiNote: Int, velocity: Int)
         fun onStatusChanged(status: String)
         fun onPlaybackStateChanged(playing: Boolean)
+        fun onVoiceParamsChanged(v1: Voice1Params, v2: VoiceConfig, v3: VoiceConfig)
     }
     private var listener: MidiEventListener? = null
 
@@ -100,56 +100,77 @@ class MidiService : Service() {
         super.onCreate()
         midiManager = getSystemService(MIDI_SERVICE) as MidiManager
         createNotificationChannel()
+        activeNotes[1] = ConcurrentHashMap.newKeySet()
+        activeNotes[2] = ConcurrentHashMap.newKeySet()
+        activeNotes[3] = ConcurrentHashMap.newKeySet()
         buildVoiceEngines()
     }
-
-    // ── Public API ────────────────────────────────────────────────────────────
 
     fun setListener(l: MidiEventListener?) {
         listener = l
         l?.onPlaybackStateChanged(isPlaying)
+        l?.onVoiceParamsChanged(v1Params, v2Config, v3Config)
     }
 
-    fun updateParameters(
-        bpm: Int, velocity: Int,
-        minOct: Int, maxOct: Int,
-        chan: Int, scale: Int, timing: Int,
-        root: Int = 0
-    ) {
-        this.bpm           = bpm
-        this.velocity      = velocity
-        this.minOctave     = minOct
-        this.maxOctave     = maxOct
-        this.channel       = chan
-        this.selectedScale = scale
-        this.timingMode    = timing
-        this.rootNote      = root
-        velocityShaper.baseVelocity = velocity
+    // State accessors for manual polling
+    fun isMidiPlaying() = isPlaying
+    fun getV1Params() = v1Params
+    fun getV2Config() = v2Config
+    fun getV3Config() = v3Config
+
+    @Synchronized
+    fun updateV1Parameters(p: Voice1Params) {
+        v1Params = p
+        v1VelocityShaper.baseVelocity = p.velocity
+        rebuildV1ProHelpers()
+        
+        updateVoice2Config(v2Config)
+        updateVoice3Config(v3Config)
+        notifyParamsChanged()
     }
 
+    @Synchronized
     fun updateProSettings(settings: ProSettings) {
-        proSettings = settings
-        rebuildProHelpers()
+        v1Params = v1Params.copy(proSettings = settings)
+        rebuildV1ProHelpers()
+        
+        updateVoice2Config(v2Config)
+        updateVoice3Config(v3Config)
+        notifyParamsChanged()
     }
 
-    /** Update Voice 2 configuration at runtime (thread-safe). */
+    @Synchronized
     fun updateVoice2Config(cfg: VoiceConfig) {
-        voice2Config = cfg
-        voice2Engine?.config = cfg
+        v2Config = cfg
+        voice2Engine?.config = effectiveVoiceConfig(cfg)
         if (isPlaying) {
             voice2Engine?.stopIndependent()
             if (cfg.enabled && cfg.mode == VoiceMode.INDEPENDENT) voice2Engine?.startIndependent()
         }
+        notifyParamsChanged()
     }
 
-    /** Update Voice 3 configuration at runtime (thread-safe). */
+    @Synchronized
     fun updateVoice3Config(cfg: VoiceConfig) {
-        voice3Config = cfg
-        voice3Engine?.config = cfg
+        v3Config = cfg
+        voice3Engine?.config = effectiveVoiceConfig(cfg)
         if (isPlaying) {
             voice3Engine?.stopIndependent()
             if (cfg.enabled && cfg.mode == VoiceMode.INDEPENDENT) voice3Engine?.startIndependent()
         }
+        notifyParamsChanged()
+    }
+
+    private fun effectiveVoiceConfig(cfg: VoiceConfig): VoiceConfig {
+        return if (cfg.mode == VoiceMode.INDEPENDENT && cfg.independentConfig.useSharedPro) {
+            cfg.copy(independentConfig = cfg.independentConfig.copy(proSettings = v1Params.proSettings))
+        } else {
+            cfg
+        }
+    }
+
+    private fun notifyParamsChanged() {
+        mainHandler.post { listener?.onVoiceParamsChanged(v1Params, v2Config, v3Config) }
     }
 
     fun connectToDevice(info: MidiDeviceInfo) {
@@ -182,13 +203,12 @@ class MidiService : Service() {
     private fun startPlaying() {
         if (isPlaying) return
         isPlaying = true
-        rebuildProHelpers()
+        rebuildV1ProHelpers()
         try { startForeground(NOTIFICATION_ID, createNotification()) }
         catch (e: Exception) { Log.e(TAG, "startForeground failed", e) }
 
-        // Start independent-mode secondary voices
-        voice2Engine?.let { if (voice2Config.enabled && voice2Config.mode == VoiceMode.INDEPENDENT) it.startIndependent() }
-        voice3Engine?.let { if (voice3Config.enabled && voice3Config.mode == VoiceMode.INDEPENDENT) it.startIndependent() }
+        voice2Engine?.let { if (v2Config.enabled && v2Config.mode == VoiceMode.INDEPENDENT) it.startIndependent() }
+        voice3Engine?.let { if (v3Config.enabled && v3Config.mode == VoiceMode.INDEPENDENT) it.startIndependent() }
 
         scheduler = Executors.newSingleThreadExecutor()
         scheduler?.execute(noteLoop)
@@ -201,36 +221,58 @@ class MidiService : Service() {
         scheduler?.shutdownNow()
         try { scheduler?.awaitTermination(500, TimeUnit.MILLISECONDS) } catch (e: InterruptedException) { Thread.currentThread().interrupt() }
         scheduler = null
-        if (currentNoteNumber >= 0) { sendNoteOff(currentNoteNumber); currentNoteNumber = -1 }
+        
+        allNotesOff()
         voice2Engine?.stop()
         voice3Engine?.stop()
+        
         stopForeground(STOP_FOREGROUND_REMOVE)
         notifyPlaybackState(false)
     }
 
-    // ── Voice 1 note loop ─────────────────────────────────────────────────────
+    private fun allNotesOff() {
+        for (v in 1..3) {
+            val set = activeNotes[v] ?: continue
+            val notes = set.toList()
+            set.clear()
+            notes.forEach { note ->
+                val baseCh = when(v) {
+                    1 -> v1Params.channel
+                    2 -> v2Config.harmonyConfig.midiChannel
+                    3 -> v3Config.harmonyConfig.midiChannel
+                    else -> 0
+                }
+                sendNoteOffRaw(v, note, baseCh)
+            }
+        }
+        (0..15).forEach { ch ->
+            sendRawMidi(byteArrayOf((0xB0 or ch).toByte(), 123, 0))
+        }
+    }
 
     private val noteLoop = Runnable {
         while (isPlaying) {
-            val ps       = proSettings
-            val euclidOn = ps.euclideanEnabled && timingMode == TIMING_EUCLIDEAN
-            val isOnset  = if (euclidOn) {
-                val hit = euclideanPattern.getOrElse(euclideanStep) { false }
-                euclideanStep = (euclideanStep + 1) % euclideanPattern.size.coerceAtLeast(1)
+            val p = v1Params
+            val ps = p.proSettings
+            val euclidOn = ps.euclideanEnabled && p.timingMode == TIMING_EUCLIDEAN
+            val isOnset = if (euclidOn) {
+                val hit = v1Euclidean.getOrElse(v1EuclideanStep) { false }
+                v1EuclideanStep = (v1EuclideanStep + 1) % v1Euclidean.size.coerceAtLeast(1)
                 hit
             } else true
 
-            if (isOnset) sendRandomNote()
+            if (isOnset) sendRandomV1Note()
 
-            try { Thread.sleep(calculateInterval()) }
+            try { Thread.sleep(calculateV1Interval()) }
             catch (e: InterruptedException) { break }
         }
     }
 
-    private fun calculateInterval(): Long {
-        val base = (60_000.0 / bpm).toLong()
-        val ps   = proSettings
-        val modeInterval = when (timingMode) {
+    private fun calculateV1Interval(): Long {
+        val p = v1Params
+        val base = (60_000.0 / p.bpm).toLong()
+        val ps = p.proSettings
+        val modeInterval = when (p.timingMode) {
             TIMING_METRONOME  -> base
             TIMING_MIXED      -> if (Random.nextFloat() < 0.3f) base / 2 else base
             TIMING_RANDOMIZED -> (base * (0.5 + Random.nextDouble())).toLong()
@@ -240,36 +282,26 @@ class MidiService : Service() {
         return JitterEngine.applyJitter(modeInterval, ps.jitterAmount, ps.jitterType)
     }
 
-    private fun sendRandomNote() {
-        if (currentNoteNumber >= 0) sendNoteOff(currentNoteNumber)
+    private fun sendRandomV1Note() {
+        if (v1CurrentNote >= 0) sendNoteOffRaw(1, v1CurrentNote, v1Params.channel)
 
-        val ps        = proSettings
-        val intervals = scales.getOrNull(selectedScale) ?: return
+        val p = v1Params
+        val ps = p.proSettings
+        val intervals = scales.getOrNull(p.scale) ?: return
 
         val degreeIdx = if (ps.markovEnabled) {
-            markovChain?.nextDegree() ?: Random.nextInt(intervals.size)
+            v1MarkovChain?.nextDegree() ?: Random.nextInt(intervals.size)
         } else Random.nextInt(intervals.size)
 
-        val interval       = intervals[degreeIdx]
-        val range          = (maxOctave - minOctave + 1).coerceAtLeast(1)
-        val selectedOctave = minOctave + Random.nextInt(range)
-        val noteNumber     = ((selectedOctave + 1) * 12 + interval).coerceIn(0, 127)
-        val vel            = velocityShaper.next()
+        val interval = intervals[degreeIdx]
+        val range = (p.maxOctave - p.minOctave + 1).coerceAtLeast(1)
+        val selectedOctave = p.minOctave + Random.nextInt(range)
+        val noteNumber = ((selectedOctave + 1) * 12 + interval).coerceIn(0, 127)
+        val vel = v1VelocityShaper.next()
 
-        // Route with Omni support
-        val channels = if (channel == 0) (0..15).toList() else listOf(channel - 1)
-        channels.forEach { ch ->
-            val msg = byteArrayOf((0x90 or ch).toByte(), noteNumber.toByte(), vel.toByte())
-            inputPort?.let { p ->
-                try { p.send(msg, 0, msg.size) } catch (e: IOException) { Log.e(TAG, "Send error", e) }
-            }
-            MidiOutputService.getInstance()?.sendMidiToClients(msg, 0, msg.size, 0)
-        }
+        sendNoteOnRaw(1, noteNumber, vel, p.channel)
+        v1CurrentNote = noteNumber
 
-        currentNoteNumber = noteNumber
-        lastV2Note        = noteNumber  // Voice 3 cascade seed before V2 updates it
-
-        // Notify secondary voices
         voice2Engine?.onV1NoteOn(noteNumber, vel)
         voice3Engine?.onV1NoteOn(noteNumber, vel)
 
@@ -277,16 +309,30 @@ class MidiService : Service() {
         mainHandler.post { listener?.onNotePlayed(noteName, noteNumber, vel) }
     }
 
-    private fun sendNoteOff(noteNumber: Int) {
-        val channels = if (channel == 0) (0..15).toList() else listOf(channel - 1)
-        channels.forEach { ch ->
-            val msg = byteArrayOf((0x80 or ch).toByte(), noteNumber.toByte(), 0)
-            try { inputPort?.send(msg, 0, msg.size) } catch (e: IOException) { /* ignore */ }
-            MidiOutputService.getInstance()?.sendMidiToClients(msg, 0, msg.size, 0)
+    fun sendNoteOnRaw(voiceId: Int, note: Int, vel: Int, ch: Int) {
+        val channels = if (ch == 0) (0..15).toList() else listOf(ch - 1)
+        channels.forEach { c ->
+            val msg = byteArrayOf((0x90 or c).toByte(), note.toByte(), vel.toByte())
+            sendRawMidi(msg)
         }
+        activeNotes[voiceId]?.add(note)
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    fun sendNoteOffRaw(voiceId: Int, note: Int, ch: Int) {
+        val channels = if (ch == 0) (0..15).toList() else listOf(ch - 1)
+        channels.forEach { c ->
+            val msg = byteArrayOf((0x80 or c).toByte(), note.toByte(), 0)
+            sendRawMidi(msg)
+        }
+        activeNotes[voiceId]?.remove(note)
+    }
+
+    fun sendRawMidi(msg: ByteArray) {
+        inputPort?.let { p ->
+            try { p.send(msg, 0, msg.size) } catch (e: IOException) { Log.e(TAG, "Send error", e) }
+        }
+        MidiOutputService.getInstance()?.sendMidiToClients(msg, 0, msg.size, 0)
+    }
 
     private fun buildVoiceEngines() {
         voice2Engine = VoiceEngine(
@@ -294,35 +340,42 @@ class MidiService : Service() {
             mainHandler  = mainHandler,
             getInputPort = { inputPort },
             getScales    = { scales },
-            getGlobalScale = { selectedScale },
-            getGlobalRoot  = { rootNote },
-            getV2Note    = { lastV2Note }
-        ).also { it.config = voice2Config }
+            getGlobalScale = { v1Params.scale },
+            getGlobalRoot  = { v1Params.rootNote },
+            getV2Note    = { lastV2Note.get() },
+            onNotePlayed = { note -> lastV2Note.set(note) },
+            onNoteOnRaw  = { n, v, ch -> sendNoteOnRaw(2, n, v, ch) },
+            onNoteOffRaw = { n, ch -> sendNoteOffRaw(2, n, ch) }
+        ).also { it.config = effectiveVoiceConfig(v2Config) }
 
         voice3Engine = VoiceEngine(
             voiceId      = 3,
             mainHandler  = mainHandler,
             getInputPort = { inputPort },
             getScales    = { scales },
-            getGlobalScale = { selectedScale },
-            getGlobalRoot  = { rootNote },
-            getV2Note    = { lastV2Note }
-        ).also { it.config = voice3Config }
+            getGlobalScale = { v1Params.scale },
+            getGlobalRoot  = { v1Params.rootNote },
+            getV2Note    = { lastV2Note.get() },
+            onNotePlayed = { /* V3 doesn't seed anyone yet */ },
+            onNoteOnRaw  = { n, v, ch -> sendNoteOnRaw(3, n, v, ch) },
+            onNoteOffRaw = { n, ch -> sendNoteOffRaw(3, n, ch) }
+        ).also { it.config = effectiveVoiceConfig(v3Config) }
     }
 
-    private fun rebuildProHelpers() {
-        val ps       = proSettings
-        val scaleSize = scales.getOrNull(selectedScale)?.size ?: 7
-        velocityShaper = VelocityShaper(ps.velocityPattern, velocity).also { it.reset() }
-        markovChain    = if (ps.markovEnabled)
+    private fun rebuildV1ProHelpers() {
+        val p = v1Params
+        val ps = p.proSettings
+        val scaleSize = scales.getOrNull(p.scale)?.size ?: 7
+        v1VelocityShaper = VelocityShaper(ps.velocityPattern, p.velocity).also { it.reset() }
+        v1MarkovChain = if (ps.markovEnabled)
             MarkovMelody(scaleSize, ps.melodicLogicStyle).also { it.reset() } else null
         if (ps.euclideanEnabled) {
-            euclideanPattern = EuclideanRhythm.generate(
+            v1Euclidean = EuclideanRhythm.generate(
                 ps.euclideanSteps.coerceIn(2, 32),
                 ps.euclideanDensity.coerceIn(1, ps.euclideanSteps),
                 ps.euclideanRotation
             )
-            euclideanStep = 0
+            v1EuclideanStep = 0
         }
     }
 

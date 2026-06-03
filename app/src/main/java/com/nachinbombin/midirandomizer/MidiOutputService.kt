@@ -27,7 +27,7 @@ class MidiOutputService : MidiDeviceService() {
      * Sends MIDI data to all connected clients on the virtual output port.
      */
     fun sendMidiToClients(data: ByteArray, offset: Int, count: Int, timestamp: Long) {
-        val receivers = getOutputPortReceivers()
+        val receivers = outputPortReceivers
         if (receivers.isEmpty()) {
             Log.v(TAG, "No clients connected to virtual output port")
             return

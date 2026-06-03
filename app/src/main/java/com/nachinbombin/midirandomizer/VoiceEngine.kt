@@ -11,27 +11,23 @@ import kotlin.random.Random
 
 /**
  * Self-contained execution engine for one secondary voice (V2 or V3).
- *
- * In HARMONY mode the engine is fed Voice-1 events via [onV1NoteOn] and
- * schedules its own transformed Note-On after a micro-delay.
- *
- * In INDEPENDENT mode the engine runs its own note loop on a dedicated thread,
- * mirroring the full MidiService note loop logic but using its own config.
  */
 class VoiceEngine(
-    private val voiceId:    Int,          // 2 or 3
+    private val voiceId:    Int,
     private val mainHandler: Handler,
     private val getInputPort: () -> MidiInputPort?,
     private val getScales: () -> List<List<Int>>,
     private val getGlobalScale: () -> Int,
     private val getGlobalRoot:  () -> Int,
-    private val getV2Note: () -> Int      // for V3 cascade reference
+    private val getV2Note: () -> Int,
+    private val onNotePlayed: (Int) -> Unit,
+    private val onNoteOnRaw: (Int, Int, Int) -> Unit,
+    private val onNoteOffRaw: (Int, Int) -> Unit
 ) {
     companion object { private const val TAG = "VoiceEngine" }
 
     @Volatile var config: VoiceConfig = VoiceConfig()
 
-    // Independent-mode state
     private var scheduler: ExecutorService? = null
     @Volatile private var running = false
     private var currentNote = -1
@@ -43,29 +39,39 @@ class VoiceEngine(
 
     // ── Harmony mode ─────────────────────────────────────────────────────────
 
-    /** Called by MidiService immediately after Voice 1 fires a Note-On. */
     fun onV1NoteOn(v1Note: Int, v1Velocity: Int) {
         val cfg = config
         if (!cfg.enabled || cfg.mode != VoiceMode.HARMONY) return
         val hc = cfg.harmonyConfig
 
-        // Skip probability check
         if (hc.skipProbability > 0f && Random.nextFloat() < hc.skipProbability) return
 
-        // Compute target pitch
         val scaleIntervals = getScales().getOrNull(getGlobalScale()) ?: return
         val allowed = DiatonicHarmony.allowedNotes(scaleIntervals, getGlobalRoot())
         val refNote = if (voiceId == 3 && hc.referenceVoice == 2) getV2Note() else v1Note
         val targetNote = DiatonicHarmony.applyOffset(refNote, hc.toneStepOffset, allowed)
 
-        // Velocity
         val vel = DiatonicHarmony.applyVelocity(v1Velocity, hc)
-
-        // Schedule with time drift
         val delay = if (hc.timeDriftMs > 0) Random.nextLong(0, hc.timeDriftMs + 1) else 0L
-        mainHandler.postDelayed({
-            sendNote(targetNote, vel, hc.midiChannel)
-        }, delay)
+
+        if (delay <= 0) {
+            fireHarmonyNote(targetNote, vel, hc.midiChannel)
+        } else {
+            mainHandler.postDelayed({
+                // Check if still in harmony mode and service still active
+                if (MidiOutputService.getInstance() != null && config.mode == VoiceMode.HARMONY) {
+                    fireHarmonyNote(targetNote, vel, hc.midiChannel)
+                }
+            }, delay)
+        }
+    }
+
+    private fun fireHarmonyNote(note: Int, vel: Int, ch: Int) {
+        // Harmony notes are usually short, but we should turn off the previous one if it exists
+        if (currentNote >= 0) onNoteOffRaw(currentNote, ch)
+        onNoteOnRaw(note, vel, ch)
+        onNotePlayed(note)
+        currentNote = note
     }
 
     // ── Independent mode ─────────────────────────────────────────────────────
@@ -86,10 +92,16 @@ class VoiceEngine(
         try { scheduler?.awaitTermination(500, TimeUnit.MILLISECONDS) }
         catch (e: InterruptedException) { Thread.currentThread().interrupt() }
         scheduler = null
-        if (currentNote >= 0) { sendNoteOff(currentNote, config.independentConfig.midiChannel); currentNote = -1 }
+        if (currentNote >= 0) { 
+            onNoteOffRaw(currentNote, config.independentConfig.midiChannel)
+            currentNote = -1 
+        }
     }
 
-    fun stop() { stopIndependent() }
+    fun stop() {
+        running = false
+        stopIndependent()
+    }
 
     private val independentLoop = Runnable {
         while (running) {
@@ -111,7 +123,8 @@ class VoiceEngine(
     }
 
     private fun fireIndependentNote(ic: IndependentConfig) {
-        if (currentNote >= 0) { sendNoteOff(currentNote, ic.midiChannel); currentNote = -1 }
+        if (currentNote >= 0) onNoteOffRaw(currentNote, ic.midiChannel)
+        
         val intervals = getScales().getOrNull(ic.selectedScale) ?: return
         val ps = ic.proSettings
 
@@ -125,7 +138,8 @@ class VoiceEngine(
         val noteNum  = ((oct + 1) * 12 + interval).coerceIn(0, 127)
         val vel      = velocityShaper.next()
 
-        sendNote(noteNum, vel, ic.midiChannel)
+        onNoteOnRaw(noteNum, vel, ic.midiChannel)
+        onNotePlayed(noteNum)
         currentNote = noteNum
     }
 
@@ -140,28 +154,6 @@ class VoiceEngine(
             else -> base
         }
         return JitterEngine.applyJitter(modeMs, ps.jitterAmount, ps.jitterType)
-    }
-
-    // ── MIDI send helpers ─────────────────────────────────────────────────────
-
-    private fun sendNote(note: Int, vel: Int, channel: Int) {
-        val channels = if (channel == 0) (0..15).toList() else listOf(channel - 1)
-        channels.forEach { ch ->
-            val msg = byteArrayOf((0x90 or ch).toByte(), note.toByte(), vel.toByte())
-            try { getInputPort()?.send(msg, 0, msg.size) }
-            catch (e: IOException) { Log.e(TAG, "V$voiceId send error", e) }
-            MidiOutputService.getInstance()?.sendMidiToClients(msg, 0, msg.size, 0)
-        }
-    }
-
-    private fun sendNoteOff(note: Int, channel: Int) {
-        val channels = if (channel == 0) (0..15).toList() else listOf(channel - 1)
-        channels.forEach { ch ->
-            val msg = byteArrayOf((0x80 or ch).toByte(), note.toByte(), 0)
-            try { getInputPort()?.send(msg, 0, msg.size) }
-            catch (e: IOException) { /* ignore */ }
-            MidiOutputService.getInstance()?.sendMidiToClients(msg, 0, msg.size, 0)
-        }
     }
 
     // ── Helper rebuild ────────────────────────────────────────────────────────
