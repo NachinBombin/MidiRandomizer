@@ -68,16 +68,25 @@ class MidiService : Service() {
     private val lastV2Note = AtomicInteger(60)
 
     private val scales = listOf(
-        listOf(0,1,2,3,4,5,6,7,8,9,10,11),
-        listOf(0,2,4,5,7,9,11),
-        listOf(0,2,3,5,7,8,10),
-        listOf(0,2,3,5,7,8,11),
-        listOf(0,2,4,7,9),
-        listOf(0,3,5,7,10),
-        listOf(0,3,5,6,7,10),
-        listOf(0,2,3,5,7,9,10),
-        listOf(0,2,4,5,7,9,10),
-        listOf(0,2,4,6,8,10)
+        // ── Original 10 scales (indices 0–9) ────────────────────────────────
+        listOf(0,1,2,3,4,5,6,7,8,9,10,11),   // 0  Chromatic
+        listOf(0,2,4,5,7,9,11),               // 1  Major (Ionian)
+        listOf(0,2,3,5,7,8,10),               // 2  Minor (Natural)
+        listOf(0,2,3,5,7,8,11),               // 3  Minor (Harmonic)
+        listOf(0,2,4,7,9),                    // 4  Pentatonic Major
+        listOf(0,3,5,7,10),                   // 5  Pentatonic Minor
+        listOf(0,3,5,6,7,10),                 // 6  Blues
+        listOf(0,2,3,5,7,9,10),               // 7  Dorian
+        listOf(0,2,4,5,7,9,10),               // 8  Mixolydian
+        listOf(0,2,4,6,8,10),                 // 9  Whole Tone
+        // ── New scales (indices 10–16) ───────────────────────────────────────
+        listOf(0,2,3,5,7,8,10),               // 10 Kurd (Annaziska / Aeolian)
+        listOf(0,2,3,5,7,9,10),               // 11 Celtic Minor (Amara / Dorian)
+        listOf(0,3,5,7,10),                   // 12 Pygmy
+        listOf(0,2,4,6,7,9,11),               // 13 SaBye / SaByeD (Lydian Dominant)
+        listOf(0,2,4,6,7,9,11),               // 14 Aegean (Lydian)
+        listOf(0,1,4,5,7,8,10),               // 15 Hijaz
+        listOf(0,2,3,7,8)                     // 16 Akebono
     )
 
     private var v1VelocityShaper: VelocityShaper = VelocityShaper(VelocityPattern.RANDOM, 100)

@@ -51,9 +51,25 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
     private val deviceMap = mutableMapOf<String, MidiDeviceInfo>()
 
     private val scales = listOf(
-        "Chromatic","Major","Minor (Natural)","Minor (Harmonic)",
-        "Pentatonic Major","Pentatonic Minor","Blues",
-        "Dorian","Mixolydian","Whole Tone"
+        // Original 10
+        "Chromatic",
+        "Major",
+        "Minor (Natural)",
+        "Minor (Harmonic)",
+        "Pentatonic Major",
+        "Pentatonic Minor",
+        "Blues",
+        "Dorian",
+        "Mixolydian",
+        "Whole Tone",
+        // New 7
+        "Kurd (Annaziska / Aeolian)",
+        "Celtic Minor (Amara)",
+        "Pygmy",
+        "SaBye / SaByeD",
+        "Aegean (Lydian)",
+        "Hijaz",
+        "Akebono"
     )
 
     override fun onStart() {
@@ -142,7 +158,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         for (info in devices) {
             val name = info.properties.getString(MidiDeviceInfo.PROPERTY_NAME)
                 ?: info.properties.getString(MidiDeviceInfo.PROPERTY_PRODUCT) ?: "Unknown Device"
-            val label = "$name  [${info.inputPortCount}↓ ${info.outputPortCount}↑]"
+            val label = "$name  [${info.inputPortCount}\u2193 ${info.outputPortCount}\u2191]"
             deviceAdapter.add(label)
             deviceMap[label] = info
         }
