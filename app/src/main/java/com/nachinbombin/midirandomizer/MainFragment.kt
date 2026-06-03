@@ -81,31 +81,20 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
 
     // ── Root note helpers ────────────────────────────────────────────────────
 
-    /**
-     * Returns the currently selected root note.
-     * -1 means FREE (no root / rootNote = 0 in params, no transposition).
-     */
     private fun selectedRootTag(): Int {
-        // Check row 1
         val r1id = rgRootRow1.checkedRadioButtonId
         if (r1id != -1) {
             val tag = requireView().findViewById<RadioButton>(r1id).tag as? String
             tag?.toIntOrNull()?.let { return it }
         }
-        // Check row 2
         val r2id = rgRootRow2.checkedRadioButtonId
         if (r2id != -1) {
             val tag = requireView().findViewById<RadioButton>(r2id).tag as? String
             tag?.toIntOrNull()?.let { return it }
         }
-        // FREE is checked
         return -1
     }
 
-    /**
-     * Programmatically select a root note across the three RadioGroups.
-     * Pass -1 to select FREE.
-     */
     private fun selectRoot(semitone: Int) {
         isUpdatingFromSync = true
         when {
@@ -159,29 +148,29 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
     }
 
     private fun bindViews(v: View) {
-        btnStartStop   = v.findViewById(R.id.btnStartStop)
-        tvStatus       = v.findViewById(R.id.tvStatus)
-        tvLastNote     = v.findViewById(R.id.tvLastNote)
-        seekBpm        = v.findViewById(R.id.seekBpm)
-        tvBpm          = v.findViewById(R.id.tvBpm)
-        seekVelocity   = v.findViewById(R.id.seekVelocity)
-        tvVelocity     = v.findViewById(R.id.tvVelocity)
-        tvOctave       = v.findViewById(R.id.tvOctave)
-        rangeOctave    = v.findViewById(R.id.rangeOctave)
-        rgTiming       = v.findViewById(R.id.rgTiming)
-        spinnerChannel = v.findViewById(R.id.spinnerChannel)
-        spinnerScale   = v.findViewById(R.id.spinnerScale)
-        spinnerStyle   = v.findViewById(R.id.spinnerStyle)
+        btnStartStop      = v.findViewById(R.id.btnStartStop)
+        tvStatus          = v.findViewById(R.id.tvStatus)
+        tvLastNote        = v.findViewById(R.id.tvLastNote)
+        seekBpm           = v.findViewById(R.id.seekBpm)
+        tvBpm             = v.findViewById(R.id.tvBpm)
+        seekVelocity      = v.findViewById(R.id.seekVelocity)
+        tvVelocity        = v.findViewById(R.id.tvVelocity)
+        tvOctave          = v.findViewById(R.id.tvOctave)
+        rangeOctave       = v.findViewById(R.id.rangeOctave)
+        rgTiming          = v.findViewById(R.id.rgTiming)
+        spinnerChannel    = v.findViewById(R.id.spinnerChannel)
+        spinnerScale      = v.findViewById(R.id.spinnerScale)
+        spinnerStyle      = v.findViewById(R.id.spinnerStyle)
         layoutDroneTiming = v.findViewById(R.id.layoutDroneTiming)
-        layoutDroneRange = v.findViewById(R.id.layoutDroneRange)
-        tvDroneRange   = v.findViewById(R.id.tvDroneRange)
-        rangeDroneBeats = v.findViewById(R.id.rangeDroneBeats)
-        rgDroneTiming  = v.findViewById(R.id.rgDroneTiming)
-        deviceListView = v.findViewById(R.id.listViewDevices)
-        tvDeviceInfo   = v.findViewById(R.id.tvDeviceInfo)
-        rgRootRow1     = v.findViewById(R.id.rgRootRow1)
-        rgRootRow2     = v.findViewById(R.id.rgRootRow2)
-        rgRootFree     = v.findViewById(R.id.rgRootFree)
+        layoutDroneRange  = v.findViewById(R.id.layoutDroneRange)
+        tvDroneRange      = v.findViewById(R.id.tvDroneRange)
+        rangeDroneBeats   = v.findViewById(R.id.rangeDroneBeats)
+        rgDroneTiming     = v.findViewById(R.id.rgDroneTiming)
+        deviceListView    = v.findViewById(R.id.listViewDevices)
+        tvDeviceInfo      = v.findViewById(R.id.tvDeviceInfo)
+        rgRootRow1        = v.findViewById(R.id.rgRootRow1)
+        rgRootRow2        = v.findViewById(R.id.rgRootRow2)
+        rgRootFree        = v.findViewById(R.id.rgRootFree)
 
         seekBpm.max      = 280
         seekBpm.progress = currentParams.bpm - 20
@@ -208,7 +197,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
 
         deviceListView.adapter = deviceAdapter
 
-        // Default: FREE selected (rootNote == 0, no transposition label)
+        // Default: FREE selected
         selectRoot(-1)
     }
 
@@ -277,17 +266,26 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
             currentParams = currentParams.copy(scale = it)
             push()
         }
-
         spinnerStyle.onItemSelectedListener = simpleSpinner {
             currentParams = currentParams.copy(style = VoiceStyle.entries[it])
             updateUiVisibility()
             push()
         }
-
         rgDroneTiming.setOnCheckedChangeListener { _, id ->
             if (isUpdatingFromSync) return@setOnCheckedChangeListener
             val timing = if (id == R.id.rbDroneRandom) DroneTimingMode.RANDOM else DroneTimingMode.CONSTANT
             currentParams = currentParams.copy(droneTiming = timing)
+            updateUiVisibility()
+            push()
+        }
+        rangeDroneBeats.addOnChangeListener { slider, _, fromUser ->
+            if (!fromUser) return@addOnChangeListener
+            val vals = slider.values
+            currentParams = currentParams.copy(
+                droneMinBeats = vals[0].toInt(),
+                droneMaxBeats = vals[1].toInt()
+            )
+            tvDroneRange.text = "Drone beat range: ${currentParams.droneMinBeats} - ${currentParams.droneMaxBeats}"
             push()
         }
 
@@ -295,7 +293,6 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         val rootRowListener = RadioGroup.OnCheckedChangeListener { group, checkedId ->
             if (isUpdatingFromSync || checkedId == -1) return@OnCheckedChangeListener
             isUpdatingFromSync = true
-            // Clear the other two groups
             if (group.id == R.id.rgRootRow1) {
                 rgRootRow2.clearCheck()
                 rgRootFree.clearCheck()
@@ -306,7 +303,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
             isUpdatingFromSync = false
             val tag = requireView().findViewById<RadioButton>(checkedId).tag as? String
             val semitone = tag?.toIntOrNull() ?: 0
-            currentParams = currentParams.copy(rootNote = semitone)
+            currentParams = currentParams.copy(rootNote = semitone + 1)
             push()
         }
         rgRootRow1.setOnCheckedChangeListener(rootRowListener)
@@ -318,7 +315,6 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
             rgRootRow1.clearCheck()
             rgRootRow2.clearCheck()
             isUpdatingFromSync = false
-            // FREE = rootNote 0, but semantically "no transposition" label in UI
             currentParams = currentParams.copy(rootNote = 0)
             push()
         }
@@ -334,62 +330,35 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
     private fun updateUiVisibility() {
         if (view == null) return
         val style = currentParams.style
-        
-        // SINGLE_NOTE_DRONE: Hide BPM, Timing Mode, Octave
+
         val isSingleNote = style == VoiceStyle.SINGLE_NOTE_DRONE
-        seekBpm.visibility = if (isSingleNote) View.GONE else View.VISIBLE
-        tvBpm.visibility = if (isSingleNote) View.GONE else View.VISIBLE
-        rgTiming.visibility = if (isSingleNote) View.GONE else View.VISIBLE
-        tvOctave.visibility = if (isSingleNote) View.GONE else View.VISIBLE
+        seekBpm.visibility    = if (isSingleNote) View.GONE else View.VISIBLE
+        tvBpm.visibility      = if (isSingleNote) View.GONE else View.VISIBLE
+        rgTiming.visibility   = if (isSingleNote) View.GONE else View.VISIBLE
+        tvOctave.visibility   = if (isSingleNote) View.GONE else View.VISIBLE
         rangeOctave.visibility = if (isSingleNote) View.GONE else View.VISIBLE
 
-        // EVOLVING_DRONE: Hide Timing Mode (Standard), show Drone Timing
         val isEvolving = style == VoiceStyle.EVOLVING_DRONE
         val isRandomDrone = isEvolving && rgDroneTiming.checkedRadioButtonId == R.id.rbDroneRandom
-        
+
         if (isEvolving) {
-            rgTiming.visibility = View.GONE
+            rgTiming.visibility          = View.GONE
             layoutDroneTiming.visibility = View.VISIBLE
-            layoutDroneRange.visibility = if (isRandomDrone) View.VISIBLE else View.GONE
+            layoutDroneRange.visibility  = if (isRandomDrone) View.VISIBLE else View.GONE
         } else if (!isSingleNote) {
-            rgTiming.visibility = View.VISIBLE
+            rgTiming.visibility          = View.VISIBLE
             layoutDroneTiming.visibility = View.GONE
-            layoutDroneRange.visibility = View.GONE
+            layoutDroneRange.visibility  = View.GONE
         } else {
             layoutDroneTiming.visibility = View.GONE
-            layoutDroneRange.visibility = View.GONE
+            layoutDroneRange.visibility  = View.GONE
         }
     }
 
+    // ── Simple push — relay currentParams directly, never re-read widgets ────
+
     private fun push() {
         if (isUpdatingFromSync) return
-        val v = requireView()
-        
-        val styleIdx = spinnerStyle.selectedItemPosition
-        val style = VoiceStyle.entries.getOrElse(styleIdx) { VoiceStyle.GENERATIVE }
-        
-        val droneTiming = if (rgDroneTiming.checkedRadioButtonId == R.id.rbDroneRandom) DroneTimingMode.RANDOM else DroneTimingMode.CONSTANT
-
-        currentParams = currentParams.copy(
-            bpm        = seekBpm.progress + 20,
-            velocity   = seekVelocity.progress + 1,
-            minOctave  = rangeOctave.values[0].toInt(),
-            maxOctave  = rangeOctave.values[1].toInt(),
-            channel    = spinnerChannel.selectedItemPosition + 1,
-            scale      = spinnerScale.selectedItemPosition,
-            rootNote   = selectedRootTag().let { if (it == -1) 0 else it + 1 },
-            timingMode = when (rgTiming.checkedRadioButtonId) {
-                R.id.rbMetronome  -> MidiService.TIMING_METRONOME
-                R.id.rbMixed      -> MidiService.TIMING_MIXED
-                R.id.rbRandomized -> MidiService.TIMING_RANDOMIZED
-                R.id.rbEuclidean  -> MidiService.TIMING_EUCLIDEAN
-                else              -> MidiService.TIMING_METRONOME
-            },
-            style      = style,
-            droneTiming = droneTiming,
-            droneMinBeats = rangeDroneBeats.values[0].toInt(),
-            droneMaxBeats = rangeDroneBeats.values[1].toInt()
-        )
         host?.getMidiService()?.updateV1Parameters(currentParams)
     }
 
@@ -433,17 +402,10 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         spinnerChannel.setSelection(v1.channel)
         spinnerScale.setSelection(v1.scale)
 
-        // Sync root note grid — if rootNote==0 AND FREE was previously selected, keep FREE;
-        // if rootNote==0 but came from a C selection, show C.
-        // We store the distinction by checking whether FREE is currently checked.
-        // Simplest rule: if rootNote==0 and FREE button is checked → leave FREE;
-        // if rootNote==0 and a note button is checked → leave it.
-        // For all other values just select the note.
-        isUpdatingFromSync = false          // release before selectRoot to allow its inner guard
+        isUpdatingFromSync = false
         if (v1.rootNote != 0) {
-            selectRoot(v1.rootNote)
+            selectRoot(v1.rootNote - 1)
         }
-        // If rootNote==0 we don't change the UI — user's last choice (FREE or C) is preserved
 
         isUpdatingFromSync = true
         spinnerStyle.setSelection(v1.style.ordinal)
