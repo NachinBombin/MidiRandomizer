@@ -12,7 +12,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.FragmentActivity
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.tabs.TabLayout
@@ -69,7 +68,7 @@ class MainActivity : AppCompatActivity(),
     }
 
     private val requestPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
+        ActivityResultContracts.RequestPermission(),
     ) { granted ->
         if (granted) startMidiService()
     }
@@ -116,7 +115,16 @@ class MainActivity : AppCompatActivity(),
         }
         setContentView(layout)
 
-        pager.adapter = PagerAdapter(this)
+        pager.adapter = object : FragmentStateAdapter(this) {
+            override fun getItemCount() = 4
+            override fun createFragment(position: Int): Fragment = when (position) {
+                0    -> MainFragment()
+                1    -> VoicesFragment()
+                2    -> ProSettingsFragment()
+                3    -> PerformanceFragment()
+                else -> MainFragment()
+            }
+        }
         TabLayoutMediator(tabs, pager) { tab, pos ->
             tab.text = when (pos) {
                 0 -> "▶  Main"
@@ -127,6 +135,7 @@ class MainActivity : AppCompatActivity(),
             }
         }.attach()
 
+        @Suppress("DEPRECATION")
         midiManager.registerDeviceCallback(deviceCallback, mainHandler)
         checkPermissionsAndStartService()
     }
@@ -146,7 +155,7 @@ class MainActivity : AppCompatActivity(),
         val intent = Intent(this, MidiService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
         else startService(intent)
-        bindService(intent, connection, Context.BIND_AUTO_CREATE)
+        bindService(intent, connection, BIND_AUTO_CREATE)
     }
 
     override fun onDestroy() {
@@ -174,17 +183,6 @@ class MainActivity : AppCompatActivity(),
     override fun onVoiceParamsChanged(v1: MidiService.Voice1Params, v2: VoiceConfig, v3: VoiceConfig) {
         mainHandler.post {
             fragmentListeners.forEach { it.onVoiceParamsChanged(v1, v2, v3) }
-        }
-    }
-
-    private class PagerAdapter(fa: FragmentActivity) : FragmentStateAdapter(fa) {
-        override fun getItemCount() = 4
-        override fun createFragment(position: Int): Fragment = when (position) {
-            0    -> MainFragment()
-            1    -> VoicesFragment()
-            2    -> ProSettingsFragment()
-            3    -> PerformanceFragment()
-            else -> MainFragment()
         }
     }
 }

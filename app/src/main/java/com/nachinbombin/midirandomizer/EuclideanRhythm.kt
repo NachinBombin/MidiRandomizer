@@ -33,7 +33,9 @@ object EuclideanRhythm {
         }
 
         // Apply rotation
-        if (rotation == 0) return pattern
+        if (rotation == 0) {
+            return pattern
+        }
         val rotated = BooleanArray(steps)
         val offset = ((rotation % steps) + steps) % steps
         for (i in 0 until steps) {

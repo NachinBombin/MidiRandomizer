@@ -145,7 +145,7 @@ class MidiService : Service() {
         voice2Engine?.config = effectiveVoiceConfig(cfg)
         if (isPlaying) {
             voice2Engine?.stopIndependent()
-            if (cfg.enabled && cfg.mode == VoiceMode.INDEPENDENT) voice2Engine?.startIndependent()
+            if (cfg.enabled && (cfg.mode == VoiceMode.INDEPENDENT)) voice2Engine?.startIndependent()
         }
         notifyParamsChanged()
     }
@@ -156,7 +156,7 @@ class MidiService : Service() {
         voice3Engine?.config = effectiveVoiceConfig(cfg)
         if (isPlaying) {
             voice3Engine?.stopIndependent()
-            if (cfg.enabled && cfg.mode == VoiceMode.INDEPENDENT) voice3Engine?.startIndependent()
+            if (cfg.enabled && (cfg.mode == VoiceMode.INDEPENDENT)) voice3Engine?.startIndependent()
         }
         notifyParamsChanged()
     }
@@ -176,20 +176,29 @@ class MidiService : Service() {
     fun connectToDevice(info: MidiDeviceInfo) {
         if (midiDevice?.info?.id == info.id) return
         closeDevice()
-        midiManager?.openDevice(info, { device ->
-            if (device == null) { notifyStatus("Failed to open device"); return@openDevice }
-            midiDevice = device
-            if (info.inputPortCount > 0) {
-                try {
-                    inputPort = device.openInputPort(0)
-                    val name = info.properties.getString(MidiDeviceInfo.PROPERTY_NAME) ?: "Device"
-                    notifyStatus("Connected: $name")
-                } catch (e: Exception) {
-                    notifyStatus("Error opening port: ${e.message}")
-                    closeDevice()
+        midiManager?.openDevice(
+            info,
+            { device ->
+                if (device == null) {
+                    notifyStatus("Failed to open device")
+                    return@openDevice
                 }
-            } else notifyStatus("Device has no input ports")
-        }, mainHandler)
+                midiDevice = device
+                if (info.inputPortCount > 0) {
+                    try {
+                        inputPort = device.openInputPort(0)
+                        val name = info.properties.getString(MidiDeviceInfo.PROPERTY_NAME) ?: "Device"
+                        notifyStatus("Connected: $name")
+                    } catch (e: Exception) {
+                        notifyStatus("Error opening port: ${e.message}")
+                        closeDevice()
+                    }
+                } else {
+                    notifyStatus("Device has no input ports")
+                }
+            },
+            mainHandler
+        )
     }
 
     private fun closeDevice() {
@@ -207,12 +216,12 @@ class MidiService : Service() {
         try { startForeground(NOTIFICATION_ID, createNotification()) }
         catch (e: Exception) { Log.e(TAG, "startForeground failed", e) }
 
-        voice2Engine?.let { if (v2Config.enabled && v2Config.mode == VoiceMode.INDEPENDENT) it.startIndependent() }
-        voice3Engine?.let { if (v3Config.enabled && v3Config.mode == VoiceMode.INDEPENDENT) it.startIndependent() }
+        voice2Engine?.let { if (v2Config.enabled && (v2Config.mode == VoiceMode.INDEPENDENT)) it.startIndependent() }
+        voice3Engine?.let { if (v3Config.enabled && (v3Config.mode == VoiceMode.INDEPENDENT)) it.startIndependent() }
 
         scheduler = Executors.newSingleThreadExecutor()
         scheduler?.execute(noteLoop)
-        notifyPlaybackState(true)
+        notifyPlaybackState(playing = true)
     }
 
     fun stopPlaying() {
@@ -264,7 +273,7 @@ class MidiService : Service() {
             if (isOnset) sendRandomV1Note()
 
             try { Thread.sleep(calculateV1Interval()) }
-            catch (e: InterruptedException) { break }
+            catch (_: InterruptedException) { break }
         }
     }
 
@@ -373,7 +382,7 @@ class MidiService : Service() {
             v1Euclidean = EuclideanRhythm.generate(
                 ps.euclideanSteps.coerceIn(2, 32),
                 ps.euclideanDensity.coerceIn(1, ps.euclideanSteps),
-                ps.euclideanRotation
+                ps.euclideanRotation,
             )
             v1EuclideanStep = 0
         }
@@ -404,8 +413,8 @@ class MidiService : Service() {
             .build()
     }
 
-    private fun notifyStatus(s: String)         { mainHandler.post { listener?.onStatusChanged(s) } }
-    private fun notifyPlaybackState(p: Boolean) { mainHandler.post { listener?.onPlaybackStateChanged(p) } }
+    private fun notifyStatus(status: String)         { mainHandler.post { listener?.onStatusChanged(status) } }
+    private fun notifyPlaybackState(playing: Boolean) { mainHandler.post { listener?.onPlaybackStateChanged(playing) } }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         try { startForeground(NOTIFICATION_ID, createNotification()) }

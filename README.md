@@ -6,7 +6,7 @@ An Android app that sends randomized MIDI notes to any connected MIDI app or har
 
 - **Randomized note generation** — picks notes from a selected musical scale each beat
 - **10 built-in scales** — Chromatic, Major, Natural/Harmonic Minor, Pentatonic Major/Minor, Blues, Dorian, Mixolydian, Whole Tone
-- **Adjustable BPM** — 20–300 BPM via seekbar
+- **Adjustable BPM** — 20–300 BPM via SeekBar
 - **Velocity control** — with slight random humanization per note
 - **Octave selection** — octaves 0–8
 - **MIDI channel selector** — channels 1–16

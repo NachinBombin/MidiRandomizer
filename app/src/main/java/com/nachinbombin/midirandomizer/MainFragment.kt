@@ -25,7 +25,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
     }
 
     private var host: MainFragmentHost? = null
-    private val mainHandler = Handler(Looper.getMainLooper())
+    // private val mainHandler = Handler(Looper.getMainLooper())
 
     private lateinit var btnStartStop:  Button
     private lateinit var tvStatus:      TextView
@@ -82,7 +82,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         setupListeners()
     }
 
-    fun onServiceReady() {
+    private fun onServiceReady() {
         push()
     }
 
@@ -112,8 +112,12 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
 
         tvOctave.text = getString(R.string.label_octave_range, currentParams.minOctave, currentParams.maxOctave)
 
-        val chAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item,
-            (0..16).map { if (it == 0) "Ch Omni (0)" else getString(R.string.channel_format, it) })
+        val channels = (0..16).map { if (it == 0) "Ch Omni (0)" else getString(R.string.channel_format, it) }
+        val chAdapter = ArrayAdapter(
+            requireContext(),
+            android.R.layout.simple_spinner_item,
+            channels
+        )
         chAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         spinnerChannel.adapter = chAdapter
 
@@ -128,6 +132,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         val mm = host?.getMidiManager() ?: return
         deviceAdapter.clear()
         deviceMap.clear()
+        @Suppress("DEPRECATION")
         val devices = mm.devices
         if (devices.isEmpty()) {
             deviceAdapter.add(getString(R.string.no_devices_found))

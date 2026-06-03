@@ -30,7 +30,7 @@ enum class VelocityPattern(val label: String) {
     RANDOM("Random"),
     ASCENDING("Ascending"),
     DESCENDING("Descending"),
-    PEAK_CENTER("Peak at Centre"),
+    PEAK_CENTER("Peak at Center"),
     ACCENT_BEATS("Accent Beats")
 }
 

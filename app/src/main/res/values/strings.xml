@@ -27,6 +27,12 @@
     <string name="label_jitter_amount">Jitter: %1$d %%</string>
     <string name="label_jitter_distribution">JITTER DISTRIBUTION</string>
     <string name="label_velocity_pattern">VELOCITY PATTERN</string>
+    <string name="label_timing_humanization">TIER 1 — TIMING HUMANIZATION</string>
+    <string name="label_v1_vel">V1 VEL\n%1$d</string>
+    <string name="label_v2_vel">V2 VEL\n%1$d</string>
+    <string name="label_v3_vel">V3 VEL\n%1$d</string>
+    <string name="label_pitch_bend_val">PITCH BEND\n%1$d</string>
+    <string name="label_mod_cc1_val">MOD (CC 1)\n%1$d</string>
     <string name="label_euclidean_rhythm">TIER 2 — EUCLIDEAN RHYTHM</string>
     <string name="label_enable_euclidean">Enable Euclidean Mode</string>
     <string name="label_euc_steps">Steps: %1$d</string>

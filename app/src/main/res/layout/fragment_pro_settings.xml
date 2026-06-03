@@ -46,7 +46,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="TIER 1 — TIMING HUMANISATION"
+            android:text="@string/label_timing_humanization"
             android:textSize="11sp"
             android:textColor="#4F9AA5"
             android:letterSpacing="0.12"

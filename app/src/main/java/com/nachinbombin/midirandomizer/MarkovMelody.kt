@@ -76,7 +76,9 @@ class MarkovMelody(private val scaleSize: Int, private val style: MelodicLogicSt
         var r = Random.nextFloat() * total
         for (i in weights.indices) {
             r -= weights[i]
-            if (r <= 0f) return i
+            if (r <= 0f) {
+                return i
+            }
         }
         return weights.size - 1
     }

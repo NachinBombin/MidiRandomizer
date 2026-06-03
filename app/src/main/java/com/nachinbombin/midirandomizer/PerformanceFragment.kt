@@ -10,7 +10,7 @@ import android.view.*
 import android.widget.*
 import androidx.fragment.app.Fragment
 
-class PerformanceFragment : Fragment() {
+class PerformanceFragment : Fragment(), MidiService.MidiEventListener {
 
     private var serviceProvider: VoicesFragment.ServiceProvider? = null
 
@@ -40,6 +40,16 @@ class PerformanceFragment : Fragment() {
         serviceProvider = context as? VoicesFragment.ServiceProvider
     }
 
+    override fun onStart() {
+        super.onStart()
+        (activity as? MainActivity)?.addMidiListener(this)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        (activity as? MainActivity)?.removeMidiListener(this)
+    }
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         val root = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
@@ -60,6 +70,8 @@ class PerformanceFragment : Fragment() {
             serviceProvider?.getMidiService()?.updateV1Parameters(currentV1)
         }
         sbV1 = v1Control.second
+        sbV1.max = 126
+        sbV1.progress = currentV1.velocity - 1
         tvV1 = v1Control.first
         velRow.addView(v1Control.third)
 
@@ -118,7 +130,7 @@ class PerformanceFragment : Fragment() {
 
         // 4. Bottom: Start/Stop toggle
         btnStartStop = Button(requireContext()).apply {
-            text = "START"
+            text = getString(R.string.btn_start)
             textSize = 20f
             setTextColor(0xFFF7F6F2.toInt())
             backgroundTintList = ColorStateList.valueOf(0xFF01696F.toInt())
@@ -142,30 +154,41 @@ class PerformanceFragment : Fragment() {
         else cfg.copy(independentConfig = cfg.independentConfig.copy(velocity = v))
 
     private fun createVelControl(label: String, initial: Int, onProgress: (Int) -> Unit): Triple<TextView, SeekBar, View> {
+        val labelResId = when (label) {
+            "V1 VEL" -> R.string.label_v1_vel
+            "V2 VEL" -> R.string.label_v2_vel
+            "V3 VEL" -> R.string.label_v3_vel
+            else -> 0
+        }
         val layout = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }
         val tv = TextView(requireContext()).apply {
-            text = "$label\n$initial"
+            text = if (labelResId != 0) getString(labelResId, initial) else "$label\n$initial"
             setTextColor(0xFFE8E6E1.toInt())
             textSize = 11f
             gravity = Gravity.CENTER
         }
         val sb = SeekBar(requireContext()).apply {
-            max = 127
-            progress = initial
+            max = 126
+            progress = initial - 1
             progressTintList = ColorStateList.valueOf(0xFF4F9AA5.toInt())
             thumbTintList = ColorStateList.valueOf(0xFF4F9AA5.toInt())
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
-                    tv.text = "$label\n$p"
-                    if (fromUser && !isUpdatingFromSync) onProgress(p)
+            setOnSeekBarChangeListener(
+                object : SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                        if (isUpdatingFromSync) return
+                        val v = p + 1
+                        tv.text = if (labelResId != 0) getString(labelResId, v) else "$label\n$v"
+                        if (fromUser) onProgress(v)
+                    }
+
+                    override fun onStartTrackingTouch(s: SeekBar?) {}
+                    override fun onStopTrackingTouch(s: SeekBar?) {}
                 }
-                override fun onStartTrackingTouch(s: SeekBar?) {}
-                override fun onStopTrackingTouch(s: SeekBar?) {}
-            })
+            )
         }
         layout.addView(tv)
         layout.addView(sb)
@@ -232,7 +255,7 @@ class PerformanceFragment : Fragment() {
         return Pair(wheel, frame)
     }
 
-    private inner class VerticalWheelView(context: Context) : View(context) {
+    private class VerticalWheelView(context: Context) : View(context) {
         var originValue = 8192
         var currentValue = 8192
         var lockProvider: (() -> Boolean)? = null
@@ -314,14 +337,22 @@ class PerformanceFragment : Fragment() {
         }
     }
 
-    fun onPlaybackStateChanged(playing: Boolean) {
+    override fun onNotePlayed(noteName: String, midiNote: Int, velocity: Int) {}
+
+    override fun onStatusChanged(status: String) {}
+
+    override fun onPlaybackStateChanged(playing: Boolean) {
         activity?.runOnUiThread {
             if (!::btnStartStop.isInitialized) return@runOnUiThread
-            btnStartStop.text = if (playing) "STOP" else "START"
+            btnStartStop.text = if (playing) getString(R.string.btn_stop) else getString(R.string.btn_start)
             btnStartStop.backgroundTintList = ColorStateList.valueOf(
                 if (playing) 0xFF8B0000.toInt() else 0xFF01696F.toInt()
             )
         }
+    }
+
+    override fun onVoiceParamsChanged(v1: MidiService.Voice1Params, v2: VoiceConfig, v3: VoiceConfig) {
+        syncFromService(v1, v2, v3)
     }
 
     fun syncFromService(v1: MidiService.Voice1Params, v2: VoiceConfig, v3: VoiceConfig) {
@@ -333,16 +364,16 @@ class PerformanceFragment : Fragment() {
             if (!::sbV1.isInitialized) return@runOnUiThread
             isUpdatingFromSync = true
             
-            sbV1.progress = v1.velocity
-            tvV1.text = "V1 VEL\n${v1.velocity}"
+            sbV1.progress = v1.velocity - 1
+            tvV1.text = getString(R.string.label_v1_vel, v1.velocity)
 
             val v2v = getVel(v2)
-            sbV2.progress = v2v
-            tvV2.text = "V2 VEL\n$v2v"
+            sbV2.progress = v2v - 1
+            tvV2.text = getString(R.string.label_v2_vel, v2v)
 
             val v3v = getVel(v3)
-            sbV3.progress = v3v
-            tvV3.text = "V3 VEL\n$v3v"
+            sbV3.progress = v3v - 1
+            tvV3.text = getString(R.string.label_v3_vel, v3v)
 
             isUpdatingFromSync = false
         }

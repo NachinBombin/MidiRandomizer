@@ -98,6 +98,7 @@
             android:id="@+id/seekBpm"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:max="280"
             android:progressTint="#4F9AA5"
             android:thumbTint="#4F9AA5"
             android:layout_marginBottom="16dp"/>
@@ -116,6 +117,7 @@
             android:id="@+id/seekVelocity"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:max="126"
             android:progressTint="#4F9AA5"
             android:thumbTint="#4F9AA5"
             android:layout_marginBottom="16dp"/>

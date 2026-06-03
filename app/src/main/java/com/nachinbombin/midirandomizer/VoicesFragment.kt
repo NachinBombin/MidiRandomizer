@@ -9,7 +9,7 @@ import androidx.fragment.app.Fragment
 /**
  * VoicesFragment — hosts the UI for Voice 2 and Voice 3.
  */
-class VoicesFragment : Fragment() {
+class VoicesFragment : Fragment(), MidiService.MidiEventListener {
 
     private var serviceProvider: ServiceProvider? = null
 
@@ -29,6 +29,24 @@ class VoicesFragment : Fragment() {
     override fun onAttach(context: Context) {
         super.onAttach(context)
         serviceProvider = context as? ServiceProvider
+    }
+
+    override fun onStart() {
+        super.onStart()
+        (activity as? MainActivity)?.addMidiListener(this)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        (activity as? MainActivity)?.removeMidiListener(this)
+    }
+
+    override fun onNotePlayed(noteName: String, midiNote: Int, velocity: Int) {}
+    override fun onStatusChanged(status: String) {}
+    override fun onPlaybackStateChanged(playing: Boolean) {}
+
+    override fun onVoiceParamsChanged(v1: MidiService.Voice1Params, v2: VoiceConfig, v3: VoiceConfig) {
+        syncFromService(v1, v2, v3)
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {

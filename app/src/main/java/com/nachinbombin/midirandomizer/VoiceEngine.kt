@@ -89,8 +89,11 @@ class VoiceEngine(
     fun stopIndependent() {
         running = false
         scheduler?.shutdownNow()
-        try { scheduler?.awaitTermination(500, TimeUnit.MILLISECONDS) }
-        catch (e: InterruptedException) { Thread.currentThread().interrupt() }
+        try {
+            scheduler?.awaitTermination(500, TimeUnit.MILLISECONDS)
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
         scheduler = null
         if (currentNote >= 0) { 
             onNoteOffRaw(currentNote, config.independentConfig.midiChannel)
@@ -117,8 +120,11 @@ class VoiceEngine(
 
             if (isOnset) fireIndependentNote(ic)
 
-            try { Thread.sleep(calcInterval(ic)) }
-            catch (e: InterruptedException) { break }
+            try {
+                Thread.sleep(calcInterval(ic))
+            } catch (_: InterruptedException) {
+                break
+            }
         }
     }
 
