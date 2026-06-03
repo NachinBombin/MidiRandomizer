@@ -82,7 +82,120 @@
             android:layout_width="match_parent"
             android:layout_height="48dp"
             android:background="#1C1B19"
-            android:layout_marginBottom="16dp"/>
+            android:layout_marginBottom="12dp"/>
+
+        <!-- Root Note -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="ROOT NOTE"
+            android:textSize="11sp"
+            android:textColor="#797876"
+            android:letterSpacing="0.12"
+            android:layout_marginBottom="6dp"/>
+
+        <!--
+             Two rows of 6 + one FREE button.
+             RadioGroup doesn't support multi-row natively, so we use a
+             LinearLayout wrapper with two horizontal RadioGroups that
+             are managed together in code (clearing the other group when
+             one is selected). The FREE button is a plain ToggleButton
+             styled as a chip and handled separately.
+        -->
+        <LinearLayout
+            android:id="@+id/rootNoteContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginBottom="16dp">
+
+            <!-- Row 1: C  C#  D  D#  E  F -->
+            <RadioGroup
+                android:id="@+id/rgRootRow1"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="4dp">
+
+                <RadioButton android:id="@+id/rbRootC"
+                    style="@style/RootChip"
+                    android:text="C"
+                    android:tag="0"/>
+                <RadioButton android:id="@+id/rbRootCs"
+                    style="@style/RootChip"
+                    android:text="C#"
+                    android:tag="1"/>
+                <RadioButton android:id="@+id/rbRootD"
+                    style="@style/RootChip"
+                    android:text="D"
+                    android:tag="2"/>
+                <RadioButton android:id="@+id/rbRootDs"
+                    style="@style/RootChip"
+                    android:text="D#"
+                    android:tag="3"/>
+                <RadioButton android:id="@+id/rbRootE"
+                    style="@style/RootChip"
+                    android:text="E"
+                    android:tag="4"/>
+                <RadioButton android:id="@+id/rbRootF"
+                    style="@style/RootChip"
+                    android:text="F"
+                    android:tag="5"/>
+
+            </RadioGroup>
+
+            <!-- Row 2: F#  G  G#  A  A#  B -->
+            <RadioGroup
+                android:id="@+id/rgRootRow2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="4dp">
+
+                <RadioButton android:id="@+id/rbRootFs"
+                    style="@style/RootChip"
+                    android:text="F#"
+                    android:tag="6"/>
+                <RadioButton android:id="@+id/rbRootG"
+                    style="@style/RootChip"
+                    android:text="G"
+                    android:tag="7"/>
+                <RadioButton android:id="@+id/rbRootGs"
+                    style="@style/RootChip"
+                    android:text="G#"
+                    android:tag="8"/>
+                <RadioButton android:id="@+id/rbRootA"
+                    style="@style/RootChip"
+                    android:text="A"
+                    android:tag="9"/>
+                <RadioButton android:id="@+id/rbRootAs"
+                    style="@style/RootChip"
+                    android:text="A#"
+                    android:tag="10"/>
+                <RadioButton android:id="@+id/rbRootB"
+                    style="@style/RootChip"
+                    android:text="B"
+                    android:tag="11"/>
+
+            </RadioGroup>
+
+            <!-- FREE row -->
+            <RadioGroup
+                android:id="@+id/rgRootFree"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <RadioButton android:id="@+id/rbRootFree"
+                    style="@style/RootChip"
+                    android:text="FREE  (no root)"
+                    android:layout_width="match_parent"
+                    android:checked="true"
+                    android:tag="-1"/>
+
+            </RadioGroup>
+
+        </LinearLayout>
 
         <!-- BPM -->
         <TextView
@@ -127,7 +240,7 @@
             android:id="@+id/tvOctave"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Octave range: 3 – 5"
+            android:text="Octave range: 3 - 5"
             android:textSize="14sp"
             android:textColor="#E8E6E1"
             android:layout_marginBottom="4dp"/>
@@ -223,7 +336,7 @@
             android:id="@+id/tvLastNote"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Last note: —"
+            android:text="Last note: -"
             android:textSize="15sp"
             android:textColor="#6DAA45"
             android:layout_marginBottom="20dp"/>
