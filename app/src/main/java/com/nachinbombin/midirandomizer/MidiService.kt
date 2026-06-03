@@ -9,11 +9,9 @@ import android.media.midi.MidiManager
 import android.os.*
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import android.content.pm.ServiceInfo
 import java.io.IOException
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.*
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.random.Random
 
@@ -58,7 +56,11 @@ class MidiService : Service() {
         val scale: Int = 0,
         val rootNote: Int = 0,
         val timingMode: Int = TIMING_METRONOME,
-        val proSettings: ProSettings = ProSettings()
+        val proSettings: ProSettings = ProSettings(),
+        val style: VoiceStyle = VoiceStyle.GENERATIVE,
+        val droneTiming: DroneTimingMode = DroneTimingMode.CONSTANT,
+        val droneMinBeats: Int = 16,
+        val droneMaxBeats: Int = 64
     )
 
     private var voice2Engine: VoiceEngine? = null
@@ -82,8 +84,8 @@ class MidiService : Service() {
         // ── New scales (indices 10–16) ───────────────────────────────────────
         listOf(0,2,3,5,7,8,10),               // 10 Kurd (Annaziska / Aeolian)
         listOf(0,2,3,5,7,9,10),               // 11 Celtic Minor (Amara / Dorian)
-        listOf(0,3,5,7,10),                   // 12 Pygmy
-        listOf(0,2,4,6,7,9,11),               // 13 SaBye / SaByeD (Lydian Dominant)
+        listOf(0,2,3,5,7,10),                 // 12 Pygmy
+        listOf(0,2,4,6,7,9,10),               // 13 SaBye / SaByeD (Lydian Dominant)
         listOf(0,2,4,6,7,9,11),               // 14 Aegean (Lydian)
         listOf(0,1,4,5,7,8,10),               // 15 Hijaz
         listOf(0,2,3,7,8)                     // 16 Akebono
@@ -107,11 +109,12 @@ class MidiService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        midiManager = getSystemService(MIDI_SERVICE) as MidiManager
-        createNotificationChannel()
         activeNotes[1] = ConcurrentHashMap.newKeySet()
         activeNotes[2] = ConcurrentHashMap.newKeySet()
         activeNotes[3] = ConcurrentHashMap.newKeySet()
+
+        midiManager = getSystemService(MIDI_SERVICE) as MidiManager
+        createNotificationChannel()
         buildVoiceEngines()
     }
 
@@ -128,41 +131,88 @@ class MidiService : Service() {
 
     @Synchronized
     fun updateV1Parameters(p: Voice1Params) {
+        val rootChanged = p.rootNote != v1Params.rootNote
+        val scaleChanged = p.scale != v1Params.scale
+        val octaveChanged = p.minOctave != v1Params.minOctave || p.maxOctave != v1Params.maxOctave
+        val styleChanged = p.style != v1Params.style
+        val proChanged = p.proSettings != v1Params.proSettings
+
         v1Params = p
         v1VelocityShaper.baseVelocity = p.velocity
         rebuildV1ProHelpers()
-        updateVoice2Config(v2Config)
-        updateVoice3Config(v3Config)
+
+        if (isPlaying && (styleChanged || (p.style == VoiceStyle.SINGLE_NOTE_DRONE && (rootChanged || scaleChanged || octaveChanged)))) {
+            // Proper cleanup of old scheduler to prevent thread leak
+            val old = scheduler
+            scheduler = null
+            old?.shutdownNow()
+            
+            scheduler = Executors.newSingleThreadExecutor()
+            scheduler?.execute(noteLoop)
+        }
+
+        // Only update children if they are using shared pro settings and pro changed
+        if (proChanged) {
+            if (v2Config.mode == VoiceMode.INDEPENDENT && v2Config.independentConfig.useSharedPro) {
+                voice2Engine?.config = effectiveVoiceConfig(v2Config)
+            }
+            if (v3Config.mode == VoiceMode.INDEPENDENT && v3Config.independentConfig.useSharedPro) {
+                voice3Engine?.config = effectiveVoiceConfig(v3Config)
+            }
+        }
+        
         notifyParamsChanged()
     }
 
     @Synchronized
     fun updateProSettings(settings: ProSettings) {
+        if (v1Params.proSettings == settings) return
         v1Params = v1Params.copy(proSettings = settings)
         rebuildV1ProHelpers()
-        updateVoice2Config(v2Config)
-        updateVoice3Config(v3Config)
+        
+        // Push to voices if shared
+        if (v2Config.mode == VoiceMode.INDEPENDENT && v2Config.independentConfig.useSharedPro) {
+            voice2Engine?.config = effectiveVoiceConfig(v2Config)
+        }
+        if (v3Config.mode == VoiceMode.INDEPENDENT && v3Config.independentConfig.useSharedPro) {
+            voice3Engine?.config = effectiveVoiceConfig(v3Config)
+        }
+        
         notifyParamsChanged()
     }
 
     @Synchronized
     fun updateVoice2Config(cfg: VoiceConfig) {
+        val oldCfg = v2Config
         v2Config = cfg
         voice2Engine?.config = effectiveVoiceConfig(cfg)
+        
         if (isPlaying) {
-            voice2Engine?.stopIndependent()
-            if (cfg.enabled && (cfg.mode == VoiceMode.INDEPENDENT)) voice2Engine?.startIndependent()
+            val needsRestart = (cfg.enabled != oldCfg.enabled) || (cfg.mode != oldCfg.mode) || 
+                               (cfg.mode == VoiceMode.INDEPENDENT && cfg.independentConfig.style != oldCfg.independentConfig.style)
+            
+            if (needsRestart) {
+                voice2Engine?.stopIndependent()
+                if (cfg.enabled && (cfg.mode == VoiceMode.INDEPENDENT)) voice2Engine?.startIndependent()
+            }
         }
         notifyParamsChanged()
     }
 
     @Synchronized
     fun updateVoice3Config(cfg: VoiceConfig) {
+        val oldCfg = v3Config
         v3Config = cfg
         voice3Engine?.config = effectiveVoiceConfig(cfg)
+        
         if (isPlaying) {
-            voice3Engine?.stopIndependent()
-            if (cfg.enabled && (cfg.mode == VoiceMode.INDEPENDENT)) voice3Engine?.startIndependent()
+            val needsRestart = (cfg.enabled != oldCfg.enabled) || (cfg.mode != oldCfg.mode) || 
+                               (cfg.mode == VoiceMode.INDEPENDENT && cfg.independentConfig.style != oldCfg.independentConfig.style)
+
+            if (needsRestart) {
+                voice3Engine?.stopIndependent()
+                if (cfg.enabled && (cfg.mode == VoiceMode.INDEPENDENT)) voice3Engine?.startIndependent()
+            }
         }
         notifyParamsChanged()
     }
@@ -219,8 +269,16 @@ class MidiService : Service() {
         if (isPlaying) return
         isPlaying = true
         rebuildV1ProHelpers()
-        try { startForeground(NOTIFICATION_ID, createNotification()) }
-        catch (e: Exception) { Log.e(TAG, "startForeground failed", e) }
+        
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, createNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+            } else {
+                startForeground(NOTIFICATION_ID, createNotification())
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "startForeground failed", e)
+        }
 
         voice2Engine?.let { if (v2Config.enabled && (v2Config.mode == VoiceMode.INDEPENDENT)) it.startIndependent() }
         voice3Engine?.let { if (v3Config.enabled && (v3Config.mode == VoiceMode.INDEPENDENT)) it.startIndependent() }
@@ -233,9 +291,11 @@ class MidiService : Service() {
     fun stopPlaying() {
         if (!isPlaying) return
         isPlaying = false
-        scheduler?.shutdownNow()
-        try { scheduler?.awaitTermination(500, TimeUnit.MILLISECONDS) } catch (e: InterruptedException) { Thread.currentThread().interrupt() }
+        
+        val old = scheduler
         scheduler = null
+        old?.shutdownNow()
+
         allNotesOff()
         voice2Engine?.stop()
         voice3Engine?.stop()
@@ -248,13 +308,15 @@ class MidiService : Service() {
             val set = activeNotes[v] ?: continue
             val notes = set.toList()
             set.clear()
+            
+            val baseCh = when(v) {
+                1 -> v1Params.channel
+                2 -> if (v2Config.mode == VoiceMode.HARMONY) v2Config.harmonyConfig.midiChannel else v2Config.independentConfig.midiChannel
+                3 -> if (v3Config.mode == VoiceMode.HARMONY) v3Config.harmonyConfig.midiChannel else v3Config.independentConfig.midiChannel
+                else -> 0
+            }
+            
             notes.forEach { note ->
-                val baseCh = when(v) {
-                    1 -> v1Params.channel
-                    2 -> v2Config.harmonyConfig.midiChannel
-                    3 -> v3Config.harmonyConfig.midiChannel
-                    else -> 0
-                }
                 sendNoteOffRaw(v, note, baseCh)
             }
         }
@@ -265,25 +327,47 @@ class MidiService : Service() {
 
     private val noteLoop = Runnable {
         while (isPlaying) {
-            val p = v1Params
-            val ps = p.proSettings
-            val euclidOn = ps.euclideanEnabled && p.timingMode == TIMING_EUCLIDEAN
-            val isOnset = if (euclidOn) {
-                val hit = v1Euclidean.getOrElse(v1EuclideanStep) { false }
-                v1EuclideanStep = (v1EuclideanStep + 1) % v1Euclidean.size.coerceAtLeast(1)
-                hit
-            } else true
+            try {
+                val p = v1Params
+                if (p.style == VoiceStyle.SINGLE_NOTE_DRONE) {
+                    sendRandomV1Note()
+                    try { Thread.sleep(Long.MAX_VALUE) } catch (_: InterruptedException) { break }
+                    break
+                }
 
-            if (isOnset) sendRandomV1Note()
+                val ps = p.proSettings
+                val euclidOn = ps.euclideanEnabled && p.timingMode == TIMING_EUCLIDEAN
+                val isOnset = if (euclidOn) {
+                    val hit = v1Euclidean.getOrElse(v1EuclideanStep) { false }
+                    v1EuclideanStep = (v1EuclideanStep + 1) % v1Euclidean.size.coerceAtLeast(1)
+                    hit
+                } else true
 
-            try { Thread.sleep(calculateV1Interval()) }
-            catch (_: InterruptedException) { break }
+                if (isOnset) sendRandomV1Note()
+
+                val interval = calculateV1Interval()
+                Thread.sleep(interval.coerceAtLeast(10L))
+            } catch (e: InterruptedException) {
+                break
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in noteLoop: ${e.message}", e)
+                try { Thread.sleep(500) } catch (_: InterruptedException) { break }
+            }
         }
     }
 
     private fun calculateV1Interval(): Long {
         val p = v1Params
-        val base = (60_000.0 / p.bpm).toLong()
+        val safeBpm = p.bpm.coerceIn(10, 500)
+        if (p.style == VoiceStyle.EVOLVING_DRONE) {
+            val beats = if (p.droneTiming == DroneTimingMode.RANDOM) {
+                val min = p.droneMinBeats.coerceIn(1, 256)
+                val max = p.droneMaxBeats.coerceIn(min, 256)
+                Random.nextInt(min, max + 1)
+            } else 32
+            return (60_000L / safeBpm) * beats
+        }
+        val base = (60_000.0 / safeBpm).toLong()
         val ps = p.proSettings
         val modeInterval = when (p.timingMode) {
             TIMING_METRONOME  -> base
@@ -296,9 +380,12 @@ class MidiService : Service() {
     }
 
     private fun sendRandomV1Note() {
-        if (v1CurrentNote >= 0) sendNoteOffRaw(1, v1CurrentNote, v1Params.channel)
-
         val p = v1Params
+        val isDrone = p.style == VoiceStyle.SINGLE_NOTE_DRONE || p.style == VoiceStyle.EVOLVING_DRONE
+        val prevNote = v1CurrentNote
+
+        if (!isDrone && prevNote >= 0) sendNoteOffRaw(1, prevNote, p.channel)
+
         val ps = p.proSettings
         val intervals = scales.getOrNull(p.scale) ?: return
 
@@ -309,12 +396,17 @@ class MidiService : Service() {
         val interval = intervals[degreeIdx]
         val range = (p.maxOctave - p.minOctave + 1).coerceAtLeast(1)
         val selectedOctave = p.minOctave + Random.nextInt(range)
+        val rootOffset = if (p.rootNote > 0) p.rootNote - 1 else 0
         // Apply rootNote offset so the scale is transposed to the correct key
-        val noteNumber = ((selectedOctave + 1) * 12 + interval + p.rootNote).coerceIn(0, 127)
+        val noteNumber = ((selectedOctave + 1) * 12 + interval + rootOffset).coerceIn(0, 127)
         val vel = v1VelocityShaper.next()
 
         sendNoteOnRaw(1, noteNumber, vel, p.channel)
         v1CurrentNote = noteNumber
+
+        if (isDrone && prevNote >= 0 && prevNote != noteNumber) {
+            sendNoteOffRaw(1, prevNote, p.channel)
+        }
 
         voice2Engine?.onV1NoteOn(noteNumber, vel)
         voice3Engine?.onV1NoteOn(noteNumber, vel)
@@ -355,7 +447,7 @@ class MidiService : Service() {
             getInputPort = { inputPort },
             getScales    = { scales },
             getGlobalScale = { v1Params.scale },
-            getGlobalRoot  = { v1Params.rootNote },
+            getGlobalRoot  = { if (v1Params.rootNote > 0) v1Params.rootNote - 1 else 0 },
             getV2Note    = { lastV2Note.get() },
             onNotePlayed = { note -> lastV2Note.set(note) },
             onNoteOnRaw  = { n, v, ch -> sendNoteOnRaw(2, n, v, ch) },
@@ -368,7 +460,7 @@ class MidiService : Service() {
             getInputPort = { inputPort },
             getScales    = { scales },
             getGlobalScale = { v1Params.scale },
-            getGlobalRoot  = { v1Params.rootNote },
+            getGlobalRoot  = { if (v1Params.rootNote > 0) v1Params.rootNote - 1 else 0 },
             getV2Note    = { lastV2Note.get() },
             onNotePlayed = { /* V3 doesn't seed anyone yet */ },
             onNoteOnRaw  = { n, v, ch -> sendNoteOnRaw(3, n, v, ch) },
@@ -422,8 +514,15 @@ class MidiService : Service() {
     private fun notifyPlaybackState(playing: Boolean) { mainHandler.post { listener?.onPlaybackStateChanged(playing) } }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        try { startForeground(NOTIFICATION_ID, createNotification()) }
-        catch (e: Exception) { Log.e(TAG, "onStartCommand startForeground failed", e) }
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, createNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+            } else {
+                startForeground(NOTIFICATION_ID, createNotification())
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "onStartCommand startForeground failed", e)
+        }
         return START_STICKY
     }
 

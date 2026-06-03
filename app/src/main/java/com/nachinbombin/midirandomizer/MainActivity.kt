@@ -17,6 +17,8 @@ import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 
+import java.util.concurrent.CopyOnWriteArraySet
+
 class MainActivity : AppCompatActivity(),
     MidiService.MidiEventListener,
     MainFragment.MainFragmentHost,
@@ -28,7 +30,7 @@ class MainActivity : AppCompatActivity(),
     private var midiService: MidiService? = null
     private var bound = false
 
-    private val fragmentListeners = mutableSetOf<MidiService.MidiEventListener>()
+    private val fragmentListeners = CopyOnWriteArraySet<MidiService.MidiEventListener>()
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
@@ -37,16 +39,15 @@ class MainActivity : AppCompatActivity(),
             svc.setListener(this@MainActivity)
             bound = true
             
-            mainHandler.post {
-                val v1 = svc.getV1Params()
-                val v2 = svc.getV2Config()
-                val v3 = svc.getV3Config()
-                val playing = svc.isMidiPlaying()
-                
-                fragmentListeners.forEach { 
-                    it.onPlaybackStateChanged(playing)
-                    it.onVoiceParamsChanged(v1, v2, v3)
-                }
+            // Initial sync to already registered listeners
+            val v1 = svc.getV1Params()
+            val v2 = svc.getV2Config()
+            val v3 = svc.getV3Config()
+            val playing = svc.isMidiPlaying()
+            
+            fragmentListeners.forEach { 
+                it.onPlaybackStateChanged(playing)
+                it.onVoiceParamsChanged(v1, v2, v3)
             }
         }
         override fun onServiceDisconnected(name: ComponentName?) {

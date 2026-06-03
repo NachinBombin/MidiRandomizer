@@ -33,6 +33,12 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
     private lateinit var rgTiming:       RadioGroup
     private lateinit var spinnerChannel: Spinner
     private lateinit var spinnerScale:   Spinner
+    private lateinit var spinnerStyle:   Spinner
+    private lateinit var layoutDroneTiming: View
+    private lateinit var layoutDroneRange: View
+    private lateinit var tvDroneRange:   TextView
+    private lateinit var rangeDroneBeats: RangeSlider
+    private lateinit var rgDroneTiming:  RadioGroup
     private lateinit var deviceListView: ListView
     private lateinit var tvDeviceInfo:   TextView
 
@@ -70,6 +76,8 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         "Hijaz",
         "Akebono"
     )
+
+    private val styles = listOf("Generative", "Single note Drone", "Evolving Drone")
 
     // ── Root note helpers ────────────────────────────────────────────────────
 
@@ -163,6 +171,12 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         rgTiming       = v.findViewById(R.id.rgTiming)
         spinnerChannel = v.findViewById(R.id.spinnerChannel)
         spinnerScale   = v.findViewById(R.id.spinnerScale)
+        spinnerStyle   = v.findViewById(R.id.spinnerStyle)
+        layoutDroneTiming = v.findViewById(R.id.layoutDroneTiming)
+        layoutDroneRange = v.findViewById(R.id.layoutDroneRange)
+        tvDroneRange   = v.findViewById(R.id.tvDroneRange)
+        rangeDroneBeats = v.findViewById(R.id.rangeDroneBeats)
+        rgDroneTiming  = v.findViewById(R.id.rgDroneTiming)
         deviceListView = v.findViewById(R.id.listViewDevices)
         tvDeviceInfo   = v.findViewById(R.id.tvDeviceInfo)
         rgRootRow1     = v.findViewById(R.id.rgRootRow1)
@@ -186,6 +200,10 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
 
         spinnerScale.adapter = ArrayAdapter(
             requireContext(), android.R.layout.simple_spinner_item, scales
+        ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+
+        spinnerStyle.adapter = ArrayAdapter(
+            requireContext(), android.R.layout.simple_spinner_item, styles
         ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
 
         deviceListView.adapter = deviceAdapter
@@ -260,6 +278,19 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
             push()
         }
 
+        spinnerStyle.onItemSelectedListener = simpleSpinner {
+            currentParams = currentParams.copy(style = VoiceStyle.entries[it])
+            updateUiVisibility()
+            push()
+        }
+
+        rgDroneTiming.setOnCheckedChangeListener { _, id ->
+            if (isUpdatingFromSync) return@setOnCheckedChangeListener
+            val timing = if (id == R.id.rbDroneRandom) DroneTimingMode.RANDOM else DroneTimingMode.CONSTANT
+            currentParams = currentParams.copy(droneTiming = timing)
+            push()
+        }
+
         // Root note — rows 1 & 2 clear each other + FREE when a note is tapped
         val rootRowListener = RadioGroup.OnCheckedChangeListener { group, checkedId ->
             if (isUpdatingFromSync || checkedId == -1) return@OnCheckedChangeListener
@@ -300,8 +331,65 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         btnStartStop.setOnClickListener { host?.getMidiService()?.togglePlayback() }
     }
 
+    private fun updateUiVisibility() {
+        if (view == null) return
+        val style = currentParams.style
+        
+        // SINGLE_NOTE_DRONE: Hide BPM, Timing Mode, Octave
+        val isSingleNote = style == VoiceStyle.SINGLE_NOTE_DRONE
+        seekBpm.visibility = if (isSingleNote) View.GONE else View.VISIBLE
+        tvBpm.visibility = if (isSingleNote) View.GONE else View.VISIBLE
+        rgTiming.visibility = if (isSingleNote) View.GONE else View.VISIBLE
+        tvOctave.visibility = if (isSingleNote) View.GONE else View.VISIBLE
+        rangeOctave.visibility = if (isSingleNote) View.GONE else View.VISIBLE
+
+        // EVOLVING_DRONE: Hide Timing Mode (Standard), show Drone Timing
+        val isEvolving = style == VoiceStyle.EVOLVING_DRONE
+        val isRandomDrone = isEvolving && rgDroneTiming.checkedRadioButtonId == R.id.rbDroneRandom
+        
+        if (isEvolving) {
+            rgTiming.visibility = View.GONE
+            layoutDroneTiming.visibility = View.VISIBLE
+            layoutDroneRange.visibility = if (isRandomDrone) View.VISIBLE else View.GONE
+        } else if (!isSingleNote) {
+            rgTiming.visibility = View.VISIBLE
+            layoutDroneTiming.visibility = View.GONE
+            layoutDroneRange.visibility = View.GONE
+        } else {
+            layoutDroneTiming.visibility = View.GONE
+            layoutDroneRange.visibility = View.GONE
+        }
+    }
+
     private fun push() {
         if (isUpdatingFromSync) return
+        val v = requireView()
+        
+        val styleIdx = spinnerStyle.selectedItemPosition
+        val style = VoiceStyle.entries.getOrElse(styleIdx) { VoiceStyle.GENERATIVE }
+        
+        val droneTiming = if (rgDroneTiming.checkedRadioButtonId == R.id.rbDroneRandom) DroneTimingMode.RANDOM else DroneTimingMode.CONSTANT
+
+        currentParams = currentParams.copy(
+            bpm        = seekBpm.progress + 20,
+            velocity   = seekVelocity.progress + 1,
+            minOctave  = rangeOctave.values[0].toInt(),
+            maxOctave  = rangeOctave.values[1].toInt(),
+            channel    = spinnerChannel.selectedItemPosition + 1,
+            scale      = spinnerScale.selectedItemPosition,
+            rootNote   = selectedRootTag().let { if (it == -1) 0 else it + 1 },
+            timingMode = when (rgTiming.checkedRadioButtonId) {
+                R.id.rbMetronome  -> MidiService.TIMING_METRONOME
+                R.id.rbMixed      -> MidiService.TIMING_MIXED
+                R.id.rbRandomized -> MidiService.TIMING_RANDOMIZED
+                R.id.rbEuclidean  -> MidiService.TIMING_EUCLIDEAN
+                else              -> MidiService.TIMING_METRONOME
+            },
+            style      = style,
+            droneTiming = droneTiming,
+            droneMinBeats = rangeDroneBeats.values[0].toInt(),
+            droneMaxBeats = rangeDroneBeats.values[1].toInt()
+        )
         host?.getMidiService()?.updateV1Parameters(currentParams)
     }
 
@@ -321,7 +409,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         )
     }
     override fun onVoiceParamsChanged(v1: MidiService.Voice1Params, v2: VoiceConfig, v3: VoiceConfig) {
-        if (!isAdded) return
+        if (!isAdded || view == null) return
         isUpdatingFromSync = true
         currentParams = v1
 
@@ -356,6 +444,17 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
             selectRoot(v1.rootNote)
         }
         // If rootNote==0 we don't change the UI — user's last choice (FREE or C) is preserved
+
+        isUpdatingFromSync = true
+        spinnerStyle.setSelection(v1.style.ordinal)
+        if (v1.droneTiming == DroneTimingMode.RANDOM) {
+            rgDroneTiming.check(R.id.rbDroneRandom)
+        } else {
+            rgDroneTiming.check(R.id.rbDroneConstant)
+        }
+        rangeDroneBeats.values = listOf(v1.droneMinBeats.toFloat(), v1.droneMaxBeats.toFloat())
+        tvDroneRange.text = "Drone beat range: ${v1.droneMinBeats} - ${v1.droneMaxBeats}"
+        updateUiVisibility()
         isUpdatingFromSync = false
     }
 

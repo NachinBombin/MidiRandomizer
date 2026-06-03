@@ -86,13 +86,10 @@ class VoiceEngine(
 
     fun stopIndependent() {
         running = false
-        scheduler?.shutdownNow()
-        try {
-            scheduler?.awaitTermination(500, TimeUnit.MILLISECONDS)
-        } catch (_: InterruptedException) {
-            Thread.currentThread().interrupt()
-        }
+        val s = scheduler
         scheduler = null
+        s?.shutdownNow()
+        // Removed blocking awaitTermination on main thread
         if (currentNote >= 0) {
             onNoteOffRaw(currentNote, config.independentConfig.midiChannel)
             currentNote = -1
@@ -102,32 +99,46 @@ class VoiceEngine(
     fun stop() {
         running = false
         stopIndependent()
+        scheduler?.shutdownNow() // Double tap for safety
     }
 
     private val independentLoop = Runnable {
-        while (running) {
-            val ic  = config.independentConfig
-            val ps  = ic.proSettings
+        try {
+            while (running) {
+                if (!running) break
+                val ic  = config.independentConfig
+                if (ic.style == VoiceStyle.SINGLE_NOTE_DRONE) {
+                    fireIndependentNote(ic)
+                    break
+                }
 
-            val euclidOn = ps.euclideanEnabled && ic.timingMode == MidiService.TIMING_EUCLIDEAN
-            val isOnset  = if (euclidOn) {
-                val hit = euclideanPattern.getOrElse(euclideanStep) { false }
-                euclideanStep = (euclideanStep + 1) % euclideanPattern.size.coerceAtLeast(1)
-                hit
-            } else true
+                val ps  = ic.proSettings
 
-            if (isOnset) fireIndependentNote(ic)
+                val euclidOn = ps.euclideanEnabled && ic.timingMode == MidiService.TIMING_EUCLIDEAN
+                val isOnset  = if (euclidOn) {
+                    val hit = euclideanPattern.getOrElse(euclideanStep) { false }
+                    euclideanStep = (euclideanStep + 1) % euclideanPattern.size.coerceAtLeast(1)
+                    hit
+                } else true
 
-            try {
-                Thread.sleep(calcInterval(ic))
-            } catch (_: InterruptedException) {
-                break
+                if (isOnset) fireIndependentNote(ic)
+
+                try {
+                    Thread.sleep(calcInterval(ic))
+                } catch (_: InterruptedException) {
+                    break
+                }
             }
+        } finally {
+            running = false
         }
     }
 
     private fun fireIndependentNote(ic: IndependentConfig) {
-        if (currentNote >= 0) onNoteOffRaw(currentNote, ic.midiChannel)
+        val isDrone = ic.style == VoiceStyle.SINGLE_NOTE_DRONE || ic.style == VoiceStyle.EVOLVING_DRONE
+        val prevNote = currentNote
+
+        if (!isDrone && prevNote >= 0) onNoteOffRaw(prevNote, ic.midiChannel)
 
         val intervals = getScales().getOrNull(ic.selectedScale) ?: return
         val ps = ic.proSettings
@@ -150,9 +161,21 @@ class VoiceEngine(
         onNoteOnRaw(noteNum, vel, ic.midiChannel)
         onNotePlayed(noteNum)
         currentNote = noteNum
+
+        if (isDrone && prevNote >= 0 && prevNote != noteNum) {
+            onNoteOffRaw(prevNote, ic.midiChannel)
+        }
     }
 
     private fun calcInterval(ic: IndependentConfig): Long {
+        if (ic.style == VoiceStyle.EVOLVING_DRONE) {
+            val beats = if (ic.droneTiming == DroneTimingMode.RANDOM) {
+                val min = ic.droneMinBeats.coerceIn(1, 256)
+                val max = ic.droneMaxBeats.coerceIn(min, 256)
+                Random.nextInt(min, max + 1)
+            } else 32
+            return (60000L / ic.bpm.coerceAtLeast(1)) * beats
+        }
         val base = (60_000.0 / ic.bpm).toLong()
         val ps   = ic.proSettings
         val modeMs = when (ic.timingMode) {

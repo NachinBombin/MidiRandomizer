@@ -4,4 +4,8 @@
         <item>3.0</item>
         <item>5.0</item>
     </array>
+    <array name="default_drone_range">
+        <item>16.0</item>
+        <item>64.0</item>
+    </array>
 </resources>

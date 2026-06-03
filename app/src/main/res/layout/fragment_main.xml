@@ -67,6 +67,93 @@
             android:layout_marginTop="6dp"
             android:layout_marginBottom="20dp"/>
 
+        <!-- Style Selection -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="STYLE"
+            android:textSize="11sp"
+            android:textColor="#797876"
+            android:letterSpacing="0.12"
+            android:layout_marginBottom="6dp"/>
+
+        <Spinner
+            android:id="@+id/spinnerStyle"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="#1C1B19"
+            android:layout_marginBottom="12dp"/>
+
+        <!-- Drone Timing (Evolving Drone only) -->
+        <LinearLayout
+            android:id="@+id/layoutDroneTiming"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="DRONE TIMING"
+                android:textSize="11sp"
+                android:textColor="#797876"
+                android:letterSpacing="0.12"
+                android:layout_marginBottom="6dp"/>
+            <RadioGroup
+                android:id="@+id/rgDroneTiming"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="12dp">
+                <RadioButton
+                    android:id="@+id/rbDroneConstant"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Constant"
+                    android:textColor="#E8E6E1"
+                    android:buttonTint="#4F9AA5"
+                    android:checked="true"/>
+                <RadioButton
+                    android:id="@+id/rbDroneRandom"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Random"
+                    android:textColor="#E8E6E1"
+                    android:buttonTint="#4F9AA5"/>
+            </RadioGroup>
+
+            <!-- Drone Timing Range -->
+            <LinearLayout
+                android:id="@+id/layoutDroneRange"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+                <TextView
+                    android:id="@+id/tvDroneRange"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Drone beat range: 16 - 64"
+                    android:textSize="14sp"
+                    android:textColor="#E8E6E1"
+                    android:layout_marginBottom="4dp"/>
+                <com.google.android.material.slider.RangeSlider
+                    android:id="@+id/rangeDroneBeats"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:valueFrom="1"
+                    android:valueTo="128"
+                    app:values="@array/default_drone_range"
+                    android:stepSize="1.0"
+                    app:thumbColor="#4F9AA5"
+                    app:trackColorActive="#4F9AA5"
+                    app:trackColorInactive="#393836"
+                    android:layout_marginBottom="12dp"/>
+            </LinearLayout>
+        </LinearLayout>
+
         <!-- Scale -->
         <TextView
             android:layout_width="wrap_content"

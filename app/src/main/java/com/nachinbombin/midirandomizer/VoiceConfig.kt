@@ -8,6 +8,12 @@ import kotlin.random.Random
 enum class VoiceMode : Parcelable { HARMONY, INDEPENDENT }
 
 @Parcelize
+enum class VoiceStyle : Parcelable { GENERATIVE, SINGLE_NOTE_DRONE, EVOLVING_DRONE }
+
+@Parcelize
+enum class DroneTimingMode : Parcelable { CONSTANT, RANDOM }
+
+@Parcelize
 data class HarmonyConfig(
     val toneStepOffset:  Int   = 2,
     val timeDriftMs:     Long  = 10,
@@ -29,7 +35,11 @@ data class IndependentConfig(
     val timingMode:    Int = 0,
     val rootNote:      Int = 0,   // 0 = follow global root; 1..12 = C..B (semitone 0..11 stored as 1..12)
     val proSettings:   ProSettings = ProSettings(),
-    val useSharedPro:  Boolean = true
+    val useSharedPro:  Boolean = true,
+    val style:         VoiceStyle = VoiceStyle.GENERATIVE,
+    val droneTiming:   DroneTimingMode = DroneTimingMode.CONSTANT,
+    val droneMinBeats: Int = 16,
+    val droneMaxBeats: Int = 64
 ) : Parcelable
 
 @Parcelize
