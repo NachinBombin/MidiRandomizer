@@ -20,7 +20,7 @@ data class HarmonyConfig(
     val skipProbability: Float = 0f,
     val masterVelocity:  Int   = 100,
     val velocityDrift:   Int   = 8,
-    val midiChannel:     Int   = 0,   // 0 = Omni (all channels)
+    val midiChannel:     Int   = 1,
     val referenceVoice:  Int   = 1
 ) : Parcelable
 
@@ -30,7 +30,7 @@ data class IndependentConfig(
     val velocity:         Int            = 90,
     val minOctave:        Int            = 3,
     val maxOctave:        Int            = 5,
-    val midiChannel:      Int            = 0,   // 0 = Omni (all channels)
+    val midiChannel:      Int            = 3,
     val selectedScale:    Int            = 1,
     val timingMode:       Int            = 0,
     val rootNote:         Int            = 0,   // 0 = follow global root; 1..12 = C..B
@@ -40,6 +40,7 @@ data class IndependentConfig(
     val droneTiming:      DroneTimingMode = DroneTimingMode.CONSTANT,
     val droneMinBeats:    Int            = 16,
     val droneMaxBeats:    Int            = 64,
+    // Octave range used in Single-Note Drone, Generative, and Evolving Drone for V2/V3
     val droneOctaveMin:   Int            = 3,
     val droneOctaveMax:   Int            = 5
 ) : Parcelable

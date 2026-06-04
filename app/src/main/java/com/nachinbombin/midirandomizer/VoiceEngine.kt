@@ -7,6 +7,9 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import kotlin.random.Random
 
+/**
+ * Self-contained execution engine for one secondary voice (V2 or V3).
+ */
 class VoiceEngine(
     private val voiceId:     Int,
     private val mainHandler: Handler,
@@ -29,10 +32,6 @@ class VoiceEngine(
     private var currentNote    = -1
     private var currentNoteCh  = 0
 
-    // Track the last V1 note/velocity so harmony can be re-fired when params change
-    @Volatile var lastV1Note: Int = -1
-    @Volatile var lastV1Vel:  Int = 100
-
     private var velocityShaper: VelocityShaper = VelocityShaper(VelocityPattern.RANDOM, 90)
     private var markovChain:    MarkovMelody?   = null
     private var euclideanPattern: BooleanArray  = BooleanArray(0)
@@ -41,8 +40,6 @@ class VoiceEngine(
     // ── Harmony mode ───────────────────────────────────────────────────────
 
     fun onV1NoteOn(v1Note: Int, v1Velocity: Int) {
-        lastV1Note = v1Note
-        lastV1Vel  = v1Velocity
         val cfg = config
         if (!cfg.enabled || cfg.mode != VoiceMode.HARMONY) return
         val hc = cfg.harmonyConfig
@@ -64,35 +61,6 @@ class VoiceEngine(
                     fireHarmonyNote(targetNote, vel, hc.midiChannel)
             }, delay)
         }
-    }
-
-    /**
-     * Called when tone offset (or other harmony params) change while a V1 note
-     * is already held. Immediately replaces the current harmony note with the
-     * new offset applied to the last known V1 note.
-     */
-    fun onToneOffsetChanged() {
-        val cfg = config
-        if (!cfg.enabled || cfg.mode != VoiceMode.HARMONY) return
-        val v1Note = lastV1Note
-        if (v1Note < 0) return        // nothing ever played in V1
-        if (currentNote < 0) return   // nothing sounding in this voice
-        val hc             = cfg.harmonyConfig
-        val scaleIntervals = getScales().getOrNull(getGlobalScale()) ?: return
-        val allowed        = DiatonicHarmony.allowedNotes(scaleIntervals, getGlobalRoot())
-        val refNote        = if (voiceId == 3 && hc.referenceVoice == 2) getV2Note() else v1Note
-        val targetNote     = DiatonicHarmony.applyOffset(refNote, hc.toneStepOffset, allowed)
-        val vel            = DiatonicHarmony.applyVelocity(lastV1Vel, hc)
-        fireHarmonyNote(targetNote, vel, hc.midiChannel)
-    }
-
-    /**
-     * Start harmonising immediately using the currently held V1 note.
-     * Called when this voice switches to HARMONY mode mid-session.
-     */
-    fun harmonizeCurrentV1Note() {
-        val v1Note = lastV1Note
-        if (v1Note >= 0) onV1NoteOn(v1Note, lastV1Vel)
     }
 
     private fun fireHarmonyNote(note: Int, vel: Int, ch: Int) {
@@ -179,6 +147,7 @@ class VoiceEngine(
 
         if (!isDrone && prevNote >= 0) onNoteOffRaw(prevNote, prevCh)
 
+        // Use droneOctaveMin/Max for all modes in V2/V3 (replaces the old minOctave/maxOctave usage)
         val octMin = ic.droneOctaveMin
         val octMax = ic.droneOctaveMax
         val octRange = (octMax - octMin + 1).coerceAtLeast(1)
@@ -186,23 +155,33 @@ class VoiceEngine(
         val noteNumber: Int
 
         if (ic.style == VoiceStyle.SINGLE_NOTE_DRONE) {
+            // ── Single Note Drone note resolution ───────────────────────────
+            // Octave: fixed when min == max, randomised within range otherwise.
             val selectedOctave = if (octRange == 1) octMin
                                  else octMin + Random.nextInt(octRange)
+
             if (ic.rootNote == 0) {
-                val globalRoot     = getGlobalRoot()
+                // Follow Main: pick the root-degree note of the global scale at global root.
+                // We pick a note from within the scale (degree 0 = root itself by default).
+                val globalRoot = getGlobalRoot()   // 0–11
                 val scaleIntervals = getScales().getOrNull(getGlobalScale()) ?: listOf(0)
-                val rootInterval   = scaleIntervals[0]
+                // Pick the first scale degree (root = interval 0) transposed to global root
+                val rootInterval = scaleIntervals[0]  // always 0 for standard scales
                 noteNumber = ((selectedOctave + 1) * 12 + globalRoot + rootInterval).coerceIn(0, 127)
             } else {
-                val rootOffset = ic.rootNote - 1
+                // Fixed root: play exactly that chromatic note (root spinner selects the note itself)
+                val rootOffset = ic.rootNote - 1   // 0–11
                 noteNumber = ((selectedOctave + 1) * 12 + rootOffset).coerceIn(0, 127)
             }
         } else {
+            // ── Generative / Evolving Drone ─────────────────────────────────
             val intervals = getScales().getOrNull(ic.selectedScale) ?: return
             val ps        = ic.proSettings
+
             val degreeIdx = if (ps.markovEnabled) {
                 markovChain?.nextDegree() ?: Random.nextInt(intervals.size)
             } else Random.nextInt(intervals.size)
+
             val interval = intervals[degreeIdx]
             val oct      = octMin + Random.nextInt(octRange)
             val root     = if (ic.rootNote > 0) ic.rootNote - 1 else getGlobalRoot()
@@ -210,6 +189,7 @@ class VoiceEngine(
         }
 
         val vel = velocityShaper.next()
+
         onNoteOnRaw(noteNumber, vel, ic.midiChannel)
         onNotePlayed(noteNumber)
         currentNote   = noteNumber
