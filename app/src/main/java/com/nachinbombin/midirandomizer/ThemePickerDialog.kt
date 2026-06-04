@@ -1,7 +1,6 @@
 package com.nachinbombin.midirandomizer
 
 import android.content.Context
-import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -56,7 +55,7 @@ class ThemePickerDialog : BottomSheetDialogFragment() {
         // Preset grid
         root.addView(RecyclerView(ctx).apply {
             layoutManager = GridLayoutManager(ctx, 2)
-            adapter = Adapter(ctx, current) { preset ->
+            adapter = Adapter(ctx, current.name) { preset ->
                 onThemeSelected?.invoke(preset)
                 dismiss()
             }
@@ -75,7 +74,7 @@ class ThemePickerDialog : BottomSheetDialogFragment() {
 
     private class Adapter(
         private val ctx: Context,
-        private val current: ThemePreset,
+        private val selectedName: String,   // name of the currently active preset
         private val onClick: (ThemePreset) -> Unit
     ) : RecyclerView.Adapter<Adapter.VH>() {
 
@@ -112,7 +111,7 @@ class ThemePickerDialog : BottomSheetDialogFragment() {
 
         override fun onBindViewHolder(holder: VH, position: Int) {
             val p          = ThemePreset.ALL[position]
-            val isSelected = p.name == current.name
+            val isSelected = p.name == selectedName
 
             // Gradient swatch: bg → accent
             holder.swatch.background = GradientDrawable(
@@ -120,17 +119,17 @@ class ThemePickerDialog : BottomSheetDialogFragment() {
                 intArrayOf(p.bg, p.accent)
             ).apply { cornerRadius = dp(5).toFloat() }
 
-            // Label
+            // Label — use accent colour when this card is the active theme
             holder.label.text = p.name
-            holder.label.setTextColor(if (isSelected) p.accent else current.textPrimary)
+            holder.label.setTextColor(if (isSelected) p.accent else p.textMuted)
 
-            // Card border — thicker + accent colour when selected
+            // Card border — thicker + accent colour when selected, subtle otherwise
             holder.card.background = GradientDrawable().apply {
                 cornerRadius = dp(8).toFloat()
                 setColor(p.bgElevated)
                 setStroke(
                     dp(if (isSelected) 2 else 1),
-                    if (isSelected) p.accent else current.borderSubtle
+                    if (isSelected) p.accent else p.borderSubtle  // fix: p.borderSubtle
                 )
             }
 
