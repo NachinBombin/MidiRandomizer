@@ -1,6 +1,9 @@
 package com.nachinbombin.midirandomizer
 
+import android.content.pm.PackageManager
 import android.content.res.ColorStateList
+import android.media.midi.MidiDeviceInfo
+import android.media.midi.MidiManager
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -8,8 +11,6 @@ import android.view.ViewGroup
 import android.widget.*
 import androidx.fragment.app.Fragment
 import com.google.android.material.slider.RangeSlider
-import android.media.midi.MidiDeviceInfo
-import android.media.midi.MidiManager
 
 class MainFragment : Fragment(), MidiService.MidiEventListener {
 
@@ -20,84 +21,208 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
 
     private var host: MainFragmentHost? = null
 
+    private lateinit var btnStartStop:   Button
     private lateinit var tvStatus:       TextView
     private lateinit var tvLastNote:     TextView
     private lateinit var seekBpm:        SeekBar
     private lateinit var tvBpm:          TextView
     private lateinit var seekVelocity:   SeekBar
     private lateinit var tvVelocity:     TextView
-    private lateinit var rangeOctave:    RangeSlider
     private lateinit var tvOctave:       TextView
+    private lateinit var rangeOctave:    RangeSlider
     private lateinit var rgTiming:       RadioGroup
     private lateinit var spinnerChannel: Spinner
     private lateinit var spinnerScale:   Spinner
     private lateinit var spinnerStyle:   Spinner
-    private lateinit var btnStartStop:   Button
-    private lateinit var deviceListView: ListView
-    private lateinit var rgRootRow1:     RadioGroup
-    private lateinit var rgRootRow2:     RadioGroup
-    private lateinit var rgRootFree:     RadioGroup
     private lateinit var layoutDroneTiming: View
-    private lateinit var layoutDroneRange:  View
-    private lateinit var rgDroneTiming:     RadioGroup
-    private lateinit var rangeDroneBeats:   RangeSlider
-    private lateinit var tvDroneRange:      TextView
+    private lateinit var layoutDroneRange: View
+    private lateinit var tvDroneRange:   TextView
+    private lateinit var rangeDroneBeats: RangeSlider
+    private lateinit var rgDroneTiming:  RadioGroup
+    private lateinit var deviceListView: ListView
+    private lateinit var tvDeviceInfo:   TextView
 
-    private var deviceAdapter = ArrayAdapter<String>(android.app.Application(), android.R.layout.simple_list_item_1)
+    // Root note UI — three RadioGroups acting as one
+    private lateinit var rgRootRow1: RadioGroup
+    private lateinit var rgRootRow2: RadioGroup
+    private lateinit var rgRootFree: RadioGroup
+
+    private var currentParams      = MidiService.Voice1Params()
+    private var isUpdatingFromSync = false
+
+    private val deviceAdapter by lazy {
+        ArrayAdapter<String>(requireContext(), android.R.layout.simple_list_item_1)
+    }
     private val deviceMap = mutableMapOf<String, MidiDeviceInfo>()
 
-    @Volatile private var currentParams = MidiService.Voice1Params()
-    @Volatile private var isUpdatingFromSync = false
+    private val scales = listOf(
+        // Original 10
+        "Chromatic",
+        "Major",
+        "Minor (Natural)",
+        "Minor (Harmonic)",
+        "Pentatonic Major",
+        "Pentatonic Minor",
+        "Blues",
+        "Dorian",
+        "Mixolydian",
+        "Whole Tone",
+        // New 7
+        "Kurd (Annaziska / Aeolian)",
+        "Celtic Minor (Amara)",
+        "Pygmy",
+        "SaBye / SaByeD",
+        "Aegean (Lydian)",
+        "Hijaz",
+        "Akebono"
+    )
 
-    override fun onAttach(context: android.content.Context) {
-        super.onAttach(context)
-        host = context as? MainFragmentHost
+    private val styles = listOf("Generative", "Single note Drone", "Evolving Drone")
+
+    // ── Root note helpers ────────────────────────────────────────────────────
+
+    private fun selectedRootTag(): Int {
+        val r1id = rgRootRow1.checkedRadioButtonId
+        if (r1id != -1) {
+            val tag = requireView().findViewById<RadioButton>(r1id).tag as? String
+            tag?.toIntOrNull()?.let { return it }
+        }
+        val r2id = rgRootRow2.checkedRadioButtonId
+        if (r2id != -1) {
+            val tag = requireView().findViewById<RadioButton>(r2id).tag as? String
+            tag?.toIntOrNull()?.let { return it }
+        }
+        return -1
     }
 
-    override fun onDetach() {
-        super.onDetach()
-        host = null
+    private fun selectRoot(semitone: Int) {
+        isUpdatingFromSync = true
+        when {
+            semitone in 0..5 -> {
+                rgRootRow2.clearCheck()
+                rgRootFree.clearCheck()
+                val btn = rgRootRow1.findViewWithTag<RadioButton>(semitone.toString())
+                btn?.isChecked = true
+            }
+            semitone in 6..11 -> {
+                rgRootRow1.clearCheck()
+                rgRootFree.clearCheck()
+                val btn = rgRootRow2.findViewWithTag<RadioButton>(semitone.toString())
+                btn?.isChecked = true
+            }
+            else -> {
+                rgRootRow1.clearCheck()
+                rgRootRow2.clearCheck()
+                rgRootFree.check(R.id.rbRootFree)
+            }
+        }
+        isUpdatingFromSync = false
     }
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
-        return inflater.inflate(R.layout.fragment_main, container, false)
+    // ── Fragment lifecycle ───────────────────────────────────────────────────
+
+    override fun onStart() {
+        super.onStart()
+        (activity as? MainActivity)?.addMidiListener(this)
     }
+
+    override fun onStop() {
+        super.onStop()
+        (activity as? MainActivity)?.removeMidiListener(this)
+    }
+
+    override fun onCreateView(
+        inflater: LayoutInflater, container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View = inflater.inflate(R.layout.fragment_main, container, false)
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
+        host = activity as? MainFragmentHost
+        bindViews(view)
+        if (!requireContext().packageManager.hasSystemFeature(PackageManager.FEATURE_MIDI)) {
+            tvStatus.text = getString(R.string.midi_not_supported)
+            btnStartStop.isEnabled = false
+        }
+        refreshDeviceList()
+        setupListeners()
+    }
 
-        tvStatus       = view.findViewById(R.id.tvStatus)
-        tvLastNote     = view.findViewById(R.id.tvLastNote)
-        seekBpm        = view.findViewById(R.id.seekBpm)
-        tvBpm          = view.findViewById(R.id.tvBpm)
-        seekVelocity   = view.findViewById(R.id.seekVelocity)
-        tvVelocity     = view.findViewById(R.id.tvVelocity)
-        rangeOctave    = view.findViewById(R.id.rangeOctave)
-        tvOctave       = view.findViewById(R.id.tvOctave)
-        rgTiming       = view.findViewById(R.id.rgTiming)
-        spinnerChannel = view.findViewById(R.id.spinnerChannel)
-        spinnerScale   = view.findViewById(R.id.spinnerScale)
-        spinnerStyle   = view.findViewById(R.id.spinnerStyle)
-        btnStartStop   = view.findViewById(R.id.btnStartStop)
-        deviceListView = view.findViewById(R.id.listViewDevices)
-        rgRootRow1     = view.findViewById(R.id.rgRootRow1)
-        rgRootRow2     = view.findViewById(R.id.rgRootRow2)
-        rgRootFree     = view.findViewById(R.id.rgRootFree)
-        layoutDroneTiming = view.findViewById(R.id.layoutDroneTiming)
-        layoutDroneRange  = view.findViewById(R.id.layoutDroneRange)
-        rgDroneTiming     = view.findViewById(R.id.rgDroneTiming)
-        rangeDroneBeats   = view.findViewById(R.id.rangeDroneBeats)
-        tvDroneRange      = view.findViewById(R.id.tvDroneRange)
+    private fun bindViews(v: View) {
+        btnStartStop      = v.findViewById(R.id.btnStartStop)
+        tvStatus          = v.findViewById(R.id.tvStatus)
+        tvLastNote        = v.findViewById(R.id.tvLastNote)
+        seekBpm           = v.findViewById(R.id.seekBpm)
+        tvBpm             = v.findViewById(R.id.tvBpm)
+        seekVelocity      = v.findViewById(R.id.seekVelocity)
+        tvVelocity        = v.findViewById(R.id.tvVelocity)
+        tvOctave          = v.findViewById(R.id.tvOctave)
+        rangeOctave       = v.findViewById(R.id.rangeOctave)
+        rgTiming          = v.findViewById(R.id.rgTiming)
+        spinnerChannel    = v.findViewById(R.id.spinnerChannel)
+        spinnerScale      = v.findViewById(R.id.spinnerScale)
+        spinnerStyle      = v.findViewById(R.id.spinnerStyle)
+        layoutDroneTiming = v.findViewById(R.id.layoutDroneTiming)
+        layoutDroneRange  = v.findViewById(R.id.layoutDroneRange)
+        tvDroneRange      = v.findViewById(R.id.tvDroneRange)
+        rangeDroneBeats   = v.findViewById(R.id.rangeDroneBeats)
+        rgDroneTiming     = v.findViewById(R.id.rgDroneTiming)
+        deviceListView    = v.findViewById(R.id.listViewDevices)
+        tvDeviceInfo      = v.findViewById(R.id.tvDeviceInfo)
+        rgRootRow1        = v.findViewById(R.id.rgRootRow1)
+        rgRootRow2        = v.findViewById(R.id.rgRootRow2)
+        rgRootFree        = v.findViewById(R.id.rgRootFree)
+
+        seekBpm.max      = 280
+        seekBpm.progress = currentParams.bpm - 20
+        tvBpm.text       = getString(R.string.label_bpm, currentParams.bpm)
+
+        seekVelocity.max      = 126
+        seekVelocity.progress = currentParams.velocity - 1
+        tvVelocity.text       = getString(R.string.label_velocity, currentParams.velocity)
+
+        tvOctave.text = getString(R.string.label_octave_range, currentParams.minOctave, currentParams.maxOctave)
+
+        val channels = (0..16).map { if (it == 0) "Ch Omni (0)" else getString(R.string.channel_format, it) }
+        spinnerChannel.adapter = ArrayAdapter(
+            requireContext(), android.R.layout.simple_spinner_item, channels
+        ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+
+        spinnerScale.adapter = ArrayAdapter(
+            requireContext(), android.R.layout.simple_spinner_item, scales
+        ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+
+        spinnerStyle.adapter = ArrayAdapter(
+            requireContext(), android.R.layout.simple_spinner_item, styles
+        ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
 
         deviceListView.adapter = deviceAdapter
 
-        // Populate MIDI channel spinner: 0 (Omni), 1–16
-        val channelLabels = listOf("0 (Omni)") + (1..16).map { "Ch $it" }
-        spinnerChannel.adapter = ArrayAdapter(requireContext(),
-            android.R.layout.simple_spinner_item, channelLabels).also {
-            it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        }
+        // Default: FREE selected
+        selectRoot(-1)
+    }
 
+    fun refreshDeviceList() {
+        val mm = host?.getMidiManager() ?: return
+        deviceAdapter.clear()
+        deviceMap.clear()
+        @Suppress("DEPRECATION")
+        val devices = mm.devices
+        if (devices.isEmpty()) {
+            deviceAdapter.add(getString(R.string.no_devices_found))
+            tvDeviceInfo.text = getString(R.string.connect_device_hint)
+            return
+        }
+        for (info in devices) {
+            val name = info.properties.getString(MidiDeviceInfo.PROPERTY_NAME)
+                ?: info.properties.getString(MidiDeviceInfo.PROPERTY_PRODUCT) ?: "Unknown Device"
+            val label = "$name  [${info.inputPortCount}\u2193 ${info.outputPortCount}\u2191]"
+            deviceAdapter.add(label)
+            deviceMap[label] = info
+        }
+        tvDeviceInfo.text = getString(R.string.tap_to_connect)
+    }
+
+    private fun setupListeners() {
         seekBpm.setOnSeekBarChangeListener(simpleSeek { p ->
             currentParams = currentParams.copy(bpm = p + 20)
             tvBpm.text = getString(R.string.label_bpm, currentParams.bpm)
@@ -113,7 +238,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
             val vals = slider.values
             val low  = vals[0].toInt()
             val high = vals[1].toInt()
-            // Allow low == high (single octave selection) — no minimum gap enforced
+            // Allow low == high (single octave) — no minimum gap enforced
             currentParams = currentParams.copy(minOctave = low, maxOctave = high)
             tvOctave.text = getString(R.string.label_octave_range, low, high)
             push()
@@ -130,16 +255,17 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
             currentParams = currentParams.copy(timingMode = mode)
             push()
         }
-        spinnerChannel.onItemSelectedListener = simpleSpinner {
-            currentParams = currentParams.copy(channel = it)
+        spinnerChannel.onItemSelectedListener = simpleSpinner { pos ->
+            currentParams = currentParams.copy(channel = pos)
             push()
         }
-        spinnerScale.onItemSelectedListener = simpleSpinner {
-            currentParams = currentParams.copy(scale = it)
+        spinnerScale.onItemSelectedListener = simpleSpinner { pos ->
+            currentParams = currentParams.copy(scale = pos)
             push()
         }
-        spinnerStyle.onItemSelectedListener = simpleSpinner {
-            currentParams = currentParams.copy(style = VoiceStyle.entries[it])
+        spinnerStyle.onItemSelectedListener = simpleSpinner { pos ->
+            val newStyle = VoiceStyle.entries[pos]
+            currentParams = currentParams.copy(style = newStyle)
             updateUiVisibility()
             push()
         }
@@ -165,15 +291,12 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
             if (isUpdatingFromSync || checkedId == -1) return@OnCheckedChangeListener
             isUpdatingFromSync = true
             if (group.id == R.id.rgRootRow1) {
-                rgRootRow2.clearCheck()
-                rgRootFree.clearCheck()
-            } else if (group.id == R.id.rgRootRow2) {
-                rgRootRow1.clearCheck()
-                rgRootFree.clearCheck()
+                rgRootRow2.clearCheck(); rgRootFree.clearCheck()
+            } else {
+                rgRootRow1.clearCheck(); rgRootFree.clearCheck()
             }
             isUpdatingFromSync = false
-            val tag = requireView().findViewById<RadioButton>(checkedId).tag as? String
-            val semitone = tag?.toIntOrNull() ?: 0
+            val semitone = selectedRootTag()
             currentParams = currentParams.copy(rootNote = semitone + 1)
             push()
         }
@@ -183,8 +306,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         rgRootFree.setOnCheckedChangeListener { _, checkedId ->
             if (isUpdatingFromSync || checkedId == -1) return@setOnCheckedChangeListener
             isUpdatingFromSync = true
-            rgRootRow1.clearCheck()
-            rgRootRow2.clearCheck()
+            rgRootRow1.clearCheck(); rgRootRow2.clearCheck()
             isUpdatingFromSync = false
             currentParams = currentParams.copy(rootNote = 0)
             push()
@@ -206,11 +328,11 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         seekBpm.visibility    = if (isSingleNote) View.GONE else View.VISIBLE
         tvBpm.visibility      = if (isSingleNote) View.GONE else View.VISIBLE
         rgTiming.visibility   = if (isSingleNote) View.GONE else View.VISIBLE
-        // Octave slider always visible (needed for single note drone octave selection too)
+        // Octave slider always visible — needed for single note drone octave selection
         tvOctave.visibility    = View.VISIBLE
         rangeOctave.visibility = View.VISIBLE
 
-        val isEvolving    = style == VoiceStyle.EVOLVING_DRONE
+        val isEvolving = style == VoiceStyle.EVOLVING_DRONE
         val isRandomDrone = isEvolving && rgDroneTiming.checkedRadioButtonId == R.id.rbDroneRandom
 
         if (isEvolving) {
@@ -232,12 +354,16 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         host?.getMidiService()?.updateV1Parameters(currentParams)
     }
 
+    // ── MidiEventListener callbacks ──────────────────────────────────────────
+
     override fun onNotePlayed(noteName: String, midiNote: Int, velocity: Int) {
         if (isAdded) tvLastNote.text = getString(R.string.last_note_format, noteName, midiNote, velocity)
     }
+
     override fun onStatusChanged(status: String) {
         if (isAdded) tvStatus.text = status
     }
+
     override fun onPlaybackStateChanged(playing: Boolean) {
         if (!isAdded) return
         btnStartStop.text = if (playing) getString(R.string.btn_stop) else getString(R.string.btn_start)
@@ -245,6 +371,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
             if (playing) 0xFF8B0000.toInt() else 0xFF01696F.toInt()
         )
     }
+
     override fun onVoiceParamsChanged(v1: MidiService.Voice1Params, v2: VoiceConfig, v3: VoiceConfig) {
         if (!isAdded || view == null) return
         isUpdatingFromSync = true
@@ -269,12 +396,8 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
 
         spinnerChannel.setSelection(v1.channel)
         spinnerScale.setSelection(v1.scale)
-
-        isUpdatingFromSync = false
-        if (v1.rootNote != 0) selectRoot(v1.rootNote - 1)
-
-        isUpdatingFromSync = true
         spinnerStyle.setSelection(v1.style.ordinal)
+
         if (v1.droneTiming == DroneTimingMode.RANDOM) {
             rgDroneTiming.check(R.id.rbDroneRandom)
         } else {
@@ -282,6 +405,9 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         }
         rangeDroneBeats.values = listOf(v1.droneMinBeats.toFloat(), v1.droneMaxBeats.toFloat())
         tvDroneRange.text = "Drone beat range: ${v1.droneMinBeats} - ${v1.droneMaxBeats}"
+
+        if (v1.rootNote != 0) selectRoot(v1.rootNote - 1) else selectRoot(-1)
+
         updateUiVisibility()
         isUpdatingFromSync = false
     }
@@ -297,25 +423,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         }
     }
 
-    fun refreshDeviceList() {
-        val manager = host?.getMidiManager() ?: return
-        updateDeviceList(manager.devices.toList())
-    }
-
-    private fun selectRoot(semitone: Int) {
-        isUpdatingFromSync = true
-        rgRootFree.clearCheck()
-        val row1Ids = listOf(R.id.rbRootC, R.id.rbRootCs, R.id.rbRootD, R.id.rbRootDs, R.id.rbRootE, R.id.rbRootF)
-        val row2Ids = listOf(R.id.rbRootFs, R.id.rbRootG, R.id.rbRootGs, R.id.rbRootA, R.id.rbRootAs, R.id.rbRootB)
-        val allIds  = row1Ids + row2Ids
-        allIds.forEachIndexed { idx, id ->
-            if (idx == semitone) {
-                if (id in row1Ids) { rgRootRow2.clearCheck(); rgRootRow1.check(id) }
-                else               { rgRootRow1.clearCheck(); rgRootRow2.check(id) }
-            }
-        }
-        isUpdatingFromSync = false
-    }
+    // ── Helpers ──────────────────────────────────────────────────────────────
 
     private fun simpleSeek(block: (Int) -> Unit) = object : SeekBar.OnSeekBarChangeListener {
         override fun onProgressChanged(sb: SeekBar, progress: Int, fromUser: Boolean) {
