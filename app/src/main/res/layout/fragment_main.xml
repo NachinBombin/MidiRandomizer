@@ -28,6 +28,21 @@
                 android:textStyle="bold"
                 android:textColor="#E8E6E1"/>
 
+            <Button
+                android:id="@+id/btnTheme"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:text="🎨 Theme"
+                android:textSize="13sp"
+                android:textColor="#E8E6E1"
+                android:backgroundTint="#1C1B19"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                style="?attr/materialButtonOutlinedStyle"
+                app:strokeColor="#393836"
+                app:strokeWidth="1dp"
+                app:cornerRadius="8dp"/>
+
         </LinearLayout>
 
         <TextView
@@ -181,14 +196,6 @@
             android:letterSpacing="0.12"
             android:layout_marginBottom="6dp"/>
 
-        <!--
-             Two rows of 6 + one FREE button.
-             RadioGroup doesn't support multi-row natively, so we use a
-             LinearLayout wrapper with two horizontal RadioGroups that
-             are managed together in code (clearing the other group when
-             one is selected). The FREE button is a plain ToggleButton
-             styled as a chip and handled separately.
-        -->
         <LinearLayout
             android:id="@+id/rootNoteContainer"
             android:layout_width="match_parent"

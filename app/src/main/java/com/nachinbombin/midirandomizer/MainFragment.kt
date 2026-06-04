@@ -22,6 +22,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
     private var host: MainFragmentHost? = null
 
     private lateinit var btnStartStop:   Button
+    private lateinit var btnTheme:       Button
     private lateinit var tvStatus:       TextView
     private lateinit var tvLastNote:     TextView
     private lateinit var seekBpm:        SeekBar
@@ -56,7 +57,6 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
     private val deviceMap = mutableMapOf<String, MidiDeviceInfo>()
 
     private val scales = listOf(
-        // Original 10
         "Chromatic",
         "Major",
         "Minor (Natural)",
@@ -67,7 +67,6 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         "Dorian",
         "Mixolydian",
         "Whole Tone",
-        // New 7
         "Kurd (Annaziska / Aeolian)",
         "Celtic Minor (Amara)",
         "Pygmy",
@@ -79,7 +78,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
 
     private val styles = listOf("Generative", "Single note Drone", "Evolving Drone")
 
-    // ── Root note helpers ────────────────────────────────────────────────────
+    // ── Root note helpers ─────────────────────────────────────────────────────────
 
     private fun selectedRootTag(): Int {
         val r1id = rgRootRow1.checkedRadioButtonId
@@ -119,7 +118,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         isUpdatingFromSync = false
     }
 
-    // ── Fragment lifecycle ───────────────────────────────────────────────────
+    // ── Fragment lifecycle ──────────────────────────────────────────────────────
 
     override fun onStart() {
         super.onStart()
@@ -139,6 +138,8 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         host = activity as? MainFragmentHost
         bindViews(view)
+        // Apply saved theme to the whole fragment view
+        ThemeManager.applyToView(view, ThemeManager.loadTheme(requireContext()))
         if (!requireContext().packageManager.hasSystemFeature(PackageManager.FEATURE_MIDI)) {
             tvStatus.text = getString(R.string.midi_not_supported)
             btnStartStop.isEnabled = false
@@ -149,6 +150,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
 
     private fun bindViews(v: View) {
         btnStartStop      = v.findViewById(R.id.btnStartStop)
+        btnTheme          = v.findViewById(R.id.btnTheme)
         tvStatus          = v.findViewById(R.id.tvStatus)
         tvLastNote        = v.findViewById(R.id.tvLastNote)
         seekBpm           = v.findViewById(R.id.seekBpm)
@@ -223,6 +225,16 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
     }
 
     private fun setupListeners() {
+        // ── Theme picker ──────────────────────────────────────────────────
+        btnTheme.setOnClickListener {
+            ThemePickerDialog.newInstance().apply {
+                onThemeSelected = { preset ->
+                    ThemeManager.saveTheme(requireContext(), preset)
+                    ThemeManager.applyToView(requireView(), preset)
+                }
+            }.show(childFragmentManager, "theme_picker")
+        }
+
         seekBpm.setOnSeekBarChangeListener(simpleSeek { p ->
             currentParams = currentParams.copy(bpm = p + 20)
             tvBpm.text = getString(R.string.label_bpm, currentParams.bpm)
@@ -238,7 +250,6 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
             val vals = slider.values
             val low  = vals[0].toInt()
             val high = vals[1].toInt()
-            // Allow low == high (single octave) — no minimum gap enforced
             currentParams = currentParams.copy(minOctave = low, maxOctave = high)
             tvOctave.text = getString(R.string.label_octave_range, low, high)
             push()
@@ -328,7 +339,6 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         seekBpm.visibility    = if (isSingleNote) View.GONE else View.VISIBLE
         tvBpm.visibility      = if (isSingleNote) View.GONE else View.VISIBLE
         rgTiming.visibility   = if (isSingleNote) View.GONE else View.VISIBLE
-        // Octave slider always visible — needed for single note drone octave selection
         tvOctave.visibility    = View.VISIBLE
         rangeOctave.visibility = View.VISIBLE
 
@@ -354,7 +364,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         host?.getMidiService()?.updateV1Parameters(currentParams)
     }
 
-    // ── MidiEventListener callbacks ──────────────────────────────────────────
+    // ── MidiEventListener callbacks ───────────────────────────────────────────────
 
     override fun onNotePlayed(noteName: String, midiNote: Int, velocity: Int) {
         if (isAdded) tvLastNote.text = getString(R.string.last_note_format, noteName, midiNote, velocity)
