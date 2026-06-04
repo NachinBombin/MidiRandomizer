@@ -459,19 +459,35 @@ class MidiService : Service() {
 
         if (!isDrone && prevNote >= 0) sendNoteOffRaw(1, prevNote, p.channel)
 
-        val ps = p.proSettings
-        val intervals = scales.getOrNull(p.scale) ?: return
-
-        val degreeIdx = if (ps.markovEnabled) {
-            v1MarkovChain?.nextDegree() ?: Random.nextInt(intervals.size)
-        } else Random.nextInt(intervals.size)
-
-        val interval = intervals[degreeIdx]
-        val range = (p.maxOctave - p.minOctave + 1).coerceAtLeast(1)
-        val selectedOctave = p.minOctave + Random.nextInt(range)
-        val rootOffset = if (p.rootNote > 0) p.rootNote - 1 else 0
-        val noteNumber = ((selectedOctave + 1) * 12 + interval + rootOffset).coerceIn(0, 127)
         val vel = v1VelocityShaper.next()
+        val noteNumber: Int
+
+        if (p.style == VoiceStyle.SINGLE_NOTE_DRONE) {
+            // ── V1 Single Note Drone ─────────────────────────────────────────
+            // The root note grid directly selects WHICH note to drone on.
+            // The octave slider selects the octave; if min != max the octave is
+            // randomised within the selected range.
+            val octRange = (p.maxOctave - p.minOctave + 1).coerceAtLeast(1)
+            val selectedOctave = if (octRange == 1) p.minOctave
+                                 else p.minOctave + Random.nextInt(octRange)
+            // rootNote == 0 means no root selected yet — fall back to C (0)
+            val rootOffset = if (p.rootNote > 0) p.rootNote - 1 else 0
+            noteNumber = ((selectedOctave + 1) * 12 + rootOffset).coerceIn(0, 127)
+        } else {
+            // ── Generative / Evolving Drone ──────────────────────────────────
+            val ps = p.proSettings
+            val intervals = scales.getOrNull(p.scale) ?: return
+
+            val degreeIdx = if (ps.markovEnabled) {
+                v1MarkovChain?.nextDegree() ?: Random.nextInt(intervals.size)
+            } else Random.nextInt(intervals.size)
+
+            val interval = intervals[degreeIdx]
+            val octRange = (p.maxOctave - p.minOctave + 1).coerceAtLeast(1)
+            val selectedOctave = p.minOctave + Random.nextInt(octRange)
+            val rootOffset = if (p.rootNote > 0) p.rootNote - 1 else 0
+            noteNumber = ((selectedOctave + 1) * 12 + interval + rootOffset).coerceIn(0, 127)
+        }
 
         sendNoteOnRaw(1, noteNumber, vel, p.channel)
         v1CurrentNote = noteNumber
