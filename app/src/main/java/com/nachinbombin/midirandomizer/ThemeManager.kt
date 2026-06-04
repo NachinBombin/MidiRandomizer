@@ -3,35 +3,24 @@ package com.nachinbombin.midirandomizer
 import android.content.Context
 import android.content.res.ColorStateList
 import android.widget.Button
-import android.widget.ListView
 import android.widget.SeekBar
 import android.widget.TextView
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ScrollView
 import com.google.android.material.slider.RangeSlider
 
 /**
  * Handles persistence and runtime application of [ThemePreset].
  *
- * ── Saving / Loading ────────────────────────────────────────────────────────
+ * Call [applyToView] with the fragment's root view after selecting a theme.
+ * It paints ONLY the scroll background, sliders, seekbars, the start/stop
+ * button, and status/last-note text — intentionally skipping RadioButton
+ * chips and inner ViewGroups so their drawable-based backgrounds are preserved.
+ *
+ * Usage:
  *   ThemeManager.saveTheme(context, ThemePreset.VAPORWAVE)
- *   val preset = ThemeManager.loadTheme(context)
- *
- * ── Applying to a View tree ──────────────────────────────────────────────────
- *   Override onViewCreated or onResume and call:
- *
- *   val preset = ThemeManager.loadTheme(requireContext())
- *   ThemeManager.applyToView(requireView(), preset)
- *
- * ── Wiring the picker button ─────────────────────────────────────────────────
- *   binding.btnTheme.setOnClickListener {
- *       ThemePickerDialog.newInstance().apply {
- *           onThemeSelected = { preset ->
- *               ThemeManager.saveTheme(requireContext(), preset)
- *               ThemeManager.applyToView(requireView(), preset)
- *           }
- *       }.show(childFragmentManager, "theme_picker")
- *   }
+ *   ThemeManager.applyToView(requireView(), ThemeManager.loadTheme(context))
  */
 object ThemeManager {
 
@@ -50,44 +39,54 @@ object ThemeManager {
     }
 
     /**
-     * Recursively walks [root] and re-tints every known widget type
-     * using the provided [preset] color tokens.
+     * Applies [preset] colors to the fragment view.
+     * Only touches the scroll background, known-ID widgets, and sliders.
+     * Does NOT recurse into ViewGroups generically to avoid clobbering
+     * drawable-backed widgets (chips, radio buttons, spinners, etc.).
      */
     fun applyToView(root: View, preset: ThemePreset) {
-        applyRecursive(root, preset)
+        // 1. Page background (ScrollView)
+        if (root is ScrollView) root.setBackgroundColor(preset.bg)
+
+        // 2. Walk the full tree but only paint leaf widgets we know about
+        applyLeaves(root, preset)
     }
 
-    private fun applyRecursive(view: View, p: ThemePreset) {
-        when (view) {
-            is Button -> {
-                view.backgroundTintList = ColorStateList.valueOf(p.accent)
-                view.setTextColor(p.textPrimary)
+    private fun applyLeaves(view: View, p: ThemePreset) {
+        when {
+            // ── Start/Stop button — keep its red/green state, only tint Theme btn
+            view is Button && view.id == R.id.btnTheme -> {
+                // Outlined button: just update stroke color to match accent
+                view.setTextColor(p.accent)
             }
-            is RangeSlider -> {
-                view.thumbTintList         = ColorStateList.valueOf(p.accent)
-                view.trackActiveTintList   = ColorStateList.valueOf(p.accent)
-                view.trackInactiveTintList = ColorStateList.valueOf(p.borderSubtle)
-            }
-            is SeekBar -> {
+
+            // ── SeekBars (BPM, Velocity)
+            view is SeekBar -> {
                 view.progressTintList           = ColorStateList.valueOf(p.accent)
                 view.thumbTintList              = ColorStateList.valueOf(p.accent)
                 view.progressBackgroundTintList = ColorStateList.valueOf(p.borderSubtle)
             }
-            is ListView -> {
-                view.setBackgroundColor(p.bgElevated)
+
+            // ── RangeSliders (Octave, DroneBeats)
+            view is RangeSlider -> {
+                view.thumbTintList         = ColorStateList.valueOf(p.accent)
+                view.trackActiveTintList   = ColorStateList.valueOf(p.accent)
+                view.trackInactiveTintList = ColorStateList.valueOf(p.borderSubtle)
             }
-            is ViewGroup -> {
-                view.setBackgroundColor(p.bg)
-                for (i in 0 until view.childCount) applyRecursive(view.getChildAt(i), p)
-                return // children already visited above
+
+            // ── Status / last note TextViews — keep their semantic colors
+            view is TextView && view.id == R.id.tvStatus -> {
+                view.setTextColor(p.accent)
             }
-            is TextView -> {
-                view.setTextColor(p.textPrimary)
-            }
+
+            // ── Don't touch RadioButtons, RadioGroups, Spinners, ListViews,
+            //    other TextViews, or generic ViewGroups — they have their own
+            //    drawable backgrounds or hard-coded semantic colors.
         }
-        // Walk children for non-ViewGroup compound widgets
+
+        // Recurse into children
         if (view is ViewGroup) {
-            for (i in 0 until view.childCount) applyRecursive(view.getChildAt(i), p)
+            for (i in 0 until view.childCount) applyLeaves(view.getChildAt(i), p)
         }
     }
 }

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/scrollRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#111318">
@@ -11,7 +12,7 @@
         android:orientation="vertical"
         android:padding="20dp">
 
-        <!-- Title row -->
+        <!-- ── Title row (label + theme button) ─────────────────────────── -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -33,9 +34,8 @@
                 android:layout_width="wrap_content"
                 android:layout_height="36dp"
                 android:text="🎨 Theme"
-                android:textSize="13sp"
+                android:textSize="12sp"
                 android:textColor="#E8E6E1"
-                android:backgroundTint="#1C1B19"
                 android:paddingStart="12dp"
                 android:paddingEnd="12dp"
                 style="?attr/materialButtonOutlinedStyle"
@@ -54,7 +54,7 @@
             android:textColor="#4F9AA5"
             android:layout_marginBottom="20dp"/>
 
-        <!-- MIDI Devices -->
+        <!-- ── MIDI Devices ───────────────────────────────────────────────── -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -82,7 +82,7 @@
             android:layout_marginTop="6dp"
             android:layout_marginBottom="20dp"/>
 
-        <!-- Style Selection -->
+        <!-- ── Style ─────────────────────────────────────────────────────── -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -99,13 +99,14 @@
             android:background="#1C1B19"
             android:layout_marginBottom="12dp"/>
 
-        <!-- Drone Timing (Evolving Drone only) -->
+        <!-- ── Drone Timing (Evolving Drone only) ────────────────────────── -->
         <LinearLayout
             android:id="@+id/layoutDroneTiming"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:visibility="gone">
+
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -114,12 +115,14 @@
                 android:textColor="#797876"
                 android:letterSpacing="0.12"
                 android:layout_marginBottom="6dp"/>
+
             <RadioGroup
                 android:id="@+id/rgDroneTiming"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:layout_marginBottom="12dp">
+
                 <RadioButton
                     android:id="@+id/rbDroneConstant"
                     android:layout_width="0dp"
@@ -129,6 +132,7 @@
                     android:textColor="#E8E6E1"
                     android:buttonTint="#4F9AA5"
                     android:checked="true"/>
+
                 <RadioButton
                     android:id="@+id/rbDroneRandom"
                     android:layout_width="0dp"
@@ -137,15 +141,16 @@
                     android:text="Random"
                     android:textColor="#E8E6E1"
                     android:buttonTint="#4F9AA5"/>
+
             </RadioGroup>
 
-            <!-- Drone Timing Range -->
             <LinearLayout
                 android:id="@+id/layoutDroneRange"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:visibility="gone">
+
                 <TextView
                     android:id="@+id/tvDroneRange"
                     android:layout_width="wrap_content"
@@ -154,6 +159,7 @@
                     android:textSize="14sp"
                     android:textColor="#E8E6E1"
                     android:layout_marginBottom="4dp"/>
+
                 <com.google.android.material.slider.RangeSlider
                     android:id="@+id/rangeDroneBeats"
                     android:layout_width="match_parent"
@@ -166,10 +172,11 @@
                     app:trackColorActive="#4F9AA5"
                     app:trackColorInactive="#393836"
                     android:layout_marginBottom="12dp"/>
+
             </LinearLayout>
         </LinearLayout>
 
-        <!-- Scale -->
+        <!-- ── Scale ─────────────────────────────────────────────────────── -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -186,7 +193,7 @@
             android:background="#1C1B19"
             android:layout_marginBottom="12dp"/>
 
-        <!-- Root Note -->
+        <!-- ── Root Note ──────────────────────────────────────────────────── -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -211,30 +218,12 @@
                 android:orientation="horizontal"
                 android:layout_marginBottom="4dp">
 
-                <RadioButton android:id="@+id/rbRootC"
-                    style="@style/RootChip"
-                    android:text="C"
-                    android:tag="0"/>
-                <RadioButton android:id="@+id/rbRootCs"
-                    style="@style/RootChip"
-                    android:text="C#"
-                    android:tag="1"/>
-                <RadioButton android:id="@+id/rbRootD"
-                    style="@style/RootChip"
-                    android:text="D"
-                    android:tag="2"/>
-                <RadioButton android:id="@+id/rbRootDs"
-                    style="@style/RootChip"
-                    android:text="D#"
-                    android:tag="3"/>
-                <RadioButton android:id="@+id/rbRootE"
-                    style="@style/RootChip"
-                    android:text="E"
-                    android:tag="4"/>
-                <RadioButton android:id="@+id/rbRootF"
-                    style="@style/RootChip"
-                    android:text="F"
-                    android:tag="5"/>
+                <RadioButton android:id="@+id/rbRootC"  style="@style/RootChip" android:text="C"  android:tag="0"/>
+                <RadioButton android:id="@+id/rbRootCs" style="@style/RootChip" android:text="C#" android:tag="1"/>
+                <RadioButton android:id="@+id/rbRootD"  style="@style/RootChip" android:text="D"  android:tag="2"/>
+                <RadioButton android:id="@+id/rbRootDs" style="@style/RootChip" android:text="D#" android:tag="3"/>
+                <RadioButton android:id="@+id/rbRootE"  style="@style/RootChip" android:text="E"  android:tag="4"/>
+                <RadioButton android:id="@+id/rbRootF"  style="@style/RootChip" android:text="F"  android:tag="5"/>
 
             </RadioGroup>
 
@@ -246,30 +235,12 @@
                 android:orientation="horizontal"
                 android:layout_marginBottom="4dp">
 
-                <RadioButton android:id="@+id/rbRootFs"
-                    style="@style/RootChip"
-                    android:text="F#"
-                    android:tag="6"/>
-                <RadioButton android:id="@+id/rbRootG"
-                    style="@style/RootChip"
-                    android:text="G"
-                    android:tag="7"/>
-                <RadioButton android:id="@+id/rbRootGs"
-                    style="@style/RootChip"
-                    android:text="G#"
-                    android:tag="8"/>
-                <RadioButton android:id="@+id/rbRootA"
-                    style="@style/RootChip"
-                    android:text="A"
-                    android:tag="9"/>
-                <RadioButton android:id="@+id/rbRootAs"
-                    style="@style/RootChip"
-                    android:text="A#"
-                    android:tag="10"/>
-                <RadioButton android:id="@+id/rbRootB"
-                    style="@style/RootChip"
-                    android:text="B"
-                    android:tag="11"/>
+                <RadioButton android:id="@+id/rbRootFs" style="@style/RootChip" android:text="F#" android:tag="6"/>
+                <RadioButton android:id="@+id/rbRootG"  style="@style/RootChip" android:text="G"  android:tag="7"/>
+                <RadioButton android:id="@+id/rbRootGs" style="@style/RootChip" android:text="G#" android:tag="8"/>
+                <RadioButton android:id="@+id/rbRootA"  style="@style/RootChip" android:text="A"  android:tag="9"/>
+                <RadioButton android:id="@+id/rbRootAs" style="@style/RootChip" android:text="A#" android:tag="10"/>
+                <RadioButton android:id="@+id/rbRootB"  style="@style/RootChip" android:text="B"  android:tag="11"/>
 
             </RadioGroup>
 
@@ -280,7 +251,8 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal">
 
-                <RadioButton android:id="@+id/rbRootFree"
+                <RadioButton
+                    android:id="@+id/rbRootFree"
                     style="@style/RootChip"
                     android:text="FREE  (no root)"
                     android:layout_width="match_parent"
@@ -291,7 +263,7 @@
 
         </LinearLayout>
 
-        <!-- BPM -->
+        <!-- ── BPM ───────────────────────────────────────────────────────── -->
         <TextView
             android:id="@+id/tvBpm"
             android:layout_width="wrap_content"
@@ -310,7 +282,7 @@
             android:thumbTint="#4F9AA5"
             android:layout_marginBottom="16dp"/>
 
-        <!-- Velocity -->
+        <!-- ── Velocity ──────────────────────────────────────────────────── -->
         <TextView
             android:id="@+id/tvVelocity"
             android:layout_width="wrap_content"
@@ -329,7 +301,7 @@
             android:thumbTint="#4F9AA5"
             android:layout_marginBottom="16dp"/>
 
-        <!-- Octave range -->
+        <!-- ── Octave range ──────────────────────────────────────────────── -->
         <TextView
             android:id="@+id/tvOctave"
             android:layout_width="wrap_content"
@@ -352,7 +324,7 @@
             app:trackColorInactive="#393836"
             android:layout_marginBottom="16dp"/>
 
-        <!-- MIDI Channel -->
+        <!-- ── MIDI Channel ───────────────────────────────────────────────── -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -369,7 +341,7 @@
             android:background="#1C1B19"
             android:layout_marginBottom="16dp"/>
 
-        <!-- Timing mode -->
+        <!-- ── Timing mode ────────────────────────────────────────────────── -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -425,7 +397,7 @@
 
         </RadioGroup>
 
-        <!-- Last note display -->
+        <!-- ── Last note display ─────────────────────────────────────────── -->
         <TextView
             android:id="@+id/tvLastNote"
             android:layout_width="match_parent"
@@ -435,7 +407,7 @@
             android:textColor="#6DAA45"
             android:layout_marginBottom="20dp"/>
 
-        <!-- Start / Stop -->
+        <!-- ── Start / Stop ──────────────────────────────────────────────── -->
         <Button
             android:id="@+id/btnStartStop"
             android:layout_width="match_parent"
