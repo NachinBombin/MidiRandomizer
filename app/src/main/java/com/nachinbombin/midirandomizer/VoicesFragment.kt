@@ -102,8 +102,8 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         panel.addView(harmonyPanel); panel.addView(independentPanel)
 
         fun setEnabledState(on: Boolean) {
-            modeRow.visibility       = if (on) View.VISIBLE else View.GONE
-            harmonyPanel.visibility  = if (on) View.VISIBLE else View.GONE
+            modeRow.visibility          = if (on) View.VISIBLE else View.GONE
+            harmonyPanel.visibility     = if (on) View.VISIBLE else View.GONE
             independentPanel.visibility = View.GONE
         }
 
@@ -173,7 +173,6 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         val semitones   = intervals.getOrElse(intervalIdx) { 7 }
         val channel     = hp.findViewWithTag<Spinner>("harmChannel")?.selectedItemPosition ?: 0
         val existing    = if (voiceId == 2) currentV2 else currentV3
-        // HarmonyConfig uses toneStepOffset (not semitoneDelta) and midiChannel
         return existing.copy(
             enabled       = true,
             mode          = VoiceMode.HARMONY,
@@ -197,7 +196,7 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             "Celtic Minor (Amara)","Pygmy","SaBye / SaByeD",
             "Aegean (Lydian)","Hijaz","Akebono"
         )
-        val styles = listOf("Generative","Single note Drone","Evolving Drone")
+        val styles = listOf("Generative", "Single note Drone", "Evolving Drone")
 
         layout.addView(sectionLabel("SCALE"))
         val spinnerScale = Spinner(ctx).apply { tag = "indScale" }
@@ -211,6 +210,18 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         spinnerStyle.adapter = ArrayAdapter(ctx, android.R.layout.simple_spinner_item, styles)
             .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
         layout.addView(spinnerStyle)
+
+        layout.addView(sectionLabel("ROOT NOTE"))
+        val rootLabels = listOf(
+            "Follow Global",
+            "C","C#","D","D#","E","F",
+            "F#","G","G#","A","A#","B"
+        )
+        val spinnerRoot = Spinner(ctx).apply { tag = "indRoot" }
+        spinnerRoot.adapter = ArrayAdapter(ctx, android.R.layout.simple_spinner_item, rootLabels)
+            .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        spinnerRoot.onItemSelectedListener = simpleSpinner { onChanged() }
+        layout.addView(spinnerRoot)
 
         layout.addView(sectionLabel("MIDI CHANNEL"))
         val chLabels = (0..16).map { if (it == 0) "Ch Omni (0)" else "Ch $it" }
@@ -259,10 +270,17 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         }
         droneSingleGroup.addView(rangeDroneOctave)
 
-        spinnerStyle.onItemSelectedListener = simpleSpinner { pos ->
-            rangeOctave.visibility      = if (pos != 1) View.VISIBLE else View.GONE
-            droneSingleGroup.visibility = if (pos == 1) View.VISIBLE else View.GONE
-            onChanged()
+        // Wire style spinner AFTER all sub-views exist.
+        // Guard with isUpdatingFromSync so setSelection() during sync never
+        // collapses the octave/drone controls to the Generative defaults.
+        spinnerStyle.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>, view: View?, pos: Int, id: Long) {
+                if (isUpdatingFromSync) return
+                rangeOctave.visibility      = if (pos != 1) View.VISIBLE else View.GONE
+                droneSingleGroup.visibility = if (pos == 1) View.VISIBLE else View.GONE
+                onChanged()
+            }
+            override fun onNothingSelected(parent: AdapterView<*>) {}
         }
         return layout
     }
@@ -271,17 +289,18 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         val ip       = panel.findViewWithTag<View>("independentPanel") as? LinearLayout ?: return VoiceConfig()
         val scalePos = ip.findViewWithTag<Spinner>("indScale")?.selectedItemPosition ?: 0
         val stylePos = ip.findViewWithTag<Spinner>("indStyle")?.selectedItemPosition ?: 0
+        val rootPos  = ip.findViewWithTag<Spinner>("indRoot")?.selectedItemPosition  ?: 0
         val channel  = ip.findViewWithTag<Spinner>("indChannel")?.selectedItemPosition ?: 0
         val range    = ip.findViewWithTag<RangeSlider>("rangeOctave")?.values ?: listOf(3f, 5f)
         val droneRange = ip.findViewWithTag<RangeSlider>("rangeDroneOctave")?.values ?: listOf(3f, 5f)
         val existing = if (voiceId == 2) currentV2 else currentV3
-        // IndependentConfig uses: selectedScale, style (VoiceStyle), midiChannel, minOctave, maxOctave, droneOctaveMin, droneOctaveMax
         return existing.copy(
             enabled = true,
             mode    = VoiceMode.INDEPENDENT,
             independentConfig = existing.independentConfig.copy(
                 selectedScale  = scalePos,
                 style          = VoiceStyle.entries[stylePos],
+                rootNote       = rootPos,   // 0 = follow global, 1..12 = C..B
                 midiChannel    = channel,
                 minOctave      = range[0].toInt(),
                 maxOctave      = range[1].toInt(),
@@ -320,9 +339,19 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             val ip = panel.findViewWithTag<View>("independentPanel") as? LinearLayout
             ip?.findViewWithTag<Spinner>("indScale")?.setSelection(cfg.independentConfig.selectedScale)
             ip?.findViewWithTag<Spinner>("indStyle")?.setSelection(cfg.independentConfig.style.ordinal)
+            ip?.findViewWithTag<Spinner>("indRoot")?.setSelection(cfg.independentConfig.rootNote)
             ip?.findViewWithTag<Spinner>("indChannel")?.setSelection(cfg.independentConfig.midiChannel)
-            ip?.findViewWithTag<RangeSlider>("rangeOctave")?.values =
-                listOf(cfg.independentConfig.minOctave.toFloat(), cfg.independentConfig.maxOctave.toFloat())
+            // Restore visibility based on saved style
+            val stylePos = cfg.independentConfig.style.ordinal
+            ip?.findViewWithTag<RangeSlider>("rangeOctave")?.let { slider ->
+                slider.visibility = if (stylePos != 1) View.VISIBLE else View.GONE
+                slider.values = listOf(
+                    cfg.independentConfig.minOctave.toFloat(),
+                    cfg.independentConfig.maxOctave.toFloat()
+                )
+            }
+            ip?.findViewWithTag<LinearLayout>("droneSingleGroup")?.visibility =
+                if (stylePos == 1) View.VISIBLE else View.GONE
             ip?.findViewWithTag<RangeSlider>("rangeDroneOctave")?.values =
                 listOf(cfg.independentConfig.droneOctaveMin.toFloat(), cfg.independentConfig.droneOctaveMax.toFloat())
         }
@@ -346,8 +375,8 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         setBackgroundColor(0xFF444444.toInt()); tag = "divider"
     }
 
-    private fun simpleSpinner(block: (Int) -> Unit) = object : android.widget.AdapterView.OnItemSelectedListener {
-        override fun onItemSelected(p: android.widget.AdapterView<*>, v: View?, pos: Int, id: Long) { if (!isUpdatingFromSync) block(pos) }
-        override fun onNothingSelected(p: android.widget.AdapterView<*>) {}
+    private fun simpleSpinner(block: (Int) -> Unit) = object : AdapterView.OnItemSelectedListener {
+        override fun onItemSelected(p: AdapterView<*>, v: View?, pos: Int, id: Long) { if (!isUpdatingFromSync) block(pos) }
+        override fun onNothingSelected(p: AdapterView<*>) {}
     }
 }

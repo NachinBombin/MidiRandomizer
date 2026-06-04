@@ -2,7 +2,6 @@ package com.nachinbombin.midirandomizer
 
 import android.content.Context
 import android.content.res.ColorStateList
-import android.graphics.drawable.GradientDrawable
 import android.widget.*
 import android.view.View
 import android.view.ViewGroup
@@ -23,6 +22,18 @@ import com.google.android.material.slider.RangeSlider
  * Lock icons in PerformanceFragment are ALWAYS red when locked, regardless of theme.
  * applyToView intentionally skips ImageButtons tagged "lockBtn" — PerformanceFragment
  * manages their tint itself.
+ *
+ * ## RootChip rule
+ * RadioButtons whose tag is a numeric string ("0".."11") or "-1" are note-grid
+ * chips using @drawable/root_chip_bg (a state-list drawable) and
+ * @color/root_chip_text (a state-list color). The walker MUST NOT touch their
+ * background or textColor — doing so collapses the state-list and makes every
+ * chip appear permanently selected ("all lit").
+ *
+ * ## Spinner rule
+ * Spinners inflate internal RadioButton/TextView children on some API levels.
+ * The walker skips the interior of any AdapterView to avoid corrupting adapters
+ * or inflated dropdown items.
  */
 object ThemeManager {
 
@@ -58,10 +69,26 @@ object ThemeManager {
 
     private fun applyNode(view: View, p: ThemePreset, windowBg: Int) {
         when {
-            // Lock buttons in PerformanceFragment — SKIP, they manage their own tint
+            // ── SKIP: Lock buttons in PerformanceFragment manage their own tint ──
             view is ImageButton && view.tag == "lockBtn" -> return
 
-            // Theme selector button — accent text, transparent bg
+            // ── SKIP: RootChip RadioButtons — numeric semitone tags ("0".."11")
+            //    and the FREE chip tag "-1". These use @drawable/root_chip_bg
+            //    (state-list) and @color/root_chip_text (state-list). Touching
+            //    their background or textColor collapses the state and makes
+            //    all chips appear permanently selected.
+            view is RadioButton && isRootChipTag(view.tag) -> return
+
+            // ── SKIP interior of Spinners / AdapterViews entirely.
+            //    Spinners inflate internal child views on some API levels;
+            //    walking into them corrupts the adapter and dropdown items.
+            view is AdapterView<*> -> {
+                // Paint the Spinner's own background but do NOT recurse.
+                view.setBackgroundColor(p.bgElevated)
+                return
+            }
+
+            // Theme selector button — accent text, subtle bg
             view is Button && view.id == R.id.btnTheme -> {
                 view.setTextColor(p.accent)
                 view.backgroundTintList = ColorStateList.valueOf(p.borderSubtle)
@@ -104,8 +131,7 @@ object ThemeManager {
                 view.setTextColor(p.textMuted)
             }
 
-            // RadioButtons — used in root-note chip rows and timing rows
-            // Leave background drawable untouched; only recolor text
+            // RadioButtons (non-chip) — text color only, leave background alone
             view is RadioButton -> {
                 view.setTextColor(
                     ColorStateList(
@@ -118,27 +144,27 @@ object ThemeManager {
                 )
             }
 
-            // Status / last-note TextViews
+            // Status TextView
             view is TextView && view.id == R.id.tvStatus -> {
                 view.setTextColor(p.accent)
             }
 
-            // Section-header TextViews (all-caps, muted)
+            // Section-header TextViews
             view is TextView && view.tag == "sectionHeader" -> {
                 view.setTextColor(p.textMuted)
             }
 
-            // Generic TextViews — primary text, transparent background
+            // Generic TextViews
             view is TextView -> {
                 view.setTextColor(p.textPrimary)
             }
 
-            // Elevated panels (cards, inner LinearLayouts tagged "panel")
+            // Elevated panels
             view is LinearLayout && view.tag == "panel" -> {
                 view.setBackgroundColor(p.bgElevated)
             }
 
-            // Dividers tagged "divider"
+            // Dividers
             view is View && view.tag == "divider" -> {
                 view.setBackgroundColor(p.borderSubtle)
             }
@@ -149,9 +175,19 @@ object ThemeManager {
             }
         }
 
-        // Recurse into children
+        // Recurse into children (AdapterView already returned above)
         if (view is ViewGroup) {
             for (i in 0 until view.childCount) applyNode(view.getChildAt(i), p, windowBg)
         }
+    }
+
+    /**
+     * Returns true if [tag] identifies a RootChip RadioButton.
+     * Valid tags: the strings "0".."11" (semitone index) and "-1" (FREE).
+     */
+    private fun isRootChipTag(tag: Any?): Boolean {
+        if (tag !is String) return false
+        val n = tag.toIntOrNull() ?: return false
+        return n in -1..11
     }
 }
