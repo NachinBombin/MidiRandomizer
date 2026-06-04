@@ -9,14 +9,16 @@ import android.widget.*
 import androidx.fragment.app.Fragment
 import com.google.android.material.slider.RangeSlider
 import android.media.midi.MidiDeviceInfo
+import android.media.midi.MidiManager
 
 class MainFragment : Fragment(), MidiService.MidiEventListener {
 
-    interface Host {
+    interface MainFragmentHost {
         fun getMidiService(): MidiService?
+        fun getMidiManager(): MidiManager?
     }
 
-    private var host: Host? = null
+    private var host: MainFragmentHost? = null
 
     private lateinit var tvStatus:       TextView
     private lateinit var tvLastNote:     TextView
@@ -49,7 +51,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
 
     override fun onAttach(context: android.content.Context) {
         super.onAttach(context)
-        host = context as? Host
+        host = context as? MainFragmentHost
     }
 
     override fun onDetach() {
@@ -77,7 +79,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         spinnerScale   = view.findViewById(R.id.spinnerScale)
         spinnerStyle   = view.findViewById(R.id.spinnerStyle)
         btnStartStop   = view.findViewById(R.id.btnStartStop)
-        deviceListView = view.findViewById(R.id.deviceListView)
+        deviceListView = view.findViewById(R.id.listViewDevices)
         rgRootRow1     = view.findViewById(R.id.rgRootRow1)
         rgRootRow2     = view.findViewById(R.id.rgRootRow2)
         rgRootFree     = view.findViewById(R.id.rgRootFree)
@@ -288,11 +290,16 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         }
     }
 
+    fun refreshDeviceList() {
+        val manager = host?.getMidiManager() ?: return
+        updateDeviceList(manager.devices.toList())
+    }
+
     private fun selectRoot(semitone: Int) {
         isUpdatingFromSync = true
         rgRootFree.clearCheck()
-        val row1Ids = listOf(R.id.rbRoot0, R.id.rbRoot1, R.id.rbRoot2, R.id.rbRoot3, R.id.rbRoot4, R.id.rbRoot5)
-        val row2Ids = listOf(R.id.rbRoot6, R.id.rbRoot7, R.id.rbRoot8, R.id.rbRoot9, R.id.rbRoot10, R.id.rbRoot11)
+        val row1Ids = listOf(R.id.rbRootC, R.id.rbRootCs, R.id.rbRootD, R.id.rbRootDs, R.id.rbRootE, R.id.rbRootF)
+        val row2Ids = listOf(R.id.rbRootFs, R.id.rbRootG, R.id.rbRootGs, R.id.rbRootA, R.id.rbRootAs, R.id.rbRootB)
         val allIds  = row1Ids + row2Ids
         allIds.forEachIndexed { idx, id ->
             if (idx == semitone) {

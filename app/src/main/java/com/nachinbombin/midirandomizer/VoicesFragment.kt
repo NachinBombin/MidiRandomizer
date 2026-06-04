@@ -1,6 +1,7 @@
 package com.nachinbombin.midirandomizer
 
 import android.content.Context
+import android.media.midi.MidiManager
 import android.os.Bundle
 import android.view.*
 import android.widget.*
@@ -30,6 +31,7 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
 
     interface ServiceProvider {
         fun getMidiService(): MidiService?
+        fun getMidiManager(): MidiManager?
     }
 
     fun onServiceReady() {}
