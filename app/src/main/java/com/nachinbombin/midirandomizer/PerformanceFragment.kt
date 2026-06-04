@@ -68,7 +68,6 @@ class PerformanceFragment : Fragment(), MidiService.MidiEventListener {
         sbV1 = v1Ctl.second; sbV1.max = 126; sbV1.progress = currentV1.velocity - 1; tvV1 = v1Ctl.first
         velRow.addView(v1Ctl.third)
 
-        // IndependentConfig.velocity is used for V2/V3 velocity in Perform view
         val v2Vel = currentV2.independentConfig.velocity
         val v2Ctl = createVelControl(getString(R.string.label_v2_vel, v2Vel), v2Vel) { p ->
             currentV2 = currentV2.copy(independentConfig = currentV2.independentConfig.copy(velocity = p))
@@ -150,6 +149,14 @@ class PerformanceFragment : Fragment(), MidiService.MidiEventListener {
         val preset = ThemeManager.loadTheme(requireContext())
         ThemeManager.applyToView(view, preset, forVoices = true)
         restoreLockTints()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        view?.let {
+            ThemeManager.applyToView(it, ThemeManager.loadTheme(requireContext()), forVoices = true)
+            restoreLockTints()
+        }
     }
 
     private fun restoreLockTints() {

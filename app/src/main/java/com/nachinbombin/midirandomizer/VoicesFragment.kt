@@ -70,8 +70,12 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        // Apply the active color theme — layout and structure are never changed by this call
         ThemeManager.applyToView(view, ThemeManager.loadTheme(requireContext()), forVoices = true)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        view?.let { ThemeManager.applyToView(it, ThemeManager.loadTheme(requireContext()), forVoices = true) }
     }
 
     private fun buildVoicePanel(voiceId: Int, label: String): LinearLayout {
@@ -167,7 +171,7 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         panel.addView(labeledSeekBar(ctx, "Skip % (0-100)",    0, 100, 0,  tag = "skipPct", onSync))
         panel.addView(labeledSeekBar(ctx, "Master Velocity",   0, 127, 100,tag = "masterVel", onSync))
         panel.addView(labeledSeekBar(ctx, "Velocity Drift ±",  0, 20, 8,   tag = "velDrift", onSync))
-        panel.addView(labeledSeekBar(ctx, "MIDI Channel (0=Omni)", 0, 16, voiceId, tag = "midiCh", onSync))
+        panel.addView(labeledSeekBar(ctx, "MIDI Channel (0=Omni)", 0, 16, 0, tag = "midiCh", onSync))
 
         if (voiceId == 3) {
             val refRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 8, 0, 0) }
@@ -190,7 +194,7 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         panel.addView(labeledSeekBar(ctx, "Velocity",        0,  127,  90, tag = "indVel", onSync))
         panel.addView(labeledSeekBar(ctx, "Min Octave",      0,    8,   3, tag = "indMinOct", onSync))
         panel.addView(labeledSeekBar(ctx, "Max Octave",      0,    8,   5, tag = "indMaxOct", onSync))
-        panel.addView(labeledSeekBar(ctx, "MIDI Channel (0=Omni)", 0, 16, voiceId + 1, tag = "indMidiCh", onSync))
+        panel.addView(labeledSeekBar(ctx, "MIDI Channel (0=Omni)", 0, 16, 0, tag = "indMidiCh", onSync))
 
         val scaleNames = listOf("Chromatic","Major","Minor Natural","Minor Harmonic",
             "Pentatonic Maj","Pentatonic Min","Blues","Dorian","Mixolydian","Whole Tone",

@@ -50,6 +50,11 @@ class ProSettingsFragment : Fragment() {
         ThemeManager.applyToView(view, ThemeManager.loadTheme(requireContext()), forVoices = false)
     }
 
+    override fun onResume() {
+        super.onResume()
+        view?.let { ThemeManager.applyToView(it, ThemeManager.loadTheme(requireContext()), forVoices = false) }
+    }
+
     fun setInitialSettings(s: ProSettings) { current = s }
 
     private fun bindViews(v: View) {
