@@ -41,6 +41,15 @@
             android:layout_width="match_parent"
             android:layout_height="120dp"
             android:background="#1C1B19"
+            android:layout_marginBottom="4dp"/>
+
+        <TextView
+            android:id="@+id/tvDeviceInfo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Tap a device to connect"
+            android:textSize="12sp"
+            android:textColor="#797876"
             android:layout_marginBottom="16dp"/>
 
         <!-- Start/Stop -->
@@ -53,18 +62,11 @@
             android:textColor="#FFFFFF"
             android:layout_marginBottom="16dp"/>
 
-        <!-- Voice Style -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Voice Style"
-            android:textColor="#CDCCCA"
-            android:layout_marginBottom="4dp"/>
+        <!-- Style -->
         <Spinner
             android:id="@+id/spinnerStyle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#1C1B19"
             android:layout_marginBottom="16dp"/>
 
         <!-- BPM -->
@@ -79,7 +81,7 @@
             android:id="@+id/seekBpm"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:max="220"
+            android:max="260"
             android:progress="100"
             android:layout_marginBottom="16dp"/>
 
@@ -88,7 +90,7 @@
             android:id="@+id/tvVelocity"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Velocity: 64"
+            android:text="Velocity: 100"
             android:textColor="#CDCCCA"
             android:layout_marginBottom="4dp"/>
         <SeekBar
@@ -96,7 +98,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:max="126"
-            android:progress="63"
+            android:progress="99"
             android:layout_marginBottom="16dp"/>
 
         <!-- Octave Range -->
@@ -104,7 +106,7 @@
             android:id="@+id/tvOctave"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Octave Range: 3 - 5"
+            android:text="Octave: 3 – 5"
             android:textColor="#CDCCCA"
             android:layout_marginBottom="4dp"/>
         <com.google.android.material.slider.RangeSlider
@@ -114,112 +116,76 @@
             android:valueFrom="0"
             android:valueTo="8"
             app:values="@array/default_octave_range"
-            android:stepSize="1.0"
-            app:minSeparation="0dp"
-            app:thumbColor="#4F9AA5"
-            app:trackColorActive="#4F9AA5"
-            app:trackColorInactive="#393836"
             android:layout_marginBottom="16dp"/>
 
-        <!-- MIDI Channel -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="MIDI Channel"
-            android:textColor="#CDCCCA"
-            android:layout_marginBottom="4dp"/>
+        <!-- Channel -->
         <Spinner
             android:id="@+id/spinnerChannel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#1C1B19"
             android:layout_marginBottom="16dp"/>
 
         <!-- Scale -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Scale"
-            android:textColor="#CDCCCA"
-            android:layout_marginBottom="4dp"/>
         <Spinner
             android:id="@+id/spinnerScale"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#1C1B19"
             android:layout_marginBottom="16dp"/>
 
-        <!-- Root Note -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Root Note"
-            android:textColor="#CDCCCA"
-            android:layout_marginBottom="4dp"/>
-
+        <!-- Root Note Row 1 (C–F) -->
         <RadioGroup
             android:id="@+id/rgRootRow1"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:layout_marginBottom="4dp">
-            <RadioButton android:id="@+id/rbRootC"  android:tag="0"  android:text="C"  android:textColor="#CDCCCA" android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content"/>
-            <RadioButton android:id="@+id/rbRootCs" android:tag="1"  android:text="C#" android:textColor="#CDCCCA" android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content"/>
-            <RadioButton android:id="@+id/rbRootD"  android:tag="2"  android:text="D"  android:textColor="#CDCCCA" android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content"/>
-            <RadioButton android:id="@+id/rbRootDs" android:tag="3"  android:text="D#" android:textColor="#CDCCCA" android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content"/>
-            <RadioButton android:id="@+id/rbRootE"  android:tag="4"  android:text="E"  android:textColor="#CDCCCA" android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content"/>
-            <RadioButton android:id="@+id/rbRootF"  android:tag="5"  android:text="F"  android:textColor="#CDCCCA" android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content"/>
+            <RadioButton android:id="@+id/rbRootC"  android:tag="0"  android:text="C"  android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content" android:textColor="#CDCCCA"/>
+            <RadioButton android:id="@+id/rbRootCs" android:tag="1"  android:text="C#" android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content" android:textColor="#CDCCCA"/>
+            <RadioButton android:id="@+id/rbRootD"  android:tag="2"  android:text="D"  android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content" android:textColor="#CDCCCA"/>
+            <RadioButton android:id="@+id/rbRootDs" android:tag="3"  android:text="D#" android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content" android:textColor="#CDCCCA"/>
+            <RadioButton android:id="@+id/rbRootE"  android:tag="4"  android:text="E"  android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content" android:textColor="#CDCCCA"/>
+            <RadioButton android:id="@+id/rbRootF"  android:tag="5"  android:text="F"  android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content" android:textColor="#CDCCCA"/>
         </RadioGroup>
 
+        <!-- Root Note Row 2 (F#–B) -->
         <RadioGroup
             android:id="@+id/rgRootRow2"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:layout_marginBottom="4dp">
-            <RadioButton android:id="@+id/rbRootFs" android:tag="6"  android:text="F#" android:textColor="#CDCCCA" android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content"/>
-            <RadioButton android:id="@+id/rbRootG"  android:tag="7"  android:text="G"  android:textColor="#CDCCCA" android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content"/>
-            <RadioButton android:id="@+id/rbRootGs" android:tag="8"  android:text="G#" android:textColor="#CDCCCA" android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content"/>
-            <RadioButton android:id="@+id/rbRootA"  android:tag="9"  android:text="A"  android:textColor="#CDCCCA" android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content"/>
-            <RadioButton android:id="@+id/rbRootAs" android:tag="10" android:text="A#" android:textColor="#CDCCCA" android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content"/>
-            <RadioButton android:id="@+id/rbRootB"  android:tag="11" android:text="B"  android:textColor="#CDCCCA" android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content"/>
+            <RadioButton android:id="@+id/rbRootFs" android:tag="6"  android:text="F#" android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content" android:textColor="#CDCCCA"/>
+            <RadioButton android:id="@+id/rbRootG"  android:tag="7"  android:text="G"  android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content" android:textColor="#CDCCCA"/>
+            <RadioButton android:id="@+id/rbRootGs" android:tag="8"  android:text="G#" android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content" android:textColor="#CDCCCA"/>
+            <RadioButton android:id="@+id/rbRootA"  android:tag="9"  android:text="A"  android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content" android:textColor="#CDCCCA"/>
+            <RadioButton android:id="@+id/rbRootAs" android:tag="10" android:text="A#" android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content" android:textColor="#CDCCCA"/>
+            <RadioButton android:id="@+id/rbRootB"  android:tag="11" android:text="B"  android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content" android:textColor="#CDCCCA"/>
         </RadioGroup>
 
+        <!-- Root FREE -->
         <RadioGroup
             android:id="@+id/rgRootFree"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:layout_marginBottom="16dp">
-            <RadioButton
-                android:id="@+id/rbRootFree"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Free (no root)"
-                android:textColor="#CDCCCA"
-                android:checked="true"/>
+            <RadioButton android:id="@+id/rbRootFree" android:text="Free (random)" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#CDCCCA"/>
         </RadioGroup>
 
-        <!-- Timing Mode -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Timing Mode"
-            android:textColor="#CDCCCA"
-            android:layout_marginBottom="4dp"/>
+        <!-- Timing -->
         <RadioGroup
             android:id="@+id/rgTiming"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:layout_marginBottom="16dp">
-            <RadioButton android:id="@+id/rbMetronome"  android:text="Metro"    android:textColor="#CDCCCA" android:checked="true" android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content"/>
-            <RadioButton android:id="@+id/rbMixed"      android:text="Mixed"    android:textColor="#CDCCCA" android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content"/>
-            <RadioButton android:id="@+id/rbRandomized" android:text="Random"   android:textColor="#CDCCCA" android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content"/>
-            <RadioButton android:id="@+id/rbEuclidean"  android:text="Euclid"   android:textColor="#CDCCCA" android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content"/>
+            <RadioButton android:id="@+id/rbMetronome"  android:text="Metro"  android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content" android:textColor="#CDCCCA" android:checked="true"/>
+            <RadioButton android:id="@+id/rbMixed"      android:text="Mixed"  android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content" android:textColor="#CDCCCA"/>
+            <RadioButton android:id="@+id/rbRandomized" android:text="Rand"   android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content" android:textColor="#CDCCCA"/>
+            <RadioButton android:id="@+id/rbEuclidean"  android:text="Eucl"   android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content" android:textColor="#CDCCCA"/>
         </RadioGroup>
 
-        <!-- Drone Timing (EVOLVING_DRONE only) -->
+        <!-- Drone Timing (Evolving Drone only) -->
         <LinearLayout
             android:id="@+id/layoutDroneTiming"
             android:layout_width="match_parent"
@@ -227,23 +193,17 @@
             android:orientation="vertical"
             android:visibility="gone"
             android:layout_marginBottom="8dp">
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Drone Timing"
-                android:textColor="#CDCCCA"
-                android:layout_marginBottom="4dp"/>
             <RadioGroup
                 android:id="@+id/rgDroneTiming"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal">
-                <RadioButton android:id="@+id/rbDroneConstant" android:text="Constant" android:textColor="#CDCCCA" android:checked="true" android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content"/>
-                <RadioButton android:id="@+id/rbDroneRandom"   android:text="Random"   android:textColor="#CDCCCA" android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content"/>
+                <RadioButton android:id="@+id/rbDroneConstant" android:text="Constant" android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content" android:textColor="#CDCCCA" android:checked="true"/>
+                <RadioButton android:id="@+id/rbDroneRandom"   android:text="Random"   android:layout_weight="1" android:layout_width="0dp" android:layout_height="wrap_content" android:textColor="#CDCCCA"/>
             </RadioGroup>
         </LinearLayout>
 
-        <!-- Drone Beat Range (EVOLVING_DRONE + RANDOM only) -->
+        <!-- Drone Beat Range (Evolving Drone + Random timing only) -->
         <LinearLayout
             android:id="@+id/layoutDroneRange"
             android:layout_width="match_parent"
@@ -255,7 +215,7 @@
                 android:id="@+id/tvDroneRange"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Drone beat range: 16 - 64"
+                android:text="Drone beat range: 2 - 8"
                 android:textColor="#CDCCCA"
                 android:layout_marginBottom="4dp"/>
             <com.google.android.material.slider.RangeSlider
@@ -263,13 +223,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:valueFrom="1"
-                android:valueTo="128"
-                app:values="@array/default_drone_range"
-                android:stepSize="1.0"
-                app:thumbColor="#4F9AA5"
-                app:trackColorActive="#4F9AA5"
-                app:trackColorInactive="#393836"/>
+                android:valueTo="32"
+                app:values="@array/default_drone_range"/>
         </LinearLayout>
 
     </LinearLayout>
+
 </ScrollView>
