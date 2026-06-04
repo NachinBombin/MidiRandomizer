@@ -131,27 +131,24 @@ class MidiService : Service() {
 
     @Synchronized
     fun updateV1Parameters(p: Voice1Params) {
-        val rootChanged = p.rootNote != v1Params.rootNote
-        val scaleChanged = p.scale != v1Params.scale
-        val octaveChanged = p.minOctave != v1Params.minOctave || p.maxOctave != v1Params.maxOctave
-        val styleChanged = p.style != v1Params.style
-        val proChanged = p.proSettings != v1Params.proSettings
+        val rootChanged   = p.rootNote    != v1Params.rootNote
+        val scaleChanged  = p.scale       != v1Params.scale
+        val octaveChanged = p.minOctave   != v1Params.minOctave || p.maxOctave != v1Params.maxOctave
+        val styleChanged  = p.style       != v1Params.style
+        val proChanged    = p.proSettings != v1Params.proSettings
 
         v1Params = p
         v1VelocityShaper.baseVelocity = p.velocity
         rebuildV1ProHelpers()
 
         if (isPlaying && (styleChanged || (p.style == VoiceStyle.SINGLE_NOTE_DRONE && (rootChanged || scaleChanged || octaveChanged)))) {
-            // Proper cleanup of old scheduler to prevent thread leak
             val old = scheduler
             scheduler = null
             old?.shutdownNow()
-            
             scheduler = Executors.newSingleThreadExecutor()
             scheduler?.execute(noteLoop)
         }
 
-        // Only update children if they are using shared pro settings and pro changed
         if (proChanged) {
             if (v2Config.mode == VoiceMode.INDEPENDENT && v2Config.independentConfig.useSharedPro) {
                 voice2Engine?.config = effectiveVoiceConfig(v2Config)
@@ -160,8 +157,25 @@ class MidiService : Service() {
                 voice3Engine?.config = effectiveVoiceConfig(v3Config)
             }
         }
-        
+
+        // If V1 root/scale changed and a voice is in single-note drone with Follow Main, restart it
+        if (rootChanged || scaleChanged) {
+            restartDroneVoiceIfFollowingMain(voice2Engine, v2Config)
+            restartDroneVoiceIfFollowingMain(voice3Engine, v3Config)
+        }
+
         notifyParamsChanged()
+    }
+
+    /** Restart a V2/V3 engine if it is playing a single-note drone following the main root. */
+    private fun restartDroneVoiceIfFollowingMain(engine: VoiceEngine?, cfg: VoiceConfig) {
+        if (!isPlaying) return
+        if (engine == null || !cfg.enabled || cfg.mode != VoiceMode.INDEPENDENT) return
+        val ic = cfg.independentConfig
+        if (ic.style == VoiceStyle.SINGLE_NOTE_DRONE && ic.rootNote == 0) {
+            engine.stopIndependent()
+            engine.startIndependent()
+        }
     }
 
     @Synchronized
@@ -169,15 +183,14 @@ class MidiService : Service() {
         if (v1Params.proSettings == settings) return
         v1Params = v1Params.copy(proSettings = settings)
         rebuildV1ProHelpers()
-        
-        // Push to voices if shared
+
         if (v2Config.mode == VoiceMode.INDEPENDENT && v2Config.independentConfig.useSharedPro) {
             voice2Engine?.config = effectiveVoiceConfig(v2Config)
         }
         if (v3Config.mode == VoiceMode.INDEPENDENT && v3Config.independentConfig.useSharedPro) {
             voice3Engine?.config = effectiveVoiceConfig(v3Config)
         }
-        
+
         notifyParamsChanged()
     }
 
@@ -186,14 +199,24 @@ class MidiService : Service() {
         val oldCfg = v2Config
         v2Config = cfg
         voice2Engine?.config = effectiveVoiceConfig(cfg)
-        
+
         if (isPlaying) {
-            val needsRestart = (cfg.enabled != oldCfg.enabled) || (cfg.mode != oldCfg.mode) || 
-                               (cfg.mode == VoiceMode.INDEPENDENT && cfg.independentConfig.style != oldCfg.independentConfig.style)
-            
+            val ic    = cfg.independentConfig
+            val oldIc = oldCfg.independentConfig
+            val needsRestart =
+                (cfg.enabled != oldCfg.enabled) ||
+                (cfg.mode != oldCfg.mode) ||
+                (cfg.mode == VoiceMode.INDEPENDENT && (
+                    ic.style != oldIc.style ||
+                    (ic.style == VoiceStyle.SINGLE_NOTE_DRONE &&
+                        (ic.rootNote != oldIc.rootNote ||
+                         ic.droneOctaveMin != oldIc.droneOctaveMin ||
+                         ic.droneOctaveMax != oldIc.droneOctaveMax))
+                ))
+
             if (needsRestart) {
                 voice2Engine?.stopIndependent()
-                if (cfg.enabled && (cfg.mode == VoiceMode.INDEPENDENT)) voice2Engine?.startIndependent()
+                if (cfg.enabled && cfg.mode == VoiceMode.INDEPENDENT) voice2Engine?.startIndependent()
             }
         }
         notifyParamsChanged()
@@ -204,14 +227,24 @@ class MidiService : Service() {
         val oldCfg = v3Config
         v3Config = cfg
         voice3Engine?.config = effectiveVoiceConfig(cfg)
-        
+
         if (isPlaying) {
-            val needsRestart = (cfg.enabled != oldCfg.enabled) || (cfg.mode != oldCfg.mode) || 
-                               (cfg.mode == VoiceMode.INDEPENDENT && cfg.independentConfig.style != oldCfg.independentConfig.style)
+            val ic    = cfg.independentConfig
+            val oldIc = oldCfg.independentConfig
+            val needsRestart =
+                (cfg.enabled != oldCfg.enabled) ||
+                (cfg.mode != oldCfg.mode) ||
+                (cfg.mode == VoiceMode.INDEPENDENT && (
+                    ic.style != oldIc.style ||
+                    (ic.style == VoiceStyle.SINGLE_NOTE_DRONE &&
+                        (ic.rootNote != oldIc.rootNote ||
+                         ic.droneOctaveMin != oldIc.droneOctaveMin ||
+                         ic.droneOctaveMax != oldIc.droneOctaveMax))
+                ))
 
             if (needsRestart) {
                 voice3Engine?.stopIndependent()
-                if (cfg.enabled && (cfg.mode == VoiceMode.INDEPENDENT)) voice3Engine?.startIndependent()
+                if (cfg.enabled && cfg.mode == VoiceMode.INDEPENDENT) voice3Engine?.startIndependent()
             }
         }
         notifyParamsChanged()
@@ -269,7 +302,7 @@ class MidiService : Service() {
         if (isPlaying) return
         isPlaying = true
         rebuildV1ProHelpers()
-        
+
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(NOTIFICATION_ID, createNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
@@ -291,7 +324,7 @@ class MidiService : Service() {
     fun stopPlaying() {
         if (!isPlaying) return
         isPlaying = false
-        
+
         val old = scheduler
         scheduler = null
         old?.shutdownNow()
@@ -308,17 +341,15 @@ class MidiService : Service() {
             val set = activeNotes[v] ?: continue
             val notes = set.toList()
             set.clear()
-            
+
             val baseCh = when(v) {
                 1 -> v1Params.channel
                 2 -> if (v2Config.mode == VoiceMode.HARMONY) v2Config.harmonyConfig.midiChannel else v2Config.independentConfig.midiChannel
                 3 -> if (v3Config.mode == VoiceMode.HARMONY) v3Config.harmonyConfig.midiChannel else v3Config.independentConfig.midiChannel
                 else -> 0
             }
-            
-            notes.forEach { note ->
-                sendNoteOffRaw(v, note, baseCh)
-            }
+
+            notes.forEach { note -> sendNoteOffRaw(v, note, baseCh) }
         }
         (0..15).forEach { ch ->
             sendRawMidi(byteArrayOf((0xB0 or ch).toByte(), 123, 0))
@@ -397,7 +428,6 @@ class MidiService : Service() {
         val range = (p.maxOctave - p.minOctave + 1).coerceAtLeast(1)
         val selectedOctave = p.minOctave + Random.nextInt(range)
         val rootOffset = if (p.rootNote > 0) p.rootNote - 1 else 0
-        // Apply rootNote offset so the scale is transposed to the correct key
         val noteNumber = ((selectedOctave + 1) * 12 + interval + rootOffset).coerceIn(0, 127)
         val vel = v1VelocityShaper.next()
 

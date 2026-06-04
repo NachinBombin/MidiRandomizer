@@ -5,9 +5,17 @@ import android.os.Bundle
 import android.view.*
 import android.widget.*
 import androidx.fragment.app.Fragment
+import com.google.android.material.slider.RangeSlider
 
 /**
  * VoicesFragment — hosts the UI for Voice 2 and Voice 3.
+ *
+ * Key design notes:
+ *  - In INDEPENDENT mode, the old indMinOct/indMaxOct seekbars are REPLACED by a
+ *    single RangeSlider (tag="rangeOctave") used for Generative and Evolving Drone.
+ *  - For Single-Note Drone a dedicated RangeSlider (tag="rangeDroneOctave") is shown
+ *    instead so the user picks the octave (or range for random octave).
+ *  - All changes push to the service immediately (real-time).
  */
 class VoicesFragment : Fragment(), MidiService.MidiEventListener {
 
@@ -146,10 +154,9 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         harmonyBtn.setOnClickListener     { switchMode(true)  }
         independentBtn.setOnClickListener { switchMode(false) }
 
-        // attachSyncListeners skips spinners that already have listeners set
-        // (those wired in buildIndependentPanel with visibility logic).
-        attachSyncListeners(harmonyPanel, { syncConfig() }, skipSeekBars = true)
-        attachSyncListeners(independentPanel, { syncConfig() }, skipSeekBars = true, skipTaggedSpinners = setOf("indStyle", "indDroneTiming"))
+        attachSyncListeners(harmonyPanel,     { syncConfig() }, skipSeekBars = true)
+        attachSyncListeners(independentPanel, { syncConfig() }, skipSeekBars = true,
+            skipTaggedSpinners = setOf("indStyle", "indDroneTiming"))
 
         return panel
     }
@@ -158,11 +165,11 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         val ctx   = requireContext()
         val panel = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; setPadding(16, 8, 0, 0) }
 
-        panel.addView(labeledSeekBar(ctx, "Tone Step Offset", -7, 7, 2,    tag = "toneStep",  onSync))
-        panel.addView(labeledSeekBar(ctx, "Time Drift (ms)",   0, 45, 10,  tag = "timeDrift", onSync))
-        panel.addView(labeledSeekBar(ctx, "Skip % (0-100)",    0, 100, 0,  tag = "skipPct",   onSync))
-        panel.addView(labeledSeekBar(ctx, "Master Velocity",   0, 127, 100,tag = "masterVel", onSync))
-        panel.addView(labeledSeekBar(ctx, "Velocity Drift ±",  0, 20, 8,   tag = "velDrift",  onSync))
+        panel.addView(labeledSeekBar(ctx, "Tone Step Offset", -7, 7,   2,   tag = "toneStep",  onSync))
+        panel.addView(labeledSeekBar(ctx, "Time Drift (ms)",   0, 45,  10,  tag = "timeDrift", onSync))
+        panel.addView(labeledSeekBar(ctx, "Skip % (0-100)",    0, 100,  0,  tag = "skipPct",   onSync))
+        panel.addView(labeledSeekBar(ctx, "Master Velocity",   0, 127, 100, tag = "masterVel", onSync))
+        panel.addView(labeledSeekBar(ctx, "Velocity Drift ±",  0, 20,   8,  tag = "velDrift",  onSync))
         panel.addView(labeledSeekBar(ctx, "MIDI Channel (0=Omni)", 0, 16, voiceId, tag = "midiCh", onSync))
 
         if (voiceId == 3) {
@@ -182,11 +189,71 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         val ctx   = requireContext()
         val panel = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; setPadding(16, 8, 0, 0) }
 
-        panel.addView(labeledSeekBar(ctx, "BPM",            20,  300, 120, tag = "indBpm",    onSync))
-        panel.addView(labeledSeekBar(ctx, "Velocity",        0,  127,  90, tag = "indVel",    onSync))
-        panel.addView(labeledSeekBar(ctx, "Min Octave",      0,    8,   3, tag = "indMinOct", onSync))
-        panel.addView(labeledSeekBar(ctx, "Max Octave",      0,    8,   5, tag = "indMaxOct", onSync))
+        panel.addView(labeledSeekBar(ctx, "BPM",      20, 300, 120, tag = "indBpm",    onSync))
+        panel.addView(labeledSeekBar(ctx, "Velocity",  0, 127,  90, tag = "indVel",    onSync))
         panel.addView(labeledSeekBar(ctx, "MIDI Channel (0=Omni)", 0, 16, voiceId + 1, tag = "indMidiCh", onSync))
+
+        // ── Generative / Evolving Drone octave RangeSlider ────────────────
+        val octaveGenRow = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 8, 0, 0)
+            tag = "indOctaveGenRow"
+        }
+        val tvOctaveGen = TextView(ctx).apply {
+            text = "Octave Range: 3 - 5"
+            setTextColor(0xFFE8E6E1.toInt())
+            tag = "tvOctaveGen"
+        }
+        val rangeOctaveGen = RangeSlider(ctx).apply {
+            tag = "rangeOctave"
+            valueFrom = 0f
+            valueTo   = 8f
+            stepSize  = 1f
+            values    = listOf(3f, 5f)
+            setLabelFormatter { it.toInt().toString() }
+        }
+        rangeOctaveGen.addOnChangeListener { _, _, fromUser ->
+            val lo = rangeOctaveGen.values[0].toInt()
+            val hi = rangeOctaveGen.values[1].toInt()
+            tvOctaveGen.text = "Octave Range: $lo - $hi"
+            if (fromUser && !isUpdatingFromSync) onSync()
+        }
+        octaveGenRow.addView(tvOctaveGen)
+        octaveGenRow.addView(rangeOctaveGen)
+        panel.addView(octaveGenRow)
+
+        // ── Single-Note Drone octave RangeSlider ──────────────────────────
+        val octaveDroneRow = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 8, 0, 0)
+            tag = "indOctaveDroneRow"
+            visibility = View.GONE
+        }
+        val tvOctaveDrone = TextView(ctx).apply {
+            text = "Octave: 4 (fixed)"
+            setTextColor(0xFFE8E6E1.toInt())
+            tag = "tvOctaveDrone"
+        }
+        val rangeDroneOctave = RangeSlider(ctx).apply {
+            tag = "rangeDroneOctave"
+            valueFrom = 0f
+            valueTo   = 8f
+            stepSize  = 1f
+            values    = listOf(4f, 4f)
+            setLabelFormatter { it.toInt().toString() }
+        }
+        fun updateDroneOctaveLabel() {
+            val lo = rangeDroneOctave.values[0].toInt()
+            val hi = rangeDroneOctave.values[1].toInt()
+            tvOctaveDrone.text = if (lo == hi) "Octave: $lo (fixed)" else "Octave Range: $lo - $hi"
+        }
+        rangeDroneOctave.addOnChangeListener { _, _, fromUser ->
+            updateDroneOctaveLabel()
+            if (fromUser && !isUpdatingFromSync) onSync()
+        }
+        octaveDroneRow.addView(tvOctaveDrone)
+        octaveDroneRow.addView(rangeDroneOctave)
+        panel.addView(octaveDroneRow)
 
         // Scale
         val scaleNames = listOf(
@@ -224,7 +291,9 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         panel.addView(styleRow)
 
         // Timing (Generative only)
-        val timingRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 8, 0, 0); tag = "indTimingRow" }
+        val timingRow = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL; setPadding(0, 8, 0, 0); tag = "indTimingRow"
+        }
         timingRow.addView(TextView(ctx).apply { text = "Timing: "; setTextColor(0xFFE8E6E1.toInt()) })
         val timingSpinner = Spinner(ctx).apply { tag = "indTiming" }
         timingSpinner.adapter = ArrayAdapter(ctx, android.R.layout.simple_spinner_item,
@@ -234,17 +303,26 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         panel.addView(timingRow)
 
         // Drone Timing (Evolving Drone only)
-        val droneTimingRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 8, 0, 0); tag = "indDroneTimingRow"; visibility = View.GONE }
+        val droneTimingRow = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL; setPadding(0, 8, 0, 0)
+            tag = "indDroneTimingRow"; visibility = View.GONE
+        }
         droneTimingRow.addView(TextView(ctx).apply { text = "Drone Timing: "; setTextColor(0xFFE8E6E1.toInt()) })
         val droneTimingSpinner = Spinner(ctx).apply { tag = "indDroneTiming" }
-        droneTimingSpinner.adapter = ArrayAdapter(ctx, android.R.layout.simple_spinner_item, listOf("Constant", "Random"))
+        droneTimingSpinner.adapter = ArrayAdapter(ctx, android.R.layout.simple_spinner_item,
+            listOf("Constant", "Random"))
             .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
         droneTimingRow.addView(droneTimingSpinner)
         panel.addView(droneTimingRow)
 
         // Drone Range (Evolving Drone + Random timing only)
-        val droneRangeRow = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 8, 0, 0); tag = "indDroneRangeRow"; visibility = View.GONE }
-        val tvDroneRange = TextView(ctx).apply { text = "Drone beat range: 16 - 64"; setTextColor(0xFFE8E6E1.toInt()); tag = "tvDroneRange" }
+        val droneRangeRow = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(0, 8, 0, 0)
+            tag = "indDroneRangeRow"; visibility = View.GONE
+        }
+        val tvDroneRange = TextView(ctx).apply {
+            text = "Drone beat range: 16 - 64"; setTextColor(0xFFE8E6E1.toInt()); tag = "tvDroneRange"
+        }
         droneRangeRow.addView(tvDroneRange)
         val sbMin = SeekBar(ctx).apply { tag = "droneMin"; max = 127; progress = 15 }
         val sbMax = SeekBar(ctx).apply { tag = "droneMax"; max = 127; progress = 63 }
@@ -288,25 +366,22 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             val isEvolving = style == VoiceStyle.EVOLVING_DRONE
             val isRandomDrone = isEvolving && droneTimingSpinner.selectedItemPosition == 1
 
-            // BPM / octave rows — hide when single note drone (no loop)
-            val hideBpm = isSingle
+            // BPM row — hidden for single-note drone (no loop)
             panel.findViewWithTag<SeekBar>("indBpm")?.let {
-                (it.parent as? View)?.visibility = if (hideBpm) View.GONE else View.VISIBLE
-            }
-            panel.findViewWithTag<SeekBar>("indMinOct")?.let {
-                (it.parent as? View)?.visibility = if (hideBpm) View.GONE else View.VISIBLE
-            }
-            panel.findViewWithTag<SeekBar>("indMaxOct")?.let {
-                (it.parent as? View)?.visibility = if (hideBpm) View.GONE else View.VISIBLE
+                (it.parent as? View)?.visibility = if (isSingle) View.GONE else View.VISIBLE
             }
 
+            // Octave rows: generative/evolving use RangeSlider; single-note uses drone octave slider
+            octaveGenRow.visibility   = if (isSingle) View.GONE  else View.VISIBLE
+            octaveDroneRow.visibility = if (isSingle) View.VISIBLE else View.GONE
+
             // Timing rows
-            timingRow.visibility      = if (isSingle || isEvolving) View.GONE else View.VISIBLE
+            timingRow.visibility      = if (isSingle || isEvolving) View.GONE    else View.VISIBLE
             droneTimingRow.visibility = if (isEvolving)             View.VISIBLE else View.GONE
             droneRangeRow.visibility  = if (isRandomDrone)          View.VISIBLE else View.GONE
         }
 
-        // Style spinner — owns its own listener (NOT overwritten by attachSyncListeners)
+        // Style spinner — owns its own listener
         styleSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(p0: AdapterView<*>?, p1: View?, pos: Int, p3: Long) {
                 updateIndVisibility()
@@ -315,10 +390,18 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             override fun onNothingSelected(p0: AdapterView<*>?) {}
         }
 
-        // Drone timing spinner — also owns its listener
+        // Drone timing spinner — owns its listener
         droneTimingSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(p0: AdapterView<*>?, p1: View?, p2: Int, p3: Long) {
                 updateIndVisibility()
+                if (!isUpdatingFromSync) onSync()
+            }
+            override fun onNothingSelected(p0: AdapterView<*>?) {}
+        }
+
+        // Root spinner — own listener to react in real time (also calls onSync)
+        rootSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(p0: AdapterView<*>?, p1: View?, pos: Int, p3: Long) {
                 if (!isUpdatingFromSync) onSync()
             }
             override fun onNothingSelected(p0: AdapterView<*>?) {}
@@ -356,25 +439,37 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
 
         val eSwitch = Switch(ctx).apply { text = "Enable Euclidean"; tag = "eEnabled"; setTextColor(0xFFE8E6E1.toInt()) }
         customProPanel.addView(eSwitch)
-        val eLayout = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE; setPadding(16, 0, 0, 0); tag = "eLayout" }
+        val eLayout = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL; visibility = View.GONE
+            setPadding(16, 0, 0, 0); tag = "eLayout"
+        }
         eLayout.addView(labeledSeekBar(ctx, "E-Steps",    2, 32, 16, "eSteps",   onSync))
         eLayout.addView(labeledSeekBar(ctx, "E-Density",  1, 16,  5, "eDensity", onSync))
         eLayout.addView(labeledSeekBar(ctx, "E-Rotation", 0, 16,  0, "eRot",     onSync))
         customProPanel.addView(eLayout)
-        eSwitch.setOnCheckedChangeListener { _, on -> eLayout.visibility = if (on) View.VISIBLE else View.GONE; if (!isUpdatingFromSync) onSync() }
+        eSwitch.setOnCheckedChangeListener { _, on ->
+            eLayout.visibility = if (on) View.VISIBLE else View.GONE
+            if (!isUpdatingFromSync) onSync()
+        }
 
         val mSwitch = Switch(ctx).apply { text = "Enable Markov"; tag = "mEnabled"; setTextColor(0xFFE8E6E1.toInt()) }
         customProPanel.addView(mSwitch)
-        val mLayout = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE; setPadding(16, 0, 0, 0); tag = "mLayout" }
+        val mLayout = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL; visibility = View.GONE
+            setPadding(16, 0, 0, 0); tag = "mLayout"
+        }
         val mSpinner = Spinner(ctx).apply { tag = "mStyle" }
         mSpinner.adapter = ArrayAdapter(ctx, android.R.layout.simple_spinner_item, MelodicLogicStyle.entries.map { it.label })
         mLayout.addView(mSpinner)
         customProPanel.addView(mLayout)
-        mSwitch.setOnCheckedChangeListener { _, on -> mLayout.visibility = if (on) View.VISIBLE else View.GONE; if (!isUpdatingFromSync) onSync() }
+        mSwitch.setOnCheckedChangeListener { _, on ->
+            mLayout.visibility = if (on) View.VISIBLE else View.GONE
+            if (!isUpdatingFromSync) onSync()
+        }
 
         fun togglePro(shared: Boolean) {
-            sharedProBtn.isChecked = shared
-            customProBtn.isChecked = !shared
+            sharedProBtn.isChecked    = shared
+            customProBtn.isChecked    = !shared
             customProPanel.visibility = if (shared) View.GONE else View.VISIBLE
             if (!isUpdatingFromSync) onSync()
         }
@@ -406,20 +501,38 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         val droneTimingIdx = panel.findViewWithTag<Spinner>("indDroneTiming")?.selectedItemPosition ?: 0
         val minBeats       = (panel.findViewWithTag<SeekBar>("droneMin")?.progress ?: 15) + 1
         val maxBeats       = (panel.findViewWithTag<SeekBar>("droneMax")?.progress ?: 63) + 1
+
+        // Generative / Evolving octave range from RangeSlider
+        val rangeGenSlider    = panel.findViewWithTag<RangeSlider>("rangeOctave")
+        val genOctMin         = rangeGenSlider?.values?.getOrNull(0)?.toInt() ?: 3
+        val genOctMax         = rangeGenSlider?.values?.getOrNull(1)?.toInt() ?: 5
+
+        // Single-note drone octave range from its own RangeSlider
+        val rangeDroneSlider  = panel.findViewWithTag<RangeSlider>("rangeDroneOctave")
+        val droneOctMin       = rangeDroneSlider?.values?.getOrNull(0)?.toInt() ?: 4
+        val droneOctMax       = rangeDroneSlider?.values?.getOrNull(1)?.toInt() ?: 4
+
+        val currentStyle = VoiceStyle.entries.getOrElse(styleIdx) { VoiceStyle.GENERATIVE }
+        // droneOctaveMin/Max always stored from the appropriate slider
+        val effectiveDroneOctMin = if (currentStyle == VoiceStyle.SINGLE_NOTE_DRONE) droneOctMin else genOctMin
+        val effectiveDroneOctMax = if (currentStyle == VoiceStyle.SINGLE_NOTE_DRONE) droneOctMax else genOctMax
+
         return IndependentConfig(
             bpm           = seekVal("indBpm") + 20,
             velocity      = seekVal("indVel"),
-            minOctave     = seekVal("indMinOct"),
-            maxOctave     = seekVal("indMaxOct"),
+            minOctave     = genOctMin,
+            maxOctave     = genOctMax,
             midiChannel   = seekVal("indMidiCh"),
             selectedScale = panel.findViewWithTag<Spinner>("indScale")?.selectedItemPosition ?: 0,
             rootNote      = rootPos,
             timingMode    = panel.findViewWithTag<Spinner>("indTiming")?.selectedItemPosition ?: 0,
             useSharedPro  = shared,
-            style         = VoiceStyle.entries.getOrElse(styleIdx) { VoiceStyle.GENERATIVE },
+            style         = currentStyle,
             droneTiming   = DroneTimingMode.entries.getOrElse(droneTimingIdx) { DroneTimingMode.CONSTANT },
             droneMinBeats = minBeats,
             droneMaxBeats = maxBeats,
+            droneOctaveMin = effectiveDroneOctMin,
+            droneOctaveMax = effectiveDroneOctMax,
             proSettings   = ProSettings(
                 jitterAmount      = seekVal("jitAmt"),
                 jitterType        = JitterType.entries[panel.findViewWithTag<Spinner>("jitType")?.selectedItemPosition ?: 0],
@@ -459,19 +572,33 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             val ic = cfg.independentConfig
             panel.findViewWithTag<SeekBar>("indBpm")?.progress    = ic.bpm - 20
             panel.findViewWithTag<SeekBar>("indVel")?.progress    = ic.velocity
-            panel.findViewWithTag<SeekBar>("indMinOct")?.progress = ic.minOctave
-            panel.findViewWithTag<SeekBar>("indMaxOct")?.progress = ic.maxOctave
             panel.findViewWithTag<SeekBar>("indMidiCh")?.progress = ic.midiChannel
+
+            // Generative/Evolving octave range slider
+            panel.findViewWithTag<RangeSlider>("rangeOctave")?.values =
+                listOf(ic.minOctave.toFloat(), ic.maxOctave.toFloat())
+            panel.findViewWithTag<TextView>("tvOctaveGen")?.text =
+                "Octave Range: ${ic.minOctave} - ${ic.maxOctave}"
+
+            // Single-note drone octave slider
+            // When style is SINGLE_NOTE_DRONE, droneOctaveMin/Max holds the slider state.
+            // For other styles, fall back to minOctave/maxOctave so it shows something sensible.
+            val dOctMin = if (ic.style == VoiceStyle.SINGLE_NOTE_DRONE) ic.droneOctaveMin else ic.minOctave
+            val dOctMax = if (ic.style == VoiceStyle.SINGLE_NOTE_DRONE) ic.droneOctaveMax else ic.maxOctave
+            panel.findViewWithTag<RangeSlider>("rangeDroneOctave")?.values =
+                listOf(dOctMin.toFloat(), dOctMax.toFloat())
+            panel.findViewWithTag<TextView>("tvOctaveDrone")?.text =
+                if (dOctMin == dOctMax) "Octave: $dOctMin (fixed)" else "Octave Range: $dOctMin - $dOctMax"
+
             panel.findViewWithTag<Spinner>("indScale")?.setSelection(ic.selectedScale)
             panel.findViewWithTag<Spinner>("indRoot")?.setSelection(ic.rootNote.coerceIn(0, 12))
             panel.findViewWithTag<Spinner>("indTiming")?.setSelection(ic.timingMode)
-            // These two spinners have their own listeners; setting selection here
-            // triggers updateIndVisibility() via isUpdatingFromSync guard.
             panel.findViewWithTag<Spinner>("indStyle")?.setSelection(ic.style.ordinal)
             panel.findViewWithTag<Spinner>("indDroneTiming")?.setSelection(ic.droneTiming.ordinal)
             panel.findViewWithTag<SeekBar>("droneMin")?.progress = ic.droneMinBeats - 1
             panel.findViewWithTag<SeekBar>("droneMax")?.progress = ic.droneMaxBeats - 1
-            panel.findViewWithTag<TextView>("tvDroneRange")?.text = "Drone beat range: ${ic.droneMinBeats} - ${ic.droneMaxBeats}"
+            panel.findViewWithTag<TextView>("tvDroneRange")?.text =
+                "Drone beat range: ${ic.droneMinBeats} - ${ic.droneMaxBeats}"
             panel.findViewWithTag<RadioButton>("sharedPro")?.isChecked = ic.useSharedPro
             panel.findViewWithTag<RadioButton>("customPro")?.isChecked = !ic.useSharedPro
             panel.findViewWithTag<View>("customProPanel")?.visibility  = if (ic.useSharedPro) View.GONE else View.VISIBLE
@@ -532,7 +659,8 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
                 })
                 is Spinner -> {
                     val spinnerTag = c.tag as? String
-                    if (spinnerTag !in skipTaggedSpinners) {
+                    // Skip indRoot since it has its own listener, plus the explicit skip list
+                    if (spinnerTag !in skipTaggedSpinners && spinnerTag != "indRoot") {
                         c.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
                             override fun onItemSelected(a: AdapterView<*>?, v: View?, p: Int, id: Long) { if (!isUpdatingFromSync) onChange() }
                             override fun onNothingSelected(a: AdapterView<*>?) {}

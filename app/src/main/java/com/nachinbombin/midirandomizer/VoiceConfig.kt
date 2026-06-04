@@ -26,20 +26,23 @@ data class HarmonyConfig(
 
 @Parcelize
 data class IndependentConfig(
-    val bpm:           Int = 120,
-    val velocity:      Int = 90,
-    val minOctave:     Int = 3,
-    val maxOctave:     Int = 5,
-    val midiChannel:   Int = 3,
-    val selectedScale: Int = 1,
-    val timingMode:    Int = 0,
-    val rootNote:      Int = 0,   // 0 = follow global root; 1..12 = C..B (semitone 0..11 stored as 1..12)
-    val proSettings:   ProSettings = ProSettings(),
-    val useSharedPro:  Boolean = true,
-    val style:         VoiceStyle = VoiceStyle.GENERATIVE,
-    val droneTiming:   DroneTimingMode = DroneTimingMode.CONSTANT,
-    val droneMinBeats: Int = 16,
-    val droneMaxBeats: Int = 64
+    val bpm:              Int            = 120,
+    val velocity:         Int            = 90,
+    val minOctave:        Int            = 3,
+    val maxOctave:        Int            = 5,
+    val midiChannel:      Int            = 3,
+    val selectedScale:    Int            = 1,
+    val timingMode:       Int            = 0,
+    val rootNote:         Int            = 0,   // 0 = follow global root; 1..12 = C..B
+    val proSettings:      ProSettings    = ProSettings(),
+    val useSharedPro:     Boolean        = true,
+    val style:            VoiceStyle     = VoiceStyle.GENERATIVE,
+    val droneTiming:      DroneTimingMode = DroneTimingMode.CONSTANT,
+    val droneMinBeats:    Int            = 16,
+    val droneMaxBeats:    Int            = 64,
+    // Octave range used in Single-Note Drone, Generative, and Evolving Drone for V2/V3
+    val droneOctaveMin:   Int            = 3,
+    val droneOctaveMax:   Int            = 5
 ) : Parcelable
 
 @Parcelize
