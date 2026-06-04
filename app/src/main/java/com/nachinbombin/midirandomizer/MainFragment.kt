@@ -1,6 +1,7 @@
 package com.nachinbombin.midirandomizer
 
 import android.content.Context
+import android.media.midi.MidiManager
 import android.os.Bundle
 import android.view.*
 import android.widget.*
@@ -35,8 +36,20 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
     private val rootButtons = mutableListOf<RadioButton>()
     private var rootNoteGrid: LinearLayout? = null
 
+    // MainActivity implements both interfaces
     interface ServiceProvider {
         fun getMidiService(): MidiService?
+    }
+
+    // Required by MainActivity — provides MIDI device manager and device-list refresh
+    interface MainFragmentHost {
+        fun getMidiManager(): MidiManager?
+    }
+
+    /** Called by MainActivity's DeviceCallback when a MIDI device is added/removed. */
+    fun refreshDeviceList() {
+        // No-op in the current programmatic UI build — device selection is handled
+        // elsewhere; this stub satisfies the MainActivity contract.
     }
 
     fun onServiceReady() {
@@ -106,7 +119,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
 
         // Octave RangeSlider
         val octRow = LinearLayout(requireContext()).apply { orientation = LinearLayout.VERTICAL }
-        tvOctave = TextView(requireContext()).apply { text = "Octave: 3 \u2013 5"; setTextColor(0xFFE8E6E1.toInt()) }
+        tvOctave = TextView(requireContext()).apply { text = "Octave: 3 – 5"; setTextColor(0xFFE8E6E1.toInt()) }
         rangeOctave = RangeSlider(requireContext()).apply {
             valueFrom = 0f; valueTo = 8f; stepSize = 1f
             values = listOf(3f, 5f)
@@ -114,7 +127,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         }
         rangeOctave.addOnChangeListener { slider, _, fromUser ->
             val lo = slider.values[0].toInt(); val hi = slider.values[1].toInt()
-            tvOctave.text = if (lo == hi) "Octave: $lo" else "Octave: $lo \u2013 $hi"
+            tvOctave.text = if (lo == hi) "Octave: $lo" else "Octave: $lo – $hi"
             if (fromUser && !isUpdatingFromSync) pushParams()
         }
         octRow.addView(tvOctave)
@@ -287,7 +300,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         rowBpm.visibility = if (isSingleNote) View.GONE else View.VISIBLE
 
         // Octave slider stays visible for Single Note Drone — user selects drone octave/range
-        tvOctave.visibility   = View.VISIBLE
+        tvOctave.visibility    = View.VISIBLE
         rangeOctave.visibility = View.VISIBLE
 
         rowTiming.visibility      = if (isSingleNote || isEvolving) View.GONE else View.VISIBLE
@@ -308,17 +321,17 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         val safeBpm = sbBpm.progress + 20
         svc.updateV1Parameters(
             MidiService.Voice1Params(
-                bpm        = safeBpm,
-                velocity   = sbVelocity.progress,
-                minOctave  = lo,
-                maxOctave  = hi,
-                channel    = sbChannel.progress,
-                scale      = spinnerScale.selectedItemPosition,
-                rootNote   = if (rootIdx >= 0) rootIdx + 1 else 0,
-                timingMode = spinnerTiming.selectedItemPosition,
-                proSettings = svc.getV1Params().proSettings,
-                style = VoiceStyle.entries.getOrElse(spinnerStyle.selectedItemPosition) { VoiceStyle.GENERATIVE },
-                droneTiming = DroneTimingMode.entries.getOrElse(spinnerDroneTiming.selectedItemPosition) { DroneTimingMode.CONSTANT },
+                bpm           = safeBpm,
+                velocity      = sbVelocity.progress,
+                minOctave     = lo,
+                maxOctave     = hi,
+                channel       = sbChannel.progress,
+                scale         = spinnerScale.selectedItemPosition,
+                rootNote      = if (rootIdx >= 0) rootIdx + 1 else 0,
+                timingMode    = spinnerTiming.selectedItemPosition,
+                proSettings   = svc.getV1Params().proSettings,
+                style         = VoiceStyle.entries.getOrElse(spinnerStyle.selectedItemPosition) { VoiceStyle.GENERATIVE },
+                droneTiming   = DroneTimingMode.entries.getOrElse(spinnerDroneTiming.selectedItemPosition) { DroneTimingMode.CONSTANT },
                 droneMinBeats = sbDroneMin.progress + 1,
                 droneMaxBeats = sbDroneMax.progress + 1
             )
@@ -334,20 +347,16 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         val lo = v1.minOctave.toFloat().coerceIn(0f, 8f)
         val hi = v1.maxOctave.toFloat().coerceIn(lo, 8f)
         rangeOctave.values = listOf(lo, hi)
-        tvOctave.text = if (lo == hi) "Octave: ${lo.toInt()}" else "Octave: ${lo.toInt()} \u2013 ${hi.toInt()}"
+        tvOctave.text = if (lo == hi) "Octave: ${lo.toInt()}" else "Octave: ${lo.toInt()} – ${hi.toInt()}"
 
-        sbChannel.progress  = v1.channel
-        tvChannel.text      = if (v1.channel == 0) "MIDI Channel: Omni" else "MIDI Channel: ${v1.channel}"
+        sbChannel.progress = v1.channel
+        tvChannel.text     = if (v1.channel == 0) "MIDI Channel: Omni" else "MIDI Channel: ${v1.channel}"
         spinnerScale.setSelection(v1.scale)
 
-        // selectRoot MUST run inside the isUpdatingFromSync guard so RadioButton
-        // listeners don’t escape and call push() with stale V1 params, which
-        // would interrupt an active SINGLE_NOTE_DRONE or reset the noteLoop.
-        if (v1.rootNote != 0) {
-            selectRoot(v1.rootNote - 1)
-        } else {
-            selectRoot(-1)
-        }
+        // selectRoot runs inside isUpdatingFromSync guard — prevents RadioButton listeners
+        // from escaping and calling pushParams() with stale params (which was causing V1
+        // to appear to turn off when V2/V3 were activated).
+        if (v1.rootNote != 0) selectRoot(v1.rootNote - 1) else selectRoot(-1)
 
         spinnerStyle.setSelection(v1.style.ordinal)
         spinnerTiming.setSelection(v1.timingMode)
