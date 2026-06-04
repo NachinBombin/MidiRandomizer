@@ -16,6 +16,9 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
     private var currentV2 = VoiceConfig()
     private var currentV3 = VoiceConfig()
     private var isUpdatingFromSync = false
+    // pendingSyncCount stays >0 until all async Spinner onItemSelected callbacks fire,
+    // preventing programmatic setSelection() from pushing stale configs to the service.
+    private var pendingSyncCount = 0
 
     private lateinit var panelV2: LinearLayout
     private lateinit var panelV3: LinearLayout
@@ -201,7 +204,7 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         octSlider.addOnChangeListener { slider, _, fromUser ->
             val lo = slider.values[0].toInt(); val hi = slider.values[1].toInt()
             octLabel.text = if (lo == hi) "Octave: $lo" else "Octave: $lo \u2013 $hi"
-            if (fromUser && !isUpdatingFromSync) onSync()
+            if (fromUser && !isUpdatingFromSync && pendingSyncCount == 0) onSync()
         }
         if (voiceId == 2) octaveSliderV2 = octSlider else octaveSliderV3 = octSlider
         panel.addView(octLabel)
@@ -276,7 +279,7 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             override fun onProgressChanged(s: SeekBar?, p: Int, f: Boolean) {
                 if (sbMax.progress < p) sbMax.progress = p
                 updateRangeText()
-                if (f && !isUpdatingFromSync) onSync()
+                if (f && !isUpdatingFromSync && pendingSyncCount == 0) onSync()
             }
             override fun onStartTrackingTouch(s: SeekBar?) {}
             override fun onStopTrackingTouch(s: SeekBar?) {}
@@ -285,7 +288,7 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             override fun onProgressChanged(s: SeekBar?, p: Int, f: Boolean) {
                 if (sbMin.progress > p) sbMin.progress = p
                 updateRangeText()
-                if (f && !isUpdatingFromSync) onSync()
+                if (f && !isUpdatingFromSync && pendingSyncCount == 0) onSync()
             }
             override fun onStartTrackingTouch(s: SeekBar?) {}
             override fun onStopTrackingTouch(s: SeekBar?) {}
@@ -331,7 +334,7 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         styleSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(p0: AdapterView<*>?, p1: View?, pos: Int, p3: Long) {
                 updateIndVisibility()
-                if (!isUpdatingFromSync) onSync()
+                if (!isUpdatingFromSync && pendingSyncCount == 0) onSync()
             }
             override fun onNothingSelected(p0: AdapterView<*>?) {}
         }
@@ -339,7 +342,7 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         droneTimingSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(p0: AdapterView<*>?, p1: View?, p2: Int, p3: Long) {
                 updateIndVisibility()
-                if (!isUpdatingFromSync) onSync()
+                if (!isUpdatingFromSync && pendingSyncCount == 0) onSync()
             }
             override fun onNothingSelected(p0: AdapterView<*>?) {}
         }
@@ -381,7 +384,7 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         eLayout.addView(labeledSeekBar(ctx, "E-Density",  1, 16,  5, "eDensity", onSync))
         eLayout.addView(labeledSeekBar(ctx, "E-Rotation", 0, 16,  0, "eRot",     onSync))
         customProPanel.addView(eLayout)
-        eSwitch.setOnCheckedChangeListener { _, on -> eLayout.visibility = if (on) View.VISIBLE else View.GONE; if (!isUpdatingFromSync) onSync() }
+        eSwitch.setOnCheckedChangeListener { _, on -> eLayout.visibility = if (on) View.VISIBLE else View.GONE; if (!isUpdatingFromSync && pendingSyncCount == 0) onSync() }
 
         val mSwitch = Switch(ctx).apply { text = "Enable Markov"; tag = "mEnabled"; setTextColor(0xFFE8E6E1.toInt()) }
         customProPanel.addView(mSwitch)
@@ -390,13 +393,13 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         mSpinner.adapter = ArrayAdapter(ctx, android.R.layout.simple_spinner_item, MelodicLogicStyle.entries.map { it.label })
         mLayout.addView(mSpinner)
         customProPanel.addView(mLayout)
-        mSwitch.setOnCheckedChangeListener { _, on -> mLayout.visibility = if (on) View.VISIBLE else View.GONE; if (!isUpdatingFromSync) onSync() }
+        mSwitch.setOnCheckedChangeListener { _, on -> mLayout.visibility = if (on) View.VISIBLE else View.GONE; if (!isUpdatingFromSync && pendingSyncCount == 0) onSync() }
 
         fun togglePro(shared: Boolean) {
             sharedProBtn.isChecked = shared
             customProBtn.isChecked = !shared
             customProPanel.visibility = if (shared) View.GONE else View.VISIBLE
-            if (!isUpdatingFromSync) onSync()
+            if (!isUpdatingFromSync && pendingSyncCount == 0) onSync()
         }
         sharedProBtn.setOnClickListener { togglePro(true) }
         customProBtn.setOnClickListener { togglePro(false) }
@@ -420,30 +423,28 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
 
     private fun readIndependentConfig(panel: LinearLayout): IndependentConfig {
         fun seekVal(tag: String): Int = panel.findViewWithTag<SeekBar>(tag)?.progress ?: 0
-        val shared         = panel.findViewWithTag<RadioButton>("sharedPro")?.isChecked ?: true
-        val rootPos        = panel.findViewWithTag<Spinner>("indRoot")?.selectedItemPosition ?: 0
         val styleIdx       = panel.findViewWithTag<Spinner>("indStyle")?.selectedItemPosition ?: 0
-        val droneTimingIdx = panel.findViewWithTag<Spinner>("indDroneTiming")?.selectedItemPosition ?: 0
-        val minBeats       = (panel.findViewWithTag<SeekBar>("droneMin")?.progress ?: 15) + 1
-        val maxBeats       = (panel.findViewWithTag<SeekBar>("droneMax")?.progress ?: 63) + 1
+        val sharedPro      = panel.findViewWithTag<RadioButton>("sharedPro")?.isChecked ?: true
         return IndependentConfig(
-            bpm           = seekVal("indBpm") + 20,
-            velocity      = seekVal("indVel"),
-            minOctave     = (if (panel == panelV2) octaveSliderV2 else octaveSliderV3)?.values?.get(0)?.toInt() ?: 3,
-            maxOctave     = (if (panel == panelV2) octaveSliderV2 else octaveSliderV3)?.values?.get(1)?.toInt() ?: 5,
-            midiChannel   = seekVal("indMidiCh"),
-            selectedScale = panel.findViewWithTag<Spinner>("indScale")?.selectedItemPosition ?: 0,
-            rootNote      = rootPos,
-            timingMode    = panel.findViewWithTag<Spinner>("indTiming")?.selectedItemPosition ?: 0,
-            useSharedPro  = shared,
-            style         = VoiceStyle.entries.getOrElse(styleIdx) { VoiceStyle.GENERATIVE },
-            droneTiming   = DroneTimingMode.entries.getOrElse(droneTimingIdx) { DroneTimingMode.CONSTANT },
-            droneMinBeats = minBeats,
-            droneMaxBeats = maxBeats,
-            proSettings   = ProSettings(
-                jitterAmount      = seekVal("jitAmt"),
-                jitterType        = JitterType.entries[panel.findViewWithTag<Spinner>("jitType")?.selectedItemPosition ?: 0],
-                velocityPattern   = VelocityPattern.entries[panel.findViewWithTag<Spinner>("velPattern")?.selectedItemPosition ?: 0],
+            bpm            = seekVal("indBpm") + 20,
+            velocity       = seekVal("indVel"),
+            minOctave      = (if (panel == panelV2) octaveSliderV2 else octaveSliderV3)?.values?.get(0)?.toInt() ?: 3,
+            maxOctave      = (if (panel == panelV2) octaveSliderV2 else octaveSliderV3)?.values?.get(1)?.toInt() ?: 5,
+            midiChannel    = seekVal("indMidiCh"),
+            selectedScale  = panel.findViewWithTag<Spinner>("indScale")?.selectedItemPosition ?: 0,
+            timingMode     = panel.findViewWithTag<Spinner>("indTiming")?.selectedItemPosition ?: 0,
+            rootNote       = panel.findViewWithTag<Spinner>("indRoot")?.selectedItemPosition ?: 0,
+            style          = VoiceStyle.entries.getOrElse(styleIdx) { VoiceStyle.GENERATIVE },
+            droneTiming    = DroneTimingMode.entries.getOrElse(
+                                panel.findViewWithTag<Spinner>("indDroneTiming")?.selectedItemPosition ?: 0
+                             ) { DroneTimingMode.CONSTANT },
+            droneMinBeats  = seekVal("droneMin") + 1,
+            droneMaxBeats  = seekVal("droneMax") + 1,
+            useSharedPro   = sharedPro,
+            proSettings    = if (sharedPro) ProSettings() else ProSettings(
+                jitterAmount    = seekVal("jitAmt"),
+                jitterType      = JitterType.entries[panel.findViewWithTag<Spinner>("jitType")?.selectedItemPosition ?: 0],
+                velocityPattern = VelocityPattern.entries[panel.findViewWithTag<Spinner>("velPattern")?.selectedItemPosition ?: 0],
                 euclideanEnabled  = panel.findViewWithTag<Switch>("eEnabled")?.isChecked ?: false,
                 euclideanSteps    = seekVal("eSteps") + 2,
                 euclideanDensity  = seekVal("eDensity") + 1,
@@ -457,11 +458,15 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
     fun syncFromService(v1: MidiService.Voice1Params, v2: VoiceConfig, v3: VoiceConfig) {
         if (!::panelV2.isInitialized) return
         isUpdatingFromSync = true
+        pendingSyncCount++
         currentV2 = v2
         currentV3 = v3
         applyToPanel(panelV2, v2)
         applyToPanel(panelV3, v3)
         isUpdatingFromSync = false
+        // Post decrement so all async Spinner onItemSelected callbacks fire before
+        // pendingSyncCount drops to zero and user-driven syncs are re-enabled.
+        view?.post { pendingSyncCount-- }
     }
 
     private fun applyToPanel(panel: LinearLayout, cfg: VoiceConfig) {
@@ -555,7 +560,7 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         sb.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
                 tv.text = "$labelStr: ${p + minVal}"
-                if (fromUser && !isUpdatingFromSync) onSync()
+                if (fromUser && !isUpdatingFromSync && pendingSyncCount == 0) onSync()
             }
             override fun onStartTrackingTouch(s: SeekBar?) {}
             override fun onStopTrackingTouch(s: SeekBar?) {}
@@ -581,15 +586,15 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         fun walk(vg: ViewGroup) {
             for (i in 0 until vg.childCount) {
                 when (val child = vg.getChildAt(i)) {
-                    is Switch   -> child.setOnCheckedChangeListener { _, _ -> if (!isUpdatingFromSync) onSync() }
+                    is Switch   -> child.setOnCheckedChangeListener { _, _ -> if (!isUpdatingFromSync && pendingSyncCount == 0) onSync() }
                     is SeekBar  -> if (!skipSeekBars) child.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                        override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) { if (fromUser && !isUpdatingFromSync) onSync() }
+                        override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) { if (fromUser && !isUpdatingFromSync && pendingSyncCount == 0) onSync() }
                         override fun onStartTrackingTouch(s: SeekBar?) {}
                         override fun onStopTrackingTouch(s: SeekBar?) {}
                     })
                     is Spinner  -> if ((child.tag as? String) !in skipTaggedSpinners)
                         child.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                            override fun onItemSelected(p0: AdapterView<*>?, p1: View?, p2: Int, p3: Long) { if (!isUpdatingFromSync) onSync() }
+                            override fun onItemSelected(p0: AdapterView<*>?, p1: View?, p2: Int, p3: Long) { if (!isUpdatingFromSync && pendingSyncCount == 0) onSync() }
                             override fun onNothingSelected(p0: AdapterView<*>?) {}
                         }
                     is ViewGroup -> walk(child)
