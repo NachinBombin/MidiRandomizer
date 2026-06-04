@@ -90,7 +90,10 @@ class MidiService : Service() {
     )
 
     private var v1VelocityShaper: VelocityShaper = VelocityShaper(VelocityPattern.RANDOM, 100)
-    private var v1MarkovChain:    MarkovMelody?   = null
+
+    // ── NEW: replaces the old v1MarkovChain field ─────────────────────────
+    private var v1MelodicDispatcher: MelodicEngineDispatcher? = null
+
     private var v1Euclidean:     BooleanArray    = BooleanArray(0)
     private var v1EuclideanStep                  = 0
     private var v1CurrentNote                    = -1
@@ -205,17 +208,13 @@ class MidiService : Service() {
 
             when {
                 switchedToHarmony -> {
-                    // Stop independent loop (sends note-off on independent channel, clears state)
                     voice2Engine?.stopIndependent()
-                    // Immediately harmonize the current V1 note on the harmony channel
                     if (cfg.enabled && v1CurrentNote >= 0) {
                         voice2Engine?.onV1NoteOn(v1CurrentNote, v1Params.velocity)
                     }
                 }
                 switchedToIndependent -> {
-                    // Silence whatever the harmony mode was playing (sends note-off on its channel)
                     voice2Engine?.silenceCurrentNote()
-                    // Start the independent loop fresh
                     if (cfg.enabled) voice2Engine?.startIndependent()
                 }
                 else -> {
@@ -236,7 +235,6 @@ class MidiService : Service() {
                 }
             }
 
-            // Harmony config changed (e.g. toneStepOffset) while V1 note is sustained
             if (!switchedToHarmony && !switchedToIndependent &&
                 cfg.enabled && cfg.mode == VoiceMode.HARMONY &&
                 cfg.harmonyConfig != oldCfg.harmonyConfig &&
@@ -416,7 +414,10 @@ class MidiService : Service() {
                     hit
                 } else true
 
-                if (isOnset) sendRandomV1Note()
+                if (isOnset) {
+                    v1MelodicDispatcher?.advanceBeat()
+                    sendRandomV1Note()
+                }
 
                 val interval = calculateV1Interval()
                 Thread.sleep(interval.coerceAtLeast(10L))
@@ -459,26 +460,38 @@ class MidiService : Service() {
 
         if (!isDrone && prevNote >= 0) sendNoteOffRaw(1, prevNote, p.channel)
 
-        val vel = v1VelocityShaper.next()
+        // ── velocity: apply gesture scale on top of shaper ────────────────
+        val baseVel = v1VelocityShaper.next()
+        val gestureScale = v1MelodicDispatcher?.gestureVelocityScale() ?: 1f
+        val vel = (baseVel * gestureScale).toInt().coerceIn(1, 127)
+
         val noteNumber: Int
 
         if (p.style == VoiceStyle.SINGLE_NOTE_DRONE) {
-            // Root note grid directly selects the drone pitch.
-            // Octave slider selects the octave; range = randomised octave within range.
             val octRange = (p.maxOctave - p.minOctave + 1).coerceAtLeast(1)
             val selectedOctave = if (octRange == 1) p.minOctave
                                  else p.minOctave + Random.nextInt(octRange)
             val rootOffset = if (p.rootNote > 0) p.rootNote - 1 else 0
             noteNumber = ((selectedOctave + 1) * 12 + rootOffset).coerceIn(0, 127)
         } else {
-            val ps = p.proSettings
+            val ps        = p.proSettings
             val intervals = scales.getOrNull(p.scale) ?: return
-            val degreeIdx = if (ps.markovEnabled) {
-                v1MarkovChain?.nextDegree() ?: Random.nextInt(intervals.size)
-            } else Random.nextInt(intervals.size)
-            val interval = intervals[degreeIdx]
-            val octRange = (p.maxOctave - p.minOctave + 1).coerceAtLeast(1)
-            val selectedOctave = p.minOctave + Random.nextInt(octRange)
+
+            // ── central dispatch: MelodicEngineDispatcher ─────────────────
+            val rawDegree = v1MelodicDispatcher?.nextDegree() ?: Random.nextInt(intervals.size)
+
+            // -1 means gesture density gate suppressed this note
+            if (rawDegree < 0) return
+
+            val degreeIdx = rawDegree.coerceIn(0, intervals.size - 1)
+            val interval  = intervals[degreeIdx]
+
+            // gesture register shift applied to octave selection
+            val regShift  = v1MelodicDispatcher?.gestureRegisterShift() ?: 0
+            val octRange  = (p.maxOctave - p.minOctave + 1).coerceAtLeast(1)
+            val rawOctave = p.minOctave + Random.nextInt(octRange) + regShift
+            val selectedOctave = rawOctave.coerceIn(p.minOctave, p.maxOctave)
+
             val rootOffset = if (p.rootNote > 0) p.rootNote - 1 else 0
             noteNumber = ((selectedOctave + 1) * 12 + interval + rootOffset).coerceIn(0, 127)
         }
@@ -551,10 +564,22 @@ class MidiService : Service() {
     private fun rebuildV1ProHelpers() {
         val p  = v1Params
         val ps = p.proSettings
-        val scaleSize = scales.getOrNull(p.scale)?.size ?: 7
+        val intervals = scales.getOrNull(p.scale) ?: listOf(0,2,4,5,7,9,11)
+
         v1VelocityShaper = VelocityShaper(ps.velocityPattern, p.velocity).also { it.reset() }
-        v1MarkovChain = if (ps.markovEnabled)
-            MarkovMelody(scaleSize, ps.melodicLogicStyle).also { it.reset() } else null
+
+        // ── Build the dispatcher for whatever engine is selected ──────────
+        // NAIVE with markovEnabled=false falls through to dispatcher NAIVE mode;
+        // legacy markovEnabled=true maps to MARKOV for backwards compatibility.
+        val effectiveSettings = if (ps.melodicEngine == MelodicEngine.NAIVE && ps.markovEnabled) {
+            ps.copy(melodicEngine = MelodicEngine.MARKOV)
+        } else ps
+
+        v1MelodicDispatcher = MelodicEngineDispatcher(
+            scaleIntervals = intervals,
+            settings       = effectiveSettings
+        )
+
         if (ps.euclideanEnabled) {
             v1Euclidean = EuclideanRhythm.generate(
                 ps.euclideanSteps.coerceIn(2, 32),
