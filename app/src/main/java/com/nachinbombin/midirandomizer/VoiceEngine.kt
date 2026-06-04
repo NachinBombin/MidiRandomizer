@@ -29,8 +29,6 @@ class VoiceEngine(
     private var scheduler: ExecutorService? = null
     @Volatile private var running = false
 
-    // Track the note AND the channel it was started on so noteOff always
-    // goes to the right channel even if config is updated mid-flight.
     private var currentNote    = -1
     private var currentNoteCh  = 0
 
@@ -66,7 +64,6 @@ class VoiceEngine(
     }
 
     private fun fireHarmonyNote(note: Int, vel: Int, ch: Int) {
-        // Use the channel the PREVIOUS note was opened on for its noteOff.
         if (currentNote >= 0) onNoteOffRaw(currentNote, currentNoteCh)
         onNoteOnRaw(note, vel, ch)
         onNotePlayed(note)
@@ -91,7 +88,6 @@ class VoiceEngine(
         val s  = scheduler
         scheduler = null
         s?.shutdownNow()
-        // Capture channel now before any config change races us.
         val note = currentNote
         val ch   = currentNoteCh
         if (note >= 0) {
@@ -101,7 +97,6 @@ class VoiceEngine(
         }
     }
 
-    /** Full stop — used when global playback stops. */
     fun stop() {
         stopIndependent()
     }
@@ -113,7 +108,6 @@ class VoiceEngine(
 
                 if (ic.style == VoiceStyle.SINGLE_NOTE_DRONE) {
                     fireIndependentNote(ic)
-                    // Hold forever; will be interrupted by stopIndependent().
                     try { Thread.sleep(Long.MAX_VALUE) } catch (_: InterruptedException) {}
                     break
                 }
@@ -135,7 +129,6 @@ class VoiceEngine(
                 }
             }
         } finally {
-            // Safety: ensure any held note is released when loop exits for any reason.
             val note = currentNote
             val ch   = currentNoteCh
             if (note >= 0) {
@@ -154,26 +147,49 @@ class VoiceEngine(
 
         if (!isDrone && prevNote >= 0) onNoteOffRaw(prevNote, prevCh)
 
-        val intervals = getScales().getOrNull(ic.selectedScale) ?: return
-        val ps        = ic.proSettings
+        val noteNumber: Int
 
-        val degreeIdx = if (ps.markovEnabled) {
-            markovChain?.nextDegree() ?: Random.nextInt(intervals.size)
-        } else Random.nextInt(intervals.size)
+        if (ic.style == VoiceStyle.SINGLE_NOTE_DRONE) {
+            // ── Single Note Drone note resolution ───────────────────────
+            // Octave: fixed when min == max, randomised within range otherwise.
+            val range = (ic.maxOctave - ic.minOctave + 1).coerceAtLeast(1)
+            val selectedOctave = if (range == 1) ic.minOctave
+                                 else ic.minOctave + Random.nextInt(range)
 
-        val interval = intervals[degreeIdx]
-        val range    = (ic.maxOctave - ic.minOctave + 1).coerceAtLeast(1)
-        val oct      = ic.minOctave + Random.nextInt(range)
-        val root     = if (ic.rootNote > 0) ic.rootNote - 1 else getGlobalRoot()
-        val noteNum  = ((oct + 1) * 12 + interval + root).coerceIn(0, 127)
-        val vel      = velocityShaper.next()
+            if (ic.rootNote == 0) {
+                // Follow Main: pick the root-degree note of the global scale
+                // (degree 0 = the root itself), anchored to main's root.
+                val globalRoot = getGlobalRoot()                          // 0–11
+                noteNumber = ((selectedOctave + 1) * 12 + globalRoot).coerceIn(0, 127)
+            } else {
+                // Fixed root: play exactly that chromatic note.
+                val rootOffset = ic.rootNote - 1                         // 0–11
+                noteNumber = ((selectedOctave + 1) * 12 + rootOffset).coerceIn(0, 127)
+            }
+        } else {
+            // ── Generative / Evolving Drone ─────────────────────────────
+            val intervals = getScales().getOrNull(ic.selectedScale) ?: return
+            val ps        = ic.proSettings
 
-        onNoteOnRaw(noteNum, vel, ic.midiChannel)
-        onNotePlayed(noteNum)
-        currentNote   = noteNum
+            val degreeIdx = if (ps.markovEnabled) {
+                markovChain?.nextDegree() ?: Random.nextInt(intervals.size)
+            } else Random.nextInt(intervals.size)
+
+            val interval = intervals[degreeIdx]
+            val range    = (ic.maxOctave - ic.minOctave + 1).coerceAtLeast(1)
+            val oct      = ic.minOctave + Random.nextInt(range)
+            val root     = if (ic.rootNote > 0) ic.rootNote - 1 else getGlobalRoot()
+            noteNumber   = ((oct + 1) * 12 + interval + root).coerceIn(0, 127)
+        }
+
+        val vel = velocityShaper.next()
+
+        onNoteOnRaw(noteNumber, vel, ic.midiChannel)
+        onNotePlayed(noteNumber)
+        currentNote   = noteNumber
         currentNoteCh = ic.midiChannel
 
-        if (isDrone && prevNote >= 0 && prevNote != noteNum) {
+        if (isDrone && prevNote >= 0 && prevNote != noteNumber) {
             onNoteOffRaw(prevNote, prevCh)
         }
     }

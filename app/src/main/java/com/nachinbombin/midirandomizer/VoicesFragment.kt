@@ -146,8 +146,6 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         harmonyBtn.setOnClickListener     { switchMode(true)  }
         independentBtn.setOnClickListener { switchMode(false) }
 
-        // attachSyncListeners skips spinners that already have listeners set
-        // (those wired in buildIndependentPanel with visibility logic).
         attachSyncListeners(harmonyPanel, { syncConfig() }, skipSeekBars = true)
         attachSyncListeners(independentPanel, { syncConfig() }, skipSeekBars = true, skipTaggedSpinners = setOf("indStyle", "indDroneTiming"))
 
@@ -162,7 +160,7 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         panel.addView(labeledSeekBar(ctx, "Time Drift (ms)",   0, 45, 10,  tag = "timeDrift", onSync))
         panel.addView(labeledSeekBar(ctx, "Skip % (0-100)",    0, 100, 0,  tag = "skipPct",   onSync))
         panel.addView(labeledSeekBar(ctx, "Master Velocity",   0, 127, 100,tag = "masterVel", onSync))
-        panel.addView(labeledSeekBar(ctx, "Velocity Drift ±",  0, 20, 8,   tag = "velDrift",  onSync))
+        panel.addView(labeledSeekBar(ctx, "Velocity Drift \u00b1",  0, 20, 8,   tag = "velDrift",  onSync))
         panel.addView(labeledSeekBar(ctx, "MIDI Channel (0=Omni)", 0, 16, voiceId, tag = "midiCh", onSync))
 
         if (voiceId == 3) {
@@ -281,32 +279,38 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         })
         panel.addView(droneRangeRow)
 
-        // Visibility logic — called whenever style or drone timing changes
+        // Visibility logic
         fun updateIndVisibility() {
             val style      = VoiceStyle.entries[styleSpinner.selectedItemPosition]
             val isSingle   = style == VoiceStyle.SINGLE_NOTE_DRONE
             val isEvolving = style == VoiceStyle.EVOLVING_DRONE
             val isRandomDrone = isEvolving && droneTimingSpinner.selectedItemPosition == 1
 
-            // BPM / octave rows — hide when single note drone (no loop)
-            val hideBpm = isSingle
+            // BPM row: hide for single note drone (it fires once, no loop interval needed).
             panel.findViewWithTag<SeekBar>("indBpm")?.let {
-                (it.parent as? View)?.visibility = if (hideBpm) View.GONE else View.VISIBLE
+                (it.parent as? View)?.visibility = if (isSingle) View.GONE else View.VISIBLE
             }
+
+            // Octave rows: VISIBLE for single note drone and evolving drone;
+            // the user needs to choose the octave (or range) for the drone note.
+            val hideOctave = false // always show octave sliders
             panel.findViewWithTag<SeekBar>("indMinOct")?.let {
-                (it.parent as? View)?.visibility = if (hideBpm) View.GONE else View.VISIBLE
+                (it.parent as? View)?.visibility = if (hideOctave) View.GONE else View.VISIBLE
             }
             panel.findViewWithTag<SeekBar>("indMaxOct")?.let {
-                (it.parent as? View)?.visibility = if (hideBpm) View.GONE else View.VISIBLE
+                (it.parent as? View)?.visibility = if (hideOctave) View.GONE else View.VISIBLE
             }
 
             // Timing rows
             timingRow.visibility      = if (isSingle || isEvolving) View.GONE else View.VISIBLE
             droneTimingRow.visibility = if (isEvolving)             View.VISIBLE else View.GONE
             droneRangeRow.visibility  = if (isRandomDrone)          View.VISIBLE else View.GONE
+
+            // Scale spinner: not meaningful for single-note-drone with a fixed root,
+            // but keep visible since Follow Main mode still uses it conceptually and
+            // hiding it could be confusing.
         }
 
-        // Style spinner — owns its own listener (NOT overwritten by attachSyncListeners)
         styleSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(p0: AdapterView<*>?, p1: View?, pos: Int, p3: Long) {
                 updateIndVisibility()
@@ -315,7 +319,6 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             override fun onNothingSelected(p0: AdapterView<*>?) {}
         }
 
-        // Drone timing spinner — also owns its listener
         droneTimingSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(p0: AdapterView<*>?, p1: View?, p2: Int, p3: Long) {
                 updateIndVisibility()
@@ -465,8 +468,6 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             panel.findViewWithTag<Spinner>("indScale")?.setSelection(ic.selectedScale)
             panel.findViewWithTag<Spinner>("indRoot")?.setSelection(ic.rootNote.coerceIn(0, 12))
             panel.findViewWithTag<Spinner>("indTiming")?.setSelection(ic.timingMode)
-            // These two spinners have their own listeners; setting selection here
-            // triggers updateIndVisibility() via isUpdatingFromSync guard.
             panel.findViewWithTag<Spinner>("indStyle")?.setSelection(ic.style.ordinal)
             panel.findViewWithTag<Spinner>("indDroneTiming")?.setSelection(ic.droneTiming.ordinal)
             panel.findViewWithTag<SeekBar>("droneMin")?.progress = ic.droneMinBeats - 1
@@ -512,11 +513,6 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         }
     }
 
-    /**
-     * Walk the view tree and attach generic sync listeners.
-     * Spinners listed in [skipTaggedSpinners] are skipped because they
-     * already have dedicated listeners with visibility logic attached.
-     */
     private fun attachSyncListeners(
         group: ViewGroup,
         onChange: () -> Unit,

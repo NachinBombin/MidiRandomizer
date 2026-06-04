@@ -142,16 +142,14 @@ class MidiService : Service() {
         rebuildV1ProHelpers()
 
         if (isPlaying && (styleChanged || (p.style == VoiceStyle.SINGLE_NOTE_DRONE && (rootChanged || scaleChanged || octaveChanged)))) {
-            // Proper cleanup of old scheduler to prevent thread leak
             val old = scheduler
             scheduler = null
             old?.shutdownNow()
-            
+
             scheduler = Executors.newSingleThreadExecutor()
             scheduler?.execute(noteLoop)
         }
 
-        // Only update children if they are using shared pro settings and pro changed
         if (proChanged) {
             if (v2Config.mode == VoiceMode.INDEPENDENT && v2Config.independentConfig.useSharedPro) {
                 voice2Engine?.config = effectiveVoiceConfig(v2Config)
@@ -160,7 +158,7 @@ class MidiService : Service() {
                 voice3Engine?.config = effectiveVoiceConfig(v3Config)
             }
         }
-        
+
         notifyParamsChanged()
     }
 
@@ -169,15 +167,14 @@ class MidiService : Service() {
         if (v1Params.proSettings == settings) return
         v1Params = v1Params.copy(proSettings = settings)
         rebuildV1ProHelpers()
-        
-        // Push to voices if shared
+
         if (v2Config.mode == VoiceMode.INDEPENDENT && v2Config.independentConfig.useSharedPro) {
             voice2Engine?.config = effectiveVoiceConfig(v2Config)
         }
         if (v3Config.mode == VoiceMode.INDEPENDENT && v3Config.independentConfig.useSharedPro) {
             voice3Engine?.config = effectiveVoiceConfig(v3Config)
         }
-        
+
         notifyParamsChanged()
     }
 
@@ -186,11 +183,11 @@ class MidiService : Service() {
         val oldCfg = v2Config
         v2Config = cfg
         voice2Engine?.config = effectiveVoiceConfig(cfg)
-        
+
         if (isPlaying) {
-            val needsRestart = (cfg.enabled != oldCfg.enabled) || (cfg.mode != oldCfg.mode) || 
+            val needsRestart = (cfg.enabled != oldCfg.enabled) || (cfg.mode != oldCfg.mode) ||
                                (cfg.mode == VoiceMode.INDEPENDENT && cfg.independentConfig.style != oldCfg.independentConfig.style)
-            
+
             if (needsRestart) {
                 voice2Engine?.stopIndependent()
                 if (cfg.enabled && (cfg.mode == VoiceMode.INDEPENDENT)) voice2Engine?.startIndependent()
@@ -204,9 +201,9 @@ class MidiService : Service() {
         val oldCfg = v3Config
         v3Config = cfg
         voice3Engine?.config = effectiveVoiceConfig(cfg)
-        
+
         if (isPlaying) {
-            val needsRestart = (cfg.enabled != oldCfg.enabled) || (cfg.mode != oldCfg.mode) || 
+            val needsRestart = (cfg.enabled != oldCfg.enabled) || (cfg.mode != oldCfg.mode) ||
                                (cfg.mode == VoiceMode.INDEPENDENT && cfg.independentConfig.style != oldCfg.independentConfig.style)
 
             if (needsRestart) {
@@ -269,7 +266,7 @@ class MidiService : Service() {
         if (isPlaying) return
         isPlaying = true
         rebuildV1ProHelpers()
-        
+
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(NOTIFICATION_ID, createNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
@@ -291,7 +288,7 @@ class MidiService : Service() {
     fun stopPlaying() {
         if (!isPlaying) return
         isPlaying = false
-        
+
         val old = scheduler
         scheduler = null
         old?.shutdownNow()
@@ -308,14 +305,14 @@ class MidiService : Service() {
             val set = activeNotes[v] ?: continue
             val notes = set.toList()
             set.clear()
-            
+
             val baseCh = when(v) {
                 1 -> v1Params.channel
                 2 -> if (v2Config.mode == VoiceMode.HARMONY) v2Config.harmonyConfig.midiChannel else v2Config.independentConfig.midiChannel
                 3 -> if (v3Config.mode == VoiceMode.HARMONY) v3Config.harmonyConfig.midiChannel else v3Config.independentConfig.midiChannel
                 else -> 0
             }
-            
+
             notes.forEach { note ->
                 sendNoteOffRaw(v, note, baseCh)
             }
@@ -386,19 +383,31 @@ class MidiService : Service() {
 
         if (!isDrone && prevNote >= 0) sendNoteOffRaw(1, prevNote, p.channel)
 
-        val ps = p.proSettings
-        val intervals = scales.getOrNull(p.scale) ?: return
-
-        val degreeIdx = if (ps.markovEnabled) {
-            v1MarkovChain?.nextDegree() ?: Random.nextInt(intervals.size)
-        } else Random.nextInt(intervals.size)
-
-        val interval = intervals[degreeIdx]
-        val range = (p.maxOctave - p.minOctave + 1).coerceAtLeast(1)
-        val selectedOctave = p.minOctave + Random.nextInt(range)
         val rootOffset = if (p.rootNote > 0) p.rootNote - 1 else 0
-        // Apply rootNote offset so the scale is transposed to the correct key
-        val noteNumber = ((selectedOctave + 1) * 12 + interval + rootOffset).coerceIn(0, 127)
+
+        val noteNumber: Int
+        if (p.style == VoiceStyle.SINGLE_NOTE_DRONE) {
+            // Play exactly the root note — no random scale degree.
+            // If minOctave == maxOctave use that fixed octave; otherwise
+            // randomise within the selected range.
+            val range = (p.maxOctave - p.minOctave + 1).coerceAtLeast(1)
+            val selectedOctave = if (range == 1) p.minOctave
+                                 else p.minOctave + Random.nextInt(range)
+            noteNumber = ((selectedOctave + 1) * 12 + rootOffset).coerceIn(0, 127)
+        } else {
+            val ps = p.proSettings
+            val intervals = scales.getOrNull(p.scale) ?: return
+
+            val degreeIdx = if (ps.markovEnabled) {
+                v1MarkovChain?.nextDegree() ?: Random.nextInt(intervals.size)
+            } else Random.nextInt(intervals.size)
+
+            val interval = intervals[degreeIdx]
+            val range = (p.maxOctave - p.minOctave + 1).coerceAtLeast(1)
+            val selectedOctave = p.minOctave + Random.nextInt(range)
+            noteNumber = ((selectedOctave + 1) * 12 + interval + rootOffset).coerceIn(0, 127)
+        }
+
         val vel = v1VelocityShaper.next()
 
         sendNoteOnRaw(1, noteNumber, vel, p.channel)
@@ -503,7 +512,7 @@ class MidiService : Service() {
         }
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("MIDI Randomizer")
-            .setContentText("Generating notes…")
+            .setContentText("Generating notes\u2026")
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentIntent(pi)
             .setOngoing(true)
