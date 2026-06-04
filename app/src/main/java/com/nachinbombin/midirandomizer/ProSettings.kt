@@ -71,7 +71,7 @@ data class ContourGravityConfig(
  * @param gestureDepth 0 = off (pure Markov), 1 = full curve dominance
  */
 data class GestureCurveConfig(
-    val pitchCurvePreset: Int  = 0,   // 0=flat
+    val pitchCurvePreset: Int    = 0,   // 0=flat
     val registerCurvePreset: Int = 0,
     val densityCurvePreset: Int  = 0,
     val velocityCurvePreset: Int = 0,
@@ -145,28 +145,29 @@ data class NRTMelodicConfig(
 
 data class ProSettings(
     // ── existing fields (unchanged) ──────────────────────────────────────────
-    val markovEnabled: Boolean          = false,
+    val markovEnabled: Boolean               = false,
     val melodicLogicStyle: MelodicLogicStyle = MelodicLogicStyle.STEPWISE,
-    val velocityPattern: VelocityPattern    = VelocityPattern.RANDOM,
-    val jitterAmount: Float                 = 0f,
-    val jitterType: JitterType              = JitterType.NONE,
-    val euclideanEnabled: Boolean           = false,
-    val euclideanSteps: Int                 = 16,
-    val euclideanDensity: Int               = 8,
-    val euclideanRotation: Int              = 0,
+    val velocityPattern: VelocityPattern     = VelocityPattern.RANDOM,
+    // jitterAmount is 0–100 Int (percentage of base interval)
+    val jitterAmount: Int                    = 0,
+    val jitterType: JitterType               = JitterType.NONE,
+    val euclideanEnabled: Boolean            = false,
+    val euclideanSteps: Int                  = 16,
+    val euclideanDensity: Int                = 8,
+    val euclideanRotation: Int               = 0,
 
     // ── new: top-level engine selector ───────────────────────────────────────
     val melodicEngine: MelodicEngine = MelodicEngine.NAIVE,
 
     // ── new: Tier-1 overlays (active only when melodicEngine == MARKOV) ──────
-    val narmourConfig: NarmourConfig             = NarmourConfig(),
+    val narmourConfig: NarmourConfig               = NarmourConfig(),
     val contourGravityConfig: ContourGravityConfig = ContourGravityConfig(),
-    val gestureCurveConfig: GestureCurveConfig   = GestureCurveConfig(),
-    val secondOrderMarkov: Boolean               = false,
+    val gestureCurveConfig: GestureCurveConfig     = GestureCurveConfig(),
+    val secondOrderMarkov: Boolean                 = false,
 
     // ── new: Tier-2 replacement engine configs ────────────────────────────────
-    val pwgConfig: PWGConfig             = PWGConfig(),
-    val lSystemConfig: LSystemConfig     = LSystemConfig(),
+    val pwgConfig: PWGConfig                   = PWGConfig(),
+    val lSystemConfig: LSystemConfig           = LSystemConfig(),
     val cellAutomataConfig: CellAutomataConfig = CellAutomataConfig(),
     val nrtMelodicConfig: NRTMelodicConfig     = NRTMelodicConfig()
 )
