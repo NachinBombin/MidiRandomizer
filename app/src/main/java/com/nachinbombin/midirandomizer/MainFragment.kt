@@ -79,7 +79,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
 
     private val styles = listOf("Generative", "Single note Drone", "Evolving Drone")
 
-    // ── Root note helpers ────────────────────────────────────────────────────
+    // ── Root note helpers ─────────────────────────────────────────────────────────────────────────
 
     private fun selectedRootTag(): Int {
         val r1id = rgRootRow1.checkedRadioButtonId
@@ -119,7 +119,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         isUpdatingFromSync = false
     }
 
-    // ── Fragment lifecycle ───────────────────────────────────────────────────
+    // ── Fragment lifecycle ───────────────────────────────────────────────────────────────────────
 
     override fun onStart() {
         super.onStart()
@@ -335,8 +335,9 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         seekBpm.visibility    = if (isSingleNote) View.GONE else View.VISIBLE
         tvBpm.visibility      = if (isSingleNote) View.GONE else View.VISIBLE
         rgTiming.visibility   = if (isSingleNote) View.GONE else View.VISIBLE
-        tvOctave.visibility   = if (isSingleNote) View.GONE else View.VISIBLE
-        rangeOctave.visibility = if (isSingleNote) View.GONE else View.VISIBLE
+        // Fix 1: octave slider must remain visible in Single Note Drone mode so the user can set the octave
+        tvOctave.visibility   = View.VISIBLE
+        rangeOctave.visibility = View.VISIBLE
 
         val isEvolving = style == VoiceStyle.EVOLVING_DRONE
         val isRandomDrone = isEvolving && rgDroneTiming.checkedRadioButtonId == R.id.rbDroneRandom
@@ -362,7 +363,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         host?.getMidiService()?.updateV1Parameters(currentParams)
     }
 
-    // ── MidiEventListener ────────────────────────────────────────────────────
+    // ── MidiEventListener ────────────────────────────────────────────────────────────────────────────
 
     override fun onNotePlayed(noteName: String, midiNote: Int, velocity: Int) {
         if (isAdded) tvLastNote.text = getString(R.string.last_note_format, noteName, midiNote, velocity)
@@ -420,7 +421,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         isUpdatingFromSync = false
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // ── Helpers ──────────────────────────────────────────────────────────────────────────────
 
     private fun simpleSeek(onChange: (Int) -> Unit) =
         object : SeekBar.OnSeekBarChangeListener {

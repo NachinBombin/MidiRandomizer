@@ -20,7 +20,8 @@ data class HarmonyConfig(
     val skipProbability: Float = 0f,
     val masterVelocity:  Int   = 100,
     val velocityDrift:   Int   = 8,
-    val midiChannel:     Int   = 1,
+    // Fix 4: default MIDI channel 0 (Omni) for all voices
+    val midiChannel:     Int   = 0,
     val referenceVoice:  Int   = 1
 ) : Parcelable
 
@@ -30,7 +31,8 @@ data class IndependentConfig(
     val velocity:         Int            = 90,
     val minOctave:        Int            = 3,
     val maxOctave:        Int            = 5,
-    val midiChannel:      Int            = 3,
+    // Fix 4: default MIDI channel 0 (Omni) for all voices
+    val midiChannel:      Int            = 0,
     val selectedScale:    Int            = 1,
     val timingMode:       Int            = 0,
     val rootNote:         Int            = 0,   // 0 = follow global root; 1..12 = C..B
