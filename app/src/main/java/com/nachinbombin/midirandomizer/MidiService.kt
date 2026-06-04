@@ -203,20 +203,41 @@ class MidiService : Service() {
         if (isPlaying) {
             val ic    = cfg.independentConfig
             val oldIc = oldCfg.independentConfig
-            val needsRestart =
-                (cfg.enabled != oldCfg.enabled) ||
-                (cfg.mode != oldCfg.mode) ||
-                (cfg.mode == VoiceMode.INDEPENDENT && (
-                    ic.style != oldIc.style ||
-                    (ic.style == VoiceStyle.SINGLE_NOTE_DRONE &&
-                        (ic.rootNote != oldIc.rootNote ||
-                         ic.droneOctaveMin != oldIc.droneOctaveMin ||
-                         ic.droneOctaveMax != oldIc.droneOctaveMax))
-                ))
 
-            if (needsRestart) {
+            // Fix 3: switching from Independent → Harmony mid-session must immediately
+            // harmonize whatever V1 note is currently sustained.
+            val switchedToHarmony = cfg.mode == VoiceMode.HARMONY && oldCfg.mode != VoiceMode.HARMONY
+            if (switchedToHarmony) {
                 voice2Engine?.stopIndependent()
-                if (cfg.enabled && cfg.mode == VoiceMode.INDEPENDENT) voice2Engine?.startIndependent()
+                if (cfg.enabled && v1CurrentNote >= 0) {
+                    voice2Engine?.onV1NoteOn(v1CurrentNote, v1Params.velocity)
+                }
+            } else {
+                val needsRestart =
+                    (cfg.enabled != oldCfg.enabled) ||
+                    (cfg.mode != oldCfg.mode) ||
+                    (cfg.mode == VoiceMode.INDEPENDENT && (
+                        ic.style != oldIc.style ||
+                        (ic.style == VoiceStyle.SINGLE_NOTE_DRONE &&
+                            (ic.rootNote != oldIc.rootNote ||
+                             ic.droneOctaveMin != oldIc.droneOctaveMin ||
+                             ic.droneOctaveMax != oldIc.droneOctaveMax))
+                    ))
+
+                if (needsRestart) {
+                    voice2Engine?.stopIndependent()
+                    if (cfg.enabled && cfg.mode == VoiceMode.INDEPENDENT) voice2Engine?.startIndependent()
+                }
+            }
+
+            // Fix 2: harmony config changed (e.g. toneStepOffset slider) while V1 note is
+            // sustained — immediately re-harmonize so the new interval is heard in real time.
+            if (!switchedToHarmony &&
+                cfg.enabled && cfg.mode == VoiceMode.HARMONY &&
+                cfg.harmonyConfig != oldCfg.harmonyConfig &&
+                v1CurrentNote >= 0
+            ) {
+                voice2Engine?.onV1NoteOn(v1CurrentNote, v1Params.velocity)
             }
         }
         notifyParamsChanged()
@@ -231,20 +252,41 @@ class MidiService : Service() {
         if (isPlaying) {
             val ic    = cfg.independentConfig
             val oldIc = oldCfg.independentConfig
-            val needsRestart =
-                (cfg.enabled != oldCfg.enabled) ||
-                (cfg.mode != oldCfg.mode) ||
-                (cfg.mode == VoiceMode.INDEPENDENT && (
-                    ic.style != oldIc.style ||
-                    (ic.style == VoiceStyle.SINGLE_NOTE_DRONE &&
-                        (ic.rootNote != oldIc.rootNote ||
-                         ic.droneOctaveMin != oldIc.droneOctaveMin ||
-                         ic.droneOctaveMax != oldIc.droneOctaveMax))
-                ))
 
-            if (needsRestart) {
+            // Fix 3: switching from Independent → Harmony mid-session must immediately
+            // harmonize whatever V1 note is currently sustained.
+            val switchedToHarmony = cfg.mode == VoiceMode.HARMONY && oldCfg.mode != VoiceMode.HARMONY
+            if (switchedToHarmony) {
                 voice3Engine?.stopIndependent()
-                if (cfg.enabled && cfg.mode == VoiceMode.INDEPENDENT) voice3Engine?.startIndependent()
+                if (cfg.enabled && v1CurrentNote >= 0) {
+                    voice3Engine?.onV1NoteOn(v1CurrentNote, v1Params.velocity)
+                }
+            } else {
+                val needsRestart =
+                    (cfg.enabled != oldCfg.enabled) ||
+                    (cfg.mode != oldCfg.mode) ||
+                    (cfg.mode == VoiceMode.INDEPENDENT && (
+                        ic.style != oldIc.style ||
+                        (ic.style == VoiceStyle.SINGLE_NOTE_DRONE &&
+                            (ic.rootNote != oldIc.rootNote ||
+                             ic.droneOctaveMin != oldIc.droneOctaveMin ||
+                             ic.droneOctaveMax != oldIc.droneOctaveMax))
+                    ))
+
+                if (needsRestart) {
+                    voice3Engine?.stopIndependent()
+                    if (cfg.enabled && cfg.mode == VoiceMode.INDEPENDENT) voice3Engine?.startIndependent()
+                }
+            }
+
+            // Fix 2: harmony config changed (e.g. toneStepOffset slider) while V1 note is
+            // sustained — immediately re-harmonize so the new interval is heard in real time.
+            if (!switchedToHarmony &&
+                cfg.enabled && cfg.mode == VoiceMode.HARMONY &&
+                cfg.harmonyConfig != oldCfg.harmonyConfig &&
+                v1CurrentNote >= 0
+            ) {
+                voice3Engine?.onV1NoteOn(v1CurrentNote, v1Params.velocity)
             }
         }
         notifyParamsChanged()
