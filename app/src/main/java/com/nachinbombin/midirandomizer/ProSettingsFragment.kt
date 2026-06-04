@@ -7,9 +7,6 @@ import android.view.ViewGroup
 import android.widget.*
 import androidx.fragment.app.Fragment
 
-/**
- * Pro Settings fragment — same bg token as the Main window.
- */
 class ProSettingsFragment : Fragment() {
 
     interface ProSettingsListener {
@@ -19,22 +16,22 @@ class ProSettingsFragment : Fragment() {
     private var listener: ProSettingsListener? = null
     private var current = ProSettings()
 
-    private lateinit var seekJitter:       SeekBar
-    private lateinit var tvJitter:         TextView
+    private lateinit var seekJitter:        SeekBar
+    private lateinit var tvJitter:          TextView
     private lateinit var spinnerJitterType: Spinner
     private lateinit var spinnerVelPattern: Spinner
-    private lateinit var switchEuclidean:  Switch
-    private lateinit var layoutEuclidean:  View
-    private lateinit var seekEucSteps:     SeekBar
-    private lateinit var tvEucSteps:       TextView
-    private lateinit var seekEucDensity:   SeekBar
-    private lateinit var tvEucDensity:     TextView
-    private lateinit var seekEucRotation:  SeekBar
-    private lateinit var tvEucRotation:    TextView
-    private lateinit var switchMarkov:     Switch
-    private lateinit var layoutMarkov:     View
+    private lateinit var switchEuclidean:   Switch
+    private lateinit var layoutEuclidean:   View
+    private lateinit var seekEucSteps:      SeekBar
+    private lateinit var tvEucSteps:        TextView
+    private lateinit var seekEucDensity:    SeekBar
+    private lateinit var tvEucDensity:      TextView
+    private lateinit var seekEucRotation:   SeekBar
+    private lateinit var tvEucRotation:     TextView
+    private lateinit var switchMarkov:      Switch
+    private lateinit var layoutMarkov:      View
     private lateinit var spinnerLogicStyle: Spinner
-    private lateinit var spinnerPreset:    Spinner
+    private lateinit var spinnerPreset:     Spinner
 
     override fun onAttach(context: android.content.Context) {
         super.onAttach(context)
@@ -50,7 +47,6 @@ class ProSettingsFragment : Fragment() {
         populateSpinners()
         restoreState()
         setupListeners()
-        // Apply current theme — Pro uses the main bg token (forVoices = false)
         ThemeManager.applyToView(view, ThemeManager.loadTheme(requireContext()), forVoices = false)
     }
 
@@ -76,53 +72,57 @@ class ProSettingsFragment : Fragment() {
     }
 
     private fun populateSpinners() {
-        val jitterTypes = listOf("Uniform", "Gaussian", "Exponential", "Swing")
-        spinnerJitterType.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, jitterTypes)
-            .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        spinnerJitterType.adapter = ArrayAdapter(
+            requireContext(), android.R.layout.simple_spinner_item,
+            JitterType.entries.map { it.label }
+        ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
 
-        val velPatterns = listOf("Flat", "Accent Beat 1", "Accent Beats 1&3", "Random Accent", "Crescendo", "Decrescendo", "Wave")
-        spinnerVelPattern.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, velPatterns)
-            .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        spinnerVelPattern.adapter = ArrayAdapter(
+            requireContext(), android.R.layout.simple_spinner_item,
+            VelocityPattern.entries.map { it.label }
+        ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
 
-        val logicStyles = listOf("None", "Markov Chain", "L-System", "Cellular Automata")
-        spinnerLogicStyle.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, logicStyles)
-            .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        spinnerLogicStyle.adapter = ArrayAdapter(
+            requireContext(), android.R.layout.simple_spinner_item,
+            MelodicLogicStyle.entries.map { it.label }
+        ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
 
-        val presets = listOf("None", "Ambient Pad", "Melodic Run", "Bass Drone", "Random Walk", "Pentatonic Flow")
-        spinnerPreset.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, presets)
-            .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        spinnerPreset.adapter = ArrayAdapter(
+            requireContext(), android.R.layout.simple_spinner_item,
+            ProPreset.entries.map { it.label }
+        ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
     }
 
     private fun restoreState() {
-        seekJitter.progress = current.jitterPercent
-        tvJitter.text       = getString(R.string.label_jitter_amount, current.jitterPercent)
-        spinnerJitterType.setSelection(current.jitterType)
-        spinnerVelPattern.setSelection(current.velocityPattern)
-        switchEuclidean.isChecked = current.euclideanEnabled
+        seekJitter.progress    = current.jitterAmount
+        tvJitter.text          = getString(R.string.label_jitter_amount, current.jitterAmount)
+        spinnerJitterType.setSelection(current.jitterType.ordinal)
+        spinnerVelPattern.setSelection(current.velocityPattern.ordinal)
+        switchEuclidean.isChecked  = current.euclideanEnabled
         layoutEuclidean.visibility = if (current.euclideanEnabled) View.VISIBLE else View.GONE
-        seekEucSteps.progress   = current.eucSteps - 1
-        tvEucSteps.text         = "Steps: ${current.eucSteps}"
-        seekEucDensity.progress = current.eucDensity - 1
-        tvEucDensity.text       = "Density: ${current.eucDensity}"
-        seekEucRotation.progress = current.eucRotation
-        tvEucRotation.text      = "Rotation: ${current.eucRotation}"
+        seekEucSteps.progress   = current.euclideanSteps - 1
+        tvEucSteps.text         = "Steps: ${current.euclideanSteps}"
+        seekEucDensity.progress = current.euclideanDensity - 1
+        tvEucDensity.text       = "Density: ${current.euclideanDensity}"
+        seekEucRotation.progress = current.euclideanRotation
+        tvEucRotation.text      = "Rotation: ${current.euclideanRotation}"
         switchMarkov.isChecked  = current.markovEnabled
         layoutMarkov.visibility = if (current.markovEnabled) View.VISIBLE else View.GONE
-        spinnerLogicStyle.setSelection(current.logicStyle)
-        spinnerPreset.setSelection(current.presetIndex)
+        spinnerLogicStyle.setSelection(current.melodicLogicStyle.ordinal)
+        spinnerPreset.setSelection(current.activePreset.ordinal)
     }
 
     private fun setupListeners() {
         seekJitter.setOnSeekBarChangeListener(simpleSeek { p ->
-            current = current.copy(jitterPercent = p)
+            current = current.copy(jitterAmount = p)
             tvJitter.text = getString(R.string.label_jitter_amount, p)
             push()
         })
         spinnerJitterType.onItemSelectedListener = simpleSpinner { pos ->
-            current = current.copy(jitterType = pos); push()
+            current = current.copy(jitterType = JitterType.entries[pos]); push()
         }
         spinnerVelPattern.onItemSelectedListener = simpleSpinner { pos ->
-            current = current.copy(velocityPattern = pos); push()
+            current = current.copy(velocityPattern = VelocityPattern.entries[pos]); push()
         }
         switchEuclidean.setOnCheckedChangeListener { _, on ->
             current = current.copy(euclideanEnabled = on)
@@ -130,15 +130,15 @@ class ProSettingsFragment : Fragment() {
             push()
         }
         seekEucSteps.setOnSeekBarChangeListener(simpleSeek { p ->
-            current = current.copy(eucSteps = p + 1)
+            current = current.copy(euclideanSteps = p + 1)
             tvEucSteps.text = "Steps: ${p + 1}"; push()
         })
         seekEucDensity.setOnSeekBarChangeListener(simpleSeek { p ->
-            current = current.copy(eucDensity = p + 1)
+            current = current.copy(euclideanDensity = p + 1)
             tvEucDensity.text = "Density: ${p + 1}"; push()
         })
         seekEucRotation.setOnSeekBarChangeListener(simpleSeek { p ->
-            current = current.copy(eucRotation = p)
+            current = current.copy(euclideanRotation = p)
             tvEucRotation.text = "Rotation: $p"; push()
         })
         switchMarkov.setOnCheckedChangeListener { _, on ->
@@ -147,10 +147,10 @@ class ProSettingsFragment : Fragment() {
             push()
         }
         spinnerLogicStyle.onItemSelectedListener = simpleSpinner { pos ->
-            current = current.copy(logicStyle = pos); push()
+            current = current.copy(melodicLogicStyle = MelodicLogicStyle.entries[pos]); push()
         }
         spinnerPreset.onItemSelectedListener = simpleSpinner { pos ->
-            current = current.copy(presetIndex = pos); push()
+            current = current.copy(activePreset = ProPreset.entries[pos]); push()
         }
     }
 

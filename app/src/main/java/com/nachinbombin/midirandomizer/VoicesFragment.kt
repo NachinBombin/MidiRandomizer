@@ -10,14 +10,7 @@ import com.google.android.material.slider.RangeSlider
 
 /**
  * VoicesFragment — hosts the UI for Voice 2 and Voice 3.
- *
- * Key design notes:
- *  - In INDEPENDENT mode, the old indMinOct/indMaxOct seekbars are REPLACED by a
- *    single RangeSlider (tag="rangeOctave") used for Generative and Evolving Drone.
- *  - For Single-Note Drone a dedicated RangeSlider (tag="rangeDroneOctave") is shown
- *    instead so the user picks the octave (or range for random octave).
- *  - All changes push to the service immediately (real-time).
- *  - Background uses [ThemePreset.bgVoices] — the distinct "voices window" color.
+ * Background uses [ThemePreset.bgVoices].
  */
 class VoicesFragment : Fragment(), MidiService.MidiEventListener {
 
@@ -42,15 +35,8 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         serviceProvider = context as? ServiceProvider
     }
 
-    override fun onStart() {
-        super.onStart()
-        (activity as? MainActivity)?.addMidiListener(this)
-    }
-
-    override fun onStop() {
-        super.onStop()
-        (activity as? MainActivity)?.removeMidiListener(this)
-    }
+    override fun onStart() { super.onStart(); (activity as? MainActivity)?.addMidiListener(this) }
+    override fun onStop()  { super.onStop();  (activity as? MainActivity)?.removeMidiListener(this) }
 
     override fun onNotePlayed(noteName: String, midiNote: Int, velocity: Int) {}
     override fun onStatusChanged(status: String) {}
@@ -72,7 +58,6 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             setPadding(32, 32, 32, 64)
         }
         root.addView(column)
-
         panelV2 = buildVoicePanel(2, "Voice 2")
         column.addView(panelV2)
         column.addView(divider())
@@ -96,56 +81,42 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
 
         val headerRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
         val enableSwitch = Switch(ctx).apply {
-            text = label
-            isChecked = false
-            textSize = 18f
-            setTextColor(0xFFE8E6E1.toInt())
-            tag = "enable"
+            text = label; isChecked = false; textSize = 18f
+            setTextColor(0xFFE8E6E1.toInt()); tag = "enable"
         }
         headerRow.addView(enableSwitch)
         panel.addView(headerRow)
 
         val modeRow = LinearLayout(ctx).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(0, 12, 0, 0)
-            tag = "modeRow"
+            orientation = LinearLayout.HORIZONTAL; setPadding(0, 12, 0, 0); tag = "modeRow"
         }
-        val harmonyBtn     = radioButton(ctx, "Harmony",     true).apply { tag = "rbHarmony" }
+        val harmonyBtn     = radioButton(ctx, "Harmony",     true).apply  { tag = "rbHarmony" }
         val independentBtn = radioButton(ctx, "Independent", false).apply { tag = "rbIndependent" }
-        modeRow.addView(harmonyBtn)
-        modeRow.addView(independentBtn)
+        modeRow.addView(harmonyBtn); modeRow.addView(independentBtn)
         panel.addView(modeRow)
 
         var syncConfigAction: (() -> Unit)? = null
-
-        val harmonyPanel     = buildHarmonyPanel(voiceId) { syncConfigAction?.invoke() }.apply { tag = "harmonyPanel" }
+        val harmonyPanel     = buildHarmonyPanel(voiceId)     { syncConfigAction?.invoke() }.apply { tag = "harmonyPanel" }
         val independentPanel = buildIndependentPanel(voiceId) { syncConfigAction?.invoke() }.apply { tag = "independentPanel" }
         independentPanel.visibility = View.GONE
-        panel.addView(harmonyPanel)
-        panel.addView(independentPanel)
+        panel.addView(harmonyPanel); panel.addView(independentPanel)
 
         fun setEnabledState(on: Boolean) {
-            modeRow.visibility      = if (on) View.VISIBLE else View.GONE
-            harmonyPanel.visibility = if (on) View.VISIBLE else View.GONE
+            modeRow.visibility       = if (on) View.VISIBLE else View.GONE
+            harmonyPanel.visibility  = if (on) View.VISIBLE else View.GONE
             independentPanel.visibility = View.GONE
         }
 
-        enableSwitch.setOnCheckedChangeListener { _, on ->
-            setEnabledState(on)
-            syncConfig(voiceId)
-        }
+        enableSwitch.setOnCheckedChangeListener { _, on -> setEnabledState(on); syncConfig(voiceId) }
 
         fun setMode(harmony: Boolean) {
-            harmonyBtn.isChecked     = harmony
-            independentBtn.isChecked = !harmony
-            harmonyPanel.visibility     = if (harmony) View.VISIBLE else View.GONE
+            harmonyBtn.isChecked = harmony; independentBtn.isChecked = !harmony
+            harmonyPanel.visibility     = if (harmony)  View.VISIBLE else View.GONE
             independentPanel.visibility = if (!harmony) View.VISIBLE else View.GONE
             syncConfig(voiceId)
         }
-
         harmonyBtn.setOnClickListener     { setMode(true)  }
         independentBtn.setOnClickListener { setMode(false) }
-
         syncConfigAction = { syncConfig(voiceId) }
         setEnabledState(false)
         return panel
@@ -163,8 +134,7 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             return
         }
         val isHarmony = panel.findViewWithTag<RadioButton>("rbHarmony")?.isChecked ?: true
-        val config = if (isHarmony) readHarmonyConfig(panel, voiceId)
-                     else           readIndependentConfig(panel, voiceId)
+        val config = if (isHarmony) readHarmonyConfig(panel, voiceId) else readIndependentConfig(panel, voiceId)
         if (voiceId == 2) { currentV2 = config; serviceProvider?.getMidiService()?.updateVoice2Config(config) }
         else              { currentV3 = config; serviceProvider?.getMidiService()?.updateVoice3Config(config) }
     }
@@ -172,11 +142,8 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
     // ── Harmony panel ──────────────────────────────────────────────────────
 
     private fun buildHarmonyPanel(voiceId: Int, onChanged: () -> Unit): LinearLayout {
-        val ctx = requireContext()
-        val layout = LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(0, 8, 0, 0)
-        }
+        val ctx    = requireContext()
+        val layout = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 8, 0, 0) }
 
         layout.addView(sectionLabel("INTERVAL"))
         val intervals = listOf("-24","-19","-17","-15","-14","-12","-10","-9","-8",
@@ -196,32 +163,32 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
         spinnerCh.onItemSelectedListener = simpleSpinner { onChanged() }
         layout.addView(spinnerCh)
-
         return layout
     }
 
     private fun readHarmonyConfig(panel: LinearLayout, voiceId: Int): VoiceConfig {
         val hp = panel.findViewWithTag<View>("harmonyPanel") as? LinearLayout ?: return VoiceConfig()
-        val intervalIdx = (hp.findViewWithTag<Spinner>("harmInterval")?.selectedItemPosition ?: 15)
+        val intervalIdx = hp.findViewWithTag<Spinner>("harmInterval")?.selectedItemPosition ?: 15
         val intervals   = listOf(-24,-19,-17,-15,-14,-12,-10,-9,-8,-7,-5,-4,-3,-2,-1,0,1,2,3,4,5,7,8,9,10,12,14,15,17,19,24)
         val semitones   = intervals.getOrElse(intervalIdx) { 7 }
         val channel     = hp.findViewWithTag<Spinner>("harmChannel")?.selectedItemPosition ?: 0
         val existing    = if (voiceId == 2) currentV2 else currentV3
+        // HarmonyConfig uses toneStepOffset (not semitoneDelta) and midiChannel
         return existing.copy(
-            enabled      = true,
-            mode         = VoiceMode.HARMONY,
-            harmonyConfig = existing.harmonyConfig.copy(semitoneDelta = semitones, midiChannel = channel)
+            enabled       = true,
+            mode          = VoiceMode.HARMONY,
+            harmonyConfig = existing.harmonyConfig.copy(
+                toneStepOffset = semitones,
+                midiChannel    = channel
+            )
         )
     }
 
     // ── Independent panel ─────────────────────────────────────────────────
 
     private fun buildIndependentPanel(voiceId: Int, onChanged: () -> Unit): LinearLayout {
-        val ctx = requireContext()
-        val layout = LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(0, 8, 0, 0)
-        }
+        val ctx    = requireContext()
+        val layout = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 8, 0, 0) }
 
         val scales = listOf(
             "Chromatic","Major","Minor (Natural)","Minor (Harmonic)",
@@ -254,13 +221,13 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         layout.addView(spinnerCh)
 
         layout.addView(sectionLabel("OCTAVE RANGE"))
-        val tvOctave = TextView(ctx).apply { tag = "tvOctaveRange"; setTextColor(0xFFCDCCCA.toInt()); textSize = 13f; text = "Octave Range: 2 - 6" }
+        val tvOctave = TextView(ctx).apply {
+            tag = "tvOctaveRange"; setTextColor(0xFFCDCCCA.toInt()); textSize = 13f; text = "Octave Range: 3 - 5"
+        }
         layout.addView(tvOctave)
         val rangeOctave = RangeSlider(ctx).apply {
-            tag = "rangeOctave"
-            valueFrom = 0f; valueTo = 8f
-            values = listOf(2f, 6f)
-            stepSize = 1f
+            tag = "rangeOctave"; valueFrom = 0f; valueTo = 8f
+            values = listOf(3f, 5f); stepSize = 1f
         }
         rangeOctave.addOnChangeListener { slider, _, fromUser ->
             if (!fromUser) return@addOnChangeListener
@@ -270,16 +237,19 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         }
         layout.addView(rangeOctave)
 
-        val droneSingleGroup = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; tag = "droneSingleGroup"; visibility = View.GONE }
+        // Single-note drone octave controls
+        val droneSingleGroup = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL; tag = "droneSingleGroup"; visibility = View.GONE
+        }
         layout.addView(droneSingleGroup)
         droneSingleGroup.addView(sectionLabel("DRONE OCTAVE"))
-        val tvDroneOctave = TextView(ctx).apply { tag = "tvDroneOctave"; setTextColor(0xFFCDCCCA.toInt()); textSize = 13f; text = "Octave Range: 3 - 5" }
+        val tvDroneOctave = TextView(ctx).apply {
+            tag = "tvDroneOctave"; setTextColor(0xFFCDCCCA.toInt()); textSize = 13f; text = "Octave Range: 3 - 5"
+        }
         droneSingleGroup.addView(tvDroneOctave)
         val rangeDroneOctave = RangeSlider(ctx).apply {
-            tag = "rangeDroneOctave"
-            valueFrom = 0f; valueTo = 8f
-            values = listOf(3f, 5f)
-            stepSize = 1f
+            tag = "rangeDroneOctave"; valueFrom = 0f; valueTo = 8f
+            values = listOf(3f, 5f); stepSize = 1f
         }
         rangeDroneOctave.addOnChangeListener { slider, _, fromUser ->
             if (!fromUser) return@addOnChangeListener
@@ -290,33 +260,33 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         droneSingleGroup.addView(rangeDroneOctave)
 
         spinnerStyle.onItemSelectedListener = simpleSpinner { pos ->
-            rangeOctave.visibility     = if (pos != 1) View.VISIBLE else View.GONE
+            rangeOctave.visibility      = if (pos != 1) View.VISIBLE else View.GONE
             droneSingleGroup.visibility = if (pos == 1) View.VISIBLE else View.GONE
             onChanged()
         }
-
         return layout
     }
 
     private fun readIndependentConfig(panel: LinearLayout, voiceId: Int): VoiceConfig {
-        val ip      = panel.findViewWithTag<View>("independentPanel") as? LinearLayout ?: return VoiceConfig()
-        val scale   = ip.findViewWithTag<Spinner>("indScale")?.selectedItemPosition ?: 0
+        val ip       = panel.findViewWithTag<View>("independentPanel") as? LinearLayout ?: return VoiceConfig()
+        val scalePos = ip.findViewWithTag<Spinner>("indScale")?.selectedItemPosition ?: 0
         val stylePos = ip.findViewWithTag<Spinner>("indStyle")?.selectedItemPosition ?: 0
-        val channel = ip.findViewWithTag<Spinner>("indChannel")?.selectedItemPosition ?: 0
-        val range   = ip.findViewWithTag<RangeSlider>("rangeOctave")?.values ?: listOf(2f, 6f)
+        val channel  = ip.findViewWithTag<Spinner>("indChannel")?.selectedItemPosition ?: 0
+        val range    = ip.findViewWithTag<RangeSlider>("rangeOctave")?.values ?: listOf(3f, 5f)
         val droneRange = ip.findViewWithTag<RangeSlider>("rangeDroneOctave")?.values ?: listOf(3f, 5f)
         val existing = if (voiceId == 2) currentV2 else currentV3
+        // IndependentConfig uses: selectedScale, style (VoiceStyle), midiChannel, minOctave, maxOctave, droneOctaveMin, droneOctaveMax
         return existing.copy(
             enabled = true,
             mode    = VoiceMode.INDEPENDENT,
             independentConfig = existing.independentConfig.copy(
-                scale      = scale,
-                style      = VoiceStyle.entries[stylePos],
-                midiChannel = channel,
-                minOctave  = range[0].toInt(),
-                maxOctave  = range[1].toInt(),
-                droneMinOctave = droneRange[0].toInt(),
-                droneMaxOctave = droneRange[1].toInt()
+                selectedScale  = scalePos,
+                style          = VoiceStyle.entries[stylePos],
+                midiChannel    = channel,
+                minOctave      = range[0].toInt(),
+                maxOctave      = range[1].toInt(),
+                droneOctaveMin = droneRange[0].toInt(),
+                droneOctaveMax = droneRange[1].toInt()
             )
         )
     }
@@ -338,51 +308,42 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         val isHarmony = cfg.mode == VoiceMode.HARMONY
         panel.findViewWithTag<RadioButton>("rbHarmony")?.isChecked     = isHarmony
         panel.findViewWithTag<RadioButton>("rbIndependent")?.isChecked = !isHarmony
-        panel.findViewWithTag<View>("harmonyPanel")?.visibility     = if (isHarmony) View.VISIBLE else View.GONE
+        panel.findViewWithTag<View>("harmonyPanel")?.visibility     = if (isHarmony)  View.VISIBLE else View.GONE
         panel.findViewWithTag<View>("independentPanel")?.visibility = if (!isHarmony) View.VISIBLE else View.GONE
-
         if (isHarmony) {
             val intervals = listOf(-24,-19,-17,-15,-14,-12,-10,-9,-8,-7,-5,-4,-3,-2,-1,0,1,2,3,4,5,7,8,9,10,12,14,15,17,19,24)
-            val idx = intervals.indexOf(cfg.harmonyConfig.semitoneDelta).coerceAtLeast(0)
-            panel.findViewWithTag<View>("harmonyPanel")?.let { hp ->
-                (hp as? LinearLayout)?.findViewWithTag<Spinner>("harmInterval")?.setSelection(idx)
-                (hp as? LinearLayout)?.findViewWithTag<Spinner>("harmChannel")?.setSelection(cfg.harmonyConfig.midiChannel)
-            }
+            val idx = intervals.indexOf(cfg.harmonyConfig.toneStepOffset).coerceAtLeast(0)
+            val hp = panel.findViewWithTag<View>("harmonyPanel") as? LinearLayout
+            hp?.findViewWithTag<Spinner>("harmInterval")?.setSelection(idx)
+            hp?.findViewWithTag<Spinner>("harmChannel")?.setSelection(cfg.harmonyConfig.midiChannel)
         } else {
-            panel.findViewWithTag<View>("independentPanel")?.let { ip ->
-                (ip as? LinearLayout)?.findViewWithTag<Spinner>("indScale")?.setSelection(cfg.independentConfig.scale)
-                (ip as? LinearLayout)?.findViewWithTag<Spinner>("indStyle")?.setSelection(cfg.independentConfig.style.ordinal)
-                (ip as? LinearLayout)?.findViewWithTag<Spinner>("indChannel")?.setSelection(cfg.independentConfig.midiChannel)
-                (ip as? LinearLayout)?.findViewWithTag<RangeSlider>("rangeOctave")?.values =
-                    listOf(cfg.independentConfig.minOctave.toFloat(), cfg.independentConfig.maxOctave.toFloat())
-                (ip as? LinearLayout)?.findViewWithTag<RangeSlider>("rangeDroneOctave")?.values =
-                    listOf(cfg.independentConfig.droneMinOctave.toFloat(), cfg.independentConfig.droneMaxOctave.toFloat())
-            }
+            val ip = panel.findViewWithTag<View>("independentPanel") as? LinearLayout
+            ip?.findViewWithTag<Spinner>("indScale")?.setSelection(cfg.independentConfig.selectedScale)
+            ip?.findViewWithTag<Spinner>("indStyle")?.setSelection(cfg.independentConfig.style.ordinal)
+            ip?.findViewWithTag<Spinner>("indChannel")?.setSelection(cfg.independentConfig.midiChannel)
+            ip?.findViewWithTag<RangeSlider>("rangeOctave")?.values =
+                listOf(cfg.independentConfig.minOctave.toFloat(), cfg.independentConfig.maxOctave.toFloat())
+            ip?.findViewWithTag<RangeSlider>("rangeDroneOctave")?.values =
+                listOf(cfg.independentConfig.droneOctaveMin.toFloat(), cfg.independentConfig.droneOctaveMax.toFloat())
         }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────
 
     private fun sectionLabel(text: String) = TextView(requireContext()).apply {
-        this.text = text
-        textSize  = 11f
-        setTextColor(0xFF7A7974.toInt())
-        setPadding(0, 16, 0, 4)
-        tag = "sectionHeader"
+        this.text = text; textSize = 11f
+        setTextColor(0xFF7A7974.toInt()); setPadding(0, 16, 0, 4); tag = "sectionHeader"
     }
 
     private fun radioButton(ctx: Context, label: String, checked: Boolean) = RadioButton(ctx).apply {
-        text       = label
-        isChecked  = checked
+        text = label; isChecked = checked
         buttonTintList = android.content.res.ColorStateList.valueOf(0xFF4F9AA5.toInt())
-        setTextColor(0xFFCDCCCA.toInt())
-        setPadding(0, 0, 24, 0)
+        setTextColor(0xFFCDCCCA.toInt()); setPadding(0, 0, 24, 0)
     }
 
     private fun divider() = View(requireContext()).apply {
         layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1).apply { setMargins(0, 16, 0, 16) }
-        setBackgroundColor(0xFF444444.toInt())
-        tag = "divider"
+        setBackgroundColor(0xFF444444.toInt()); tag = "divider"
     }
 
     private fun simpleSpinner(block: (Int) -> Unit) = object : android.widget.AdapterView.OnItemSelectedListener {

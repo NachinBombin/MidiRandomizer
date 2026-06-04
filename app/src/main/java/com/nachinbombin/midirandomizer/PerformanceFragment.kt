@@ -25,7 +25,6 @@ class PerformanceFragment : Fragment(), MidiService.MidiEventListener {
     private var pitchLocked = false
     private var modLocked   = false
 
-    // References to lock buttons so we can re-tint them after theme changes
     private var pitchLockBtn: ImageButton? = null
     private var modLockBtn:   ImageButton? = null
 
@@ -44,15 +43,8 @@ class PerformanceFragment : Fragment(), MidiService.MidiEventListener {
         serviceProvider = context as? VoicesFragment.ServiceProvider
     }
 
-    override fun onStart() {
-        super.onStart()
-        (activity as? MainActivity)?.addMidiListener(this)
-    }
-
-    override fun onStop() {
-        super.onStop()
-        (activity as? MainActivity)?.removeMidiListener(this)
-    }
+    override fun onStart() { super.onStart(); (activity as? MainActivity)?.addMidiListener(this) }
+    override fun onStop()  { super.onStop();  (activity as? MainActivity)?.removeMidiListener(this) }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         val preset = ThemeManager.loadTheme(requireContext())
@@ -66,39 +58,39 @@ class PerformanceFragment : Fragment(), MidiService.MidiEventListener {
         // 1. Velocity row
         val velRow = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                setMargins(0, 0, 0, 16)
-            }
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                .apply { setMargins(0, 0, 0, 16) }
         }
-        val v1Control = createVelControl("V1 VEL", currentV1.velocity) { p ->
+        val v1Ctl = createVelControl(getString(R.string.label_v1_vel, currentV1.velocity), currentV1.velocity) { p ->
             currentV1 = currentV1.copy(velocity = p)
             serviceProvider?.getMidiService()?.updateV1Parameters(currentV1)
         }
-        sbV1 = v1Control.second; sbV1.max = 126; sbV1.progress = currentV1.velocity - 1; tvV1 = v1Control.first
-        velRow.addView(v1Control.third)
+        sbV1 = v1Ctl.second; sbV1.max = 126; sbV1.progress = currentV1.velocity - 1; tvV1 = v1Ctl.first
+        velRow.addView(v1Ctl.third)
 
-        val v2Control = createVelControl("V2 VEL", getVel(currentV2)) { p ->
-            currentV2 = setVel(currentV2, p)
+        // IndependentConfig.velocity is used for V2/V3 velocity in Perform view
+        val v2Vel = currentV2.independentConfig.velocity
+        val v2Ctl = createVelControl(getString(R.string.label_v2_vel, v2Vel), v2Vel) { p ->
+            currentV2 = currentV2.copy(independentConfig = currentV2.independentConfig.copy(velocity = p))
             serviceProvider?.getMidiService()?.updateVoice2Config(currentV2)
         }
-        sbV2 = v2Control.second; tvV2 = v2Control.first
-        velRow.addView(v2Control.third)
+        sbV2 = v2Ctl.second; tvV2 = v2Ctl.first
+        velRow.addView(v2Ctl.third)
 
-        val v3Control = createVelControl("V3 VEL", getVel(currentV3)) { p ->
-            currentV3 = setVel(currentV3, p)
+        val v3Vel = currentV3.independentConfig.velocity
+        val v3Ctl = createVelControl(getString(R.string.label_v3_vel, v3Vel), v3Vel) { p ->
+            currentV3 = currentV3.copy(independentConfig = currentV3.independentConfig.copy(velocity = p))
             serviceProvider?.getMidiService()?.updateVoice3Config(currentV3)
         }
-        sbV3 = v3Control.second; tvV3 = v3Control.first
-        velRow.addView(v3Control.third)
+        sbV3 = v3Ctl.second; tvV3 = v3Ctl.first
+        velRow.addView(v3Ctl.third)
         root.addView(velRow)
 
         // 2. Link toggles
         val linkRow = LinearLayout(requireContext()).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                setMargins(0, 0, 0, 16)
-            }
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                .apply { setMargins(0, 0, 0, 16) }
         }
         linkRow.addView(createLinkToggle("Link V1", v1Link, preset) { v1Link = it })
         linkRow.addView(createLinkToggle("Link V2", v2Link, preset) { v2Link = it })
@@ -110,41 +102,30 @@ class PerformanceFragment : Fragment(), MidiService.MidiEventListener {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
         }
-        val pitchWheel = createWheelWithLock("PITCH BEND", 8192, preset, { pitchLocked }) { isLocked ->
-            pitchLocked = isLocked
-        }
-        pitchLockBtn = pitchWheel.second
-        val pWheelView = pitchWheel.first as VerticalWheelView
-        pWheelView.accentColor = preset.accent
-        pWheelView.surfaceColor = preset.bgElevated
-        pWheelView.onValueChange = { value -> sendMidiToLinked(0xE0, value) }
 
-        val modWheel = createWheelWithLock("MOD (CC 1)", 0, preset, { modLocked }) { isLocked ->
-            modLocked = isLocked
-        }
-        modLockBtn = modWheel.second
-        val mWheelView = modWheel.first as VerticalWheelView
-        mWheelView.accentColor = preset.accent
-        mWheelView.surfaceColor = preset.bgElevated
-        mWheelView.onValueChange = { value -> sendMidiToLinked(0xB0, 1, value) }
+        val (pWheel, pLock) = createWheelWithLock("PITCH BEND", 8192, preset, { pitchLocked }) { pitchLocked = it }
+        pitchLockBtn = pLock
+        pWheel.onValueChange = { value -> sendMidiToLinked(0xE0, value) }
+
+        val (mWheel, mLock) = createWheelWithLock("MOD (CC 1)", 0, preset, { modLocked }) { modLocked = it }
+        modLockBtn = mLock
+        mWheel.onValueChange = { value -> sendMidiToLinked(0xB0, 1, value) }
 
         val pitchContainer = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
         }
-        val pTitle = buildWheelTitle("PITCH BEND", preset)
-        pitchContainer.addView(pTitle)
-        pitchContainer.addView(pitchLockBtn)
-        pitchContainer.addView(pWheelView)
+        pitchContainer.addView(buildWheelTitle("PITCH BEND", preset))
+        pitchContainer.addView(pLock)
+        pitchContainer.addView(pWheel)
 
         val modContainer = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
         }
-        val mTitle = buildWheelTitle("MOD (CC 1)", preset)
-        modContainer.addView(mTitle)
-        modContainer.addView(modLockBtn)
-        modContainer.addView(mWheelView)
+        modContainer.addView(buildWheelTitle("MOD (CC 1)", preset))
+        modContainer.addView(mLock)
+        modContainer.addView(mWheel)
 
         wheelsLayout.addView(pitchContainer)
         wheelsLayout.addView(modContainer)
@@ -155,26 +136,22 @@ class PerformanceFragment : Fragment(), MidiService.MidiEventListener {
             text = getString(R.string.btn_start)
             backgroundTintList = ColorStateList.valueOf(0xFF01696F.toInt())
             setTextColor(0xFFF7F6F2.toInt())
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { setMargins(0, 16, 0, 0) }
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                .apply { setMargins(0, 16, 0, 0) }
+            id = R.id.btnStartStop
             setOnClickListener { serviceProvider?.getMidiService()?.togglePlayback() }
         }
         root.addView(btnStartStop)
-
         return root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         val preset = ThemeManager.loadTheme(requireContext())
-        // Apply theme to all widgets; lock buttons are tagged "lockBtn" and skipped by ThemeManager
         ThemeManager.applyToView(view, preset, forVoices = true)
-        // Always restore lock tints explicitly after theme paint
         restoreLockTints()
     }
 
-    /** Lock icons are ALWAYS red when locked, regardless of theme. */
     private fun restoreLockTints() {
         val lockedColor   = 0xFF8B0000.toInt()
         val unlockedColor = 0xFF797876.toInt()
@@ -185,21 +162,12 @@ class PerformanceFragment : Fragment(), MidiService.MidiEventListener {
     // ── Wheel helpers ─────────────────────────────────────────────────────
 
     private fun buildWheelTitle(label: String, preset: ThemePreset) = TextView(requireContext()).apply {
-        text = label
-        setTextColor(preset.accent)
-        textSize = 14f
-        typeface = Typeface.DEFAULT_BOLD
+        text = label; setTextColor(preset.accent); textSize = 14f; typeface = Typeface.DEFAULT_BOLD
         gravity = Gravity.CENTER
-        layoutParams = LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply { setMargins(0, 8, 0, 4) }
+        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            .apply { setMargins(0, 8, 0, 4) }
     }
 
-    /**
-     * Returns Pair(wheelView, lockButton).
-     * The lockButton has tag="lockBtn" so [ThemeManager] skips it.
-     * Lock tint is always: red when locked, #797876 when unlocked.
-     */
     private fun createWheelWithLock(
         label: String, origin: Int, preset: ThemePreset,
         isLocked: () -> Boolean, onLockToggle: (Boolean) -> Unit
@@ -210,7 +178,7 @@ class PerformanceFragment : Fragment(), MidiService.MidiEventListener {
         val lockBtn = ImageButton(requireContext()).apply {
             setImageResource(R.drawable.ic_lock)
             background = null
-            tag = "lockBtn"  // ThemeManager skips this tag
+            tag = "lockBtn"
             imageTintList = ColorStateList.valueOf(if (isLocked()) lockedColor else unlockedColor)
             setPadding(8, 0, 0, 0)
             layoutParams = LinearLayout.LayoutParams(60, 60).apply { gravity = Gravity.CENTER_HORIZONTAL }
@@ -220,24 +188,22 @@ class PerformanceFragment : Fragment(), MidiService.MidiEventListener {
                 imageTintList = ColorStateList.valueOf(if (newState) lockedColor else unlockedColor)
             }
         }
-
         val wheel = VerticalWheelView(requireContext()).apply {
             this.originValue  = origin
             this.currentValue = origin
             this.lockProvider = isLocked
             this.accentColor  = preset.accent
             this.surfaceColor = preset.bgElevated
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
-            ).apply { setMargins(16, 8, 16, 8) }
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+                .apply { setMargins(16, 8, 16, 8) }
         }
         return Pair(wheel, lockBtn)
     }
 
-    // ── Velocity control helper ───────────────────────────────────────────
+    // ── Velocity control ──────────────────────────────────────────────────
 
     private fun createVelControl(
-        label: String, initialVel: Int, onProgress: (Int) -> Unit
+        labelText: String, initialVel: Int, onProgress: (Int) -> Unit
     ): Triple<TextView, SeekBar, LinearLayout> {
         val ctx    = requireContext()
         val layout = LinearLayout(ctx).apply {
@@ -246,36 +212,27 @@ class PerformanceFragment : Fragment(), MidiService.MidiEventListener {
             setPadding(8, 0, 8, 0)
         }
         val tv = TextView(ctx).apply {
-            text = "$label\n$initialVel"
-            setTextColor(0xFFCDCCCA.toInt())
-            textSize = 12f
-            gravity = Gravity.CENTER
+            text = labelText; setTextColor(0xFFCDCCCA.toInt()); textSize = 12f; gravity = Gravity.CENTER
         }
         val sb = SeekBar(ctx).apply {
-            max      = 126
-            progress = initialVel - 1
+            max = 126; progress = initialVel - 1
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(s: SeekBar, p: Int, fromUser: Boolean) {
                     if (isUpdatingFromSync) return
-                    val v = p + 1
-                    tv.text = "$label\n$v"
-                    if (fromUser) onProgress(v)
+                    if (fromUser) onProgress(p + 1)
                 }
                 override fun onStartTrackingTouch(s: SeekBar?) {}
                 override fun onStopTrackingTouch(s: SeekBar?) {}
             })
         }
-        layout.addView(tv)
-        layout.addView(sb)
+        layout.addView(tv); layout.addView(sb)
         return Triple(tv, sb, layout)
     }
 
     private fun createLinkToggle(label: String, initial: Boolean, preset: ThemePreset, onToggle: (Boolean) -> Unit) =
         CheckBox(requireContext()).apply {
-            text = label
-            isChecked = initial
-            setTextColor(preset.textMuted)
-            textSize = 12f
+            text = label; isChecked = initial
+            setTextColor(preset.textMuted); textSize = 12f
             buttonTintList = ColorStateList.valueOf(preset.accent)
             setPadding(16, 0, 16, 0)
             setOnCheckedChangeListener { _, isChecked -> onToggle(isChecked) }
@@ -331,17 +288,13 @@ class PerformanceFragment : Fragment(), MidiService.MidiEventListener {
             isUpdatingFromSync = true
             sbV1.progress = v1.velocity - 1
             tvV1.text = getString(R.string.label_v1_vel, v1.velocity)
-            val v2v = getVel(v2); sbV2.progress = v2v - 1; tvV2.text = getString(R.string.label_v2_vel, v2v)
-            val v3v = getVel(v3); sbV3.progress = v3v - 1; tvV3.text = getString(R.string.label_v3_vel, v3v)
+            val v2v = currentV2.independentConfig.velocity
+            sbV2.progress = v2v - 1; tvV2.text = getString(R.string.label_v2_vel, v2v)
+            val v3v = currentV3.independentConfig.velocity
+            sbV3.progress = v3v - 1; tvV3.text = getString(R.string.label_v3_vel, v3v)
             isUpdatingFromSync = false
         }
     }
-
-    private fun getVel(cfg: VoiceConfig): Int =
-        if (cfg.mode == VoiceMode.HARMONY) cfg.harmonyConfig.velocity else cfg.independentConfig.velocity
-    private fun setVel(cfg: VoiceConfig, v: Int): VoiceConfig =
-        if (cfg.mode == VoiceMode.HARMONY) cfg.copy(harmonyConfig = cfg.harmonyConfig.copy(velocity = v))
-        else cfg.copy(independentConfig = cfg.independentConfig.copy(velocity = v))
 
     // ── VerticalWheelView ─────────────────────────────────────────────────
 
@@ -362,18 +315,13 @@ class PerformanceFragment : Fragment(), MidiService.MidiEventListener {
                 MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
                     val y = event.y.coerceIn(0f, height.toFloat())
                     currentValue = ((1f - y / height.toFloat()) * maxVal).toInt()
-                    onValueChange?.invoke(currentValue)
-                    invalidate()
-                    return true
+                    onValueChange?.invoke(currentValue); invalidate(); return true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     if (lockProvider?.invoke() == false) {
-                        currentValue = originValue
-                        onValueChange?.invoke(currentValue)
-                        invalidate()
+                        currentValue = originValue; onValueChange?.invoke(currentValue); invalidate()
                     }
-                    performClick()
-                    return true
+                    performClick(); return true
                 }
             }
             return super.onTouchEvent(event)
@@ -385,16 +333,11 @@ class PerformanceFragment : Fragment(), MidiService.MidiEventListener {
             paint.color = surfaceColor
             canvas.drawRoundRect(0f, 0f, width.toFloat(), height.toFloat(), 12f, 12f, paint)
             paint.color = accentColor
-            val handleHeight = 80f
+            val handleH = 80f
             val y = height.toFloat() * (1f - currentValue.toFloat() / maxVal.toFloat())
-            canvas.drawRoundRect(
-                0f, (y - handleHeight).coerceAtLeast(0f),
-                width.toFloat(), (y + handleHeight).coerceAtMost(height.toFloat()),
-                12f, 12f, paint
-            )
+            canvas.drawRoundRect(0f, (y - handleH).coerceAtLeast(0f), width.toFloat(), (y + handleH).coerceAtMost(height.toFloat()), 12f, 12f, paint)
             if (originValue == 8192) {
-                paint.color = 0x40FFFFFF
-                canvas.drawLine(0f, height / 2f, width.toFloat(), height / 2f, paint)
+                paint.color = 0x40FFFFFF; canvas.drawLine(0f, height / 2f, width.toFloat(), height / 2f, paint)
             }
         }
     }
