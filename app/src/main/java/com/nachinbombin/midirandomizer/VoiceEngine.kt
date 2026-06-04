@@ -71,6 +71,20 @@ class VoiceEngine(
         currentNoteCh = ch
     }
 
+    /**
+     * Silences whatever note is currently playing (on whatever channel it was
+     * sent to) and resets internal state.  Safe to call in any mode.
+     */
+    fun silenceCurrentNote() {
+        val note = currentNote
+        val ch   = currentNoteCh
+        if (note >= 0) {
+            onNoteOffRaw(note, ch)
+            currentNote   = -1
+            currentNoteCh = 0
+        }
+    }
+
     // ── Independent mode ──────────────────────────────────────────────────
 
     fun startIndependent() {
@@ -88,13 +102,7 @@ class VoiceEngine(
         val s  = scheduler
         scheduler = null
         s?.shutdownNow()
-        val note = currentNote
-        val ch   = currentNoteCh
-        if (note >= 0) {
-            onNoteOffRaw(note, ch)
-            currentNote   = -1
-            currentNoteCh = 0
-        }
+        silenceCurrentNote()
     }
 
     fun stop() {
@@ -129,13 +137,7 @@ class VoiceEngine(
                 }
             }
         } finally {
-            val note = currentNote
-            val ch   = currentNoteCh
-            if (note >= 0) {
-                onNoteOffRaw(note, ch)
-                currentNote   = -1
-                currentNoteCh = 0
-            }
+            silenceCurrentNote()
             running = false
         }
     }
@@ -147,7 +149,7 @@ class VoiceEngine(
 
         if (!isDrone && prevNote >= 0) onNoteOffRaw(prevNote, prevCh)
 
-        // Use droneOctaveMin/Max for all modes in V2/V3 (replaces the old minOctave/maxOctave usage)
+        // Use droneOctaveMin/Max for all modes in V2/V3
         val octMin = ic.droneOctaveMin
         val octMax = ic.droneOctaveMax
         val octRange = (octMax - octMin + 1).coerceAtLeast(1)
@@ -155,26 +157,19 @@ class VoiceEngine(
         val noteNumber: Int
 
         if (ic.style == VoiceStyle.SINGLE_NOTE_DRONE) {
-            // ── Single Note Drone note resolution ───────────────────────────
-            // Octave: fixed when min == max, randomised within range otherwise.
             val selectedOctave = if (octRange == 1) octMin
                                  else octMin + Random.nextInt(octRange)
 
             if (ic.rootNote == 0) {
-                // Follow Main: pick the root-degree note of the global scale at global root.
-                // We pick a note from within the scale (degree 0 = root itself by default).
-                val globalRoot = getGlobalRoot()   // 0–11
+                val globalRoot = getGlobalRoot()
                 val scaleIntervals = getScales().getOrNull(getGlobalScale()) ?: listOf(0)
-                // Pick the first scale degree (root = interval 0) transposed to global root
-                val rootInterval = scaleIntervals[0]  // always 0 for standard scales
+                val rootInterval = scaleIntervals[0]
                 noteNumber = ((selectedOctave + 1) * 12 + globalRoot + rootInterval).coerceIn(0, 127)
             } else {
-                // Fixed root: play exactly that chromatic note (root spinner selects the note itself)
-                val rootOffset = ic.rootNote - 1   // 0–11
+                val rootOffset = ic.rootNote - 1
                 noteNumber = ((selectedOctave + 1) * 12 + rootOffset).coerceIn(0, 127)
             }
         } else {
-            // ── Generative / Evolving Drone ─────────────────────────────────
             val intervals = getScales().getOrNull(ic.selectedScale) ?: return
             val ps        = ic.proSettings
 

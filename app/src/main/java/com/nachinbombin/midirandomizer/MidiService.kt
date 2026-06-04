@@ -42,7 +42,7 @@ class MidiService : Service() {
 
     @Volatile private var isPlaying = false
 
-    // ── Voice parameters (Shared for sync) ───────────────────────────────────
+    // ── Voice parameters ─────────────────────────────────────────────────
     @Volatile private var v1Params = Voice1Params()
     @Volatile private var v2Config = VoiceConfig()
     @Volatile private var v3Config = VoiceConfig()
@@ -70,7 +70,6 @@ class MidiService : Service() {
     private val lastV2Note = AtomicInteger(60)
 
     private val scales = listOf(
-        // ── Original 10 scales (indices 0–9) ────────────────────────────────
         listOf(0,1,2,3,4,5,6,7,8,9,10,11),   // 0  Chromatic
         listOf(0,2,4,5,7,9,11),               // 1  Major (Ionian)
         listOf(0,2,3,5,7,8,10),               // 2  Minor (Natural)
@@ -81,11 +80,10 @@ class MidiService : Service() {
         listOf(0,2,3,5,7,9,10),               // 7  Dorian
         listOf(0,2,4,5,7,9,10),               // 8  Mixolydian
         listOf(0,2,4,6,8,10),                 // 9  Whole Tone
-        // ── New scales (indices 10–16) ───────────────────────────────────────
-        listOf(0,2,3,5,7,8,10),               // 10 Kurd (Annaziska / Aeolian)
-        listOf(0,2,3,5,7,9,10),               // 11 Celtic Minor (Amara / Dorian)
+        listOf(0,2,3,5,7,8,10),               // 10 Kurd
+        listOf(0,2,3,5,7,9,10),               // 11 Celtic Minor
         listOf(0,2,3,5,7,10),                 // 12 Pygmy
-        listOf(0,2,4,6,7,9,10),               // 13 SaBye / SaByeD (Lydian Dominant)
+        listOf(0,2,4,6,7,9,10),               // 13 Lydian Dominant
         listOf(0,2,4,6,7,9,11),               // 14 Aegean (Lydian)
         listOf(0,1,4,5,7,8,10),               // 15 Hijaz
         listOf(0,2,3,7,8)                     // 16 Akebono
@@ -158,7 +156,6 @@ class MidiService : Service() {
             }
         }
 
-        // If V1 root/scale changed and a voice is in single-note drone with Follow Main, restart it
         if (rootChanged || scaleChanged) {
             restartDroneVoiceIfFollowingMain(voice2Engine, v2Config)
             restartDroneVoiceIfFollowingMain(voice3Engine, v3Config)
@@ -167,7 +164,6 @@ class MidiService : Service() {
         notifyParamsChanged()
     }
 
-    /** Restart a V2/V3 engine if it is playing a single-note drone following the main root. */
     private fun restartDroneVoiceIfFollowingMain(engine: VoiceEngine?, cfg: VoiceConfig) {
         if (!isPlaying) return
         if (engine == null || !cfg.enabled || cfg.mode != VoiceMode.INDEPENDENT) return
@@ -204,35 +200,44 @@ class MidiService : Service() {
             val ic    = cfg.independentConfig
             val oldIc = oldCfg.independentConfig
 
-            // Fix 3: switching from Independent → Harmony mid-session must immediately
-            // harmonize whatever V1 note is currently sustained.
-            val switchedToHarmony = cfg.mode == VoiceMode.HARMONY && oldCfg.mode != VoiceMode.HARMONY
-            if (switchedToHarmony) {
-                voice2Engine?.stopIndependent()
-                if (cfg.enabled && v1CurrentNote >= 0) {
-                    voice2Engine?.onV1NoteOn(v1CurrentNote, v1Params.velocity)
-                }
-            } else {
-                val needsRestart =
-                    (cfg.enabled != oldCfg.enabled) ||
-                    (cfg.mode != oldCfg.mode) ||
-                    (cfg.mode == VoiceMode.INDEPENDENT && (
-                        ic.style != oldIc.style ||
-                        (ic.style == VoiceStyle.SINGLE_NOTE_DRONE &&
-                            (ic.rootNote != oldIc.rootNote ||
-                             ic.droneOctaveMin != oldIc.droneOctaveMin ||
-                             ic.droneOctaveMax != oldIc.droneOctaveMax))
-                    ))
+            val switchedToHarmony     = cfg.mode == VoiceMode.HARMONY     && oldCfg.mode != VoiceMode.HARMONY
+            val switchedToIndependent = cfg.mode == VoiceMode.INDEPENDENT && oldCfg.mode != VoiceMode.INDEPENDENT
 
-                if (needsRestart) {
+            when {
+                switchedToHarmony -> {
+                    // Stop independent loop (sends note-off on independent channel, clears state)
                     voice2Engine?.stopIndependent()
-                    if (cfg.enabled && cfg.mode == VoiceMode.INDEPENDENT) voice2Engine?.startIndependent()
+                    // Immediately harmonize the current V1 note on the harmony channel
+                    if (cfg.enabled && v1CurrentNote >= 0) {
+                        voice2Engine?.onV1NoteOn(v1CurrentNote, v1Params.velocity)
+                    }
+                }
+                switchedToIndependent -> {
+                    // Silence whatever the harmony mode was playing (sends note-off on its channel)
+                    voice2Engine?.silenceCurrentNote()
+                    // Start the independent loop fresh
+                    if (cfg.enabled) voice2Engine?.startIndependent()
+                }
+                else -> {
+                    val needsRestart =
+                        (cfg.enabled != oldCfg.enabled) ||
+                        (cfg.mode == VoiceMode.INDEPENDENT && (
+                            ic.style != oldIc.style ||
+                            (ic.style == VoiceStyle.SINGLE_NOTE_DRONE &&
+                                (ic.rootNote != oldIc.rootNote ||
+                                 ic.droneOctaveMin != oldIc.droneOctaveMin ||
+                                 ic.droneOctaveMax != oldIc.droneOctaveMax))
+                        ))
+
+                    if (needsRestart) {
+                        voice2Engine?.stopIndependent()
+                        if (cfg.enabled && cfg.mode == VoiceMode.INDEPENDENT) voice2Engine?.startIndependent()
+                    }
                 }
             }
 
-            // Fix 2: harmony config changed (e.g. toneStepOffset slider) while V1 note is
-            // sustained — immediately re-harmonize so the new interval is heard in real time.
-            if (!switchedToHarmony &&
+            // Harmony config changed (e.g. toneStepOffset) while V1 note is sustained
+            if (!switchedToHarmony && !switchedToIndependent &&
                 cfg.enabled && cfg.mode == VoiceMode.HARMONY &&
                 cfg.harmonyConfig != oldCfg.harmonyConfig &&
                 v1CurrentNote >= 0
@@ -253,35 +258,39 @@ class MidiService : Service() {
             val ic    = cfg.independentConfig
             val oldIc = oldCfg.independentConfig
 
-            // Fix 3: switching from Independent → Harmony mid-session must immediately
-            // harmonize whatever V1 note is currently sustained.
-            val switchedToHarmony = cfg.mode == VoiceMode.HARMONY && oldCfg.mode != VoiceMode.HARMONY
-            if (switchedToHarmony) {
-                voice3Engine?.stopIndependent()
-                if (cfg.enabled && v1CurrentNote >= 0) {
-                    voice3Engine?.onV1NoteOn(v1CurrentNote, v1Params.velocity)
-                }
-            } else {
-                val needsRestart =
-                    (cfg.enabled != oldCfg.enabled) ||
-                    (cfg.mode != oldCfg.mode) ||
-                    (cfg.mode == VoiceMode.INDEPENDENT && (
-                        ic.style != oldIc.style ||
-                        (ic.style == VoiceStyle.SINGLE_NOTE_DRONE &&
-                            (ic.rootNote != oldIc.rootNote ||
-                             ic.droneOctaveMin != oldIc.droneOctaveMin ||
-                             ic.droneOctaveMax != oldIc.droneOctaveMax))
-                    ))
+            val switchedToHarmony     = cfg.mode == VoiceMode.HARMONY     && oldCfg.mode != VoiceMode.HARMONY
+            val switchedToIndependent = cfg.mode == VoiceMode.INDEPENDENT && oldCfg.mode != VoiceMode.INDEPENDENT
 
-                if (needsRestart) {
+            when {
+                switchedToHarmony -> {
                     voice3Engine?.stopIndependent()
-                    if (cfg.enabled && cfg.mode == VoiceMode.INDEPENDENT) voice3Engine?.startIndependent()
+                    if (cfg.enabled && v1CurrentNote >= 0) {
+                        voice3Engine?.onV1NoteOn(v1CurrentNote, v1Params.velocity)
+                    }
+                }
+                switchedToIndependent -> {
+                    voice3Engine?.silenceCurrentNote()
+                    if (cfg.enabled) voice3Engine?.startIndependent()
+                }
+                else -> {
+                    val needsRestart =
+                        (cfg.enabled != oldCfg.enabled) ||
+                        (cfg.mode == VoiceMode.INDEPENDENT && (
+                            ic.style != oldIc.style ||
+                            (ic.style == VoiceStyle.SINGLE_NOTE_DRONE &&
+                                (ic.rootNote != oldIc.rootNote ||
+                                 ic.droneOctaveMin != oldIc.droneOctaveMin ||
+                                 ic.droneOctaveMax != oldIc.droneOctaveMax))
+                        ))
+
+                    if (needsRestart) {
+                        voice3Engine?.stopIndependent()
+                        if (cfg.enabled && cfg.mode == VoiceMode.INDEPENDENT) voice3Engine?.startIndependent()
+                    }
                 }
             }
 
-            // Fix 2: harmony config changed (e.g. toneStepOffset slider) while V1 note is
-            // sustained — immediately re-harmonize so the new interval is heard in real time.
-            if (!switchedToHarmony &&
+            if (!switchedToHarmony && !switchedToIndependent &&
                 cfg.enabled && cfg.mode == VoiceMode.HARMONY &&
                 cfg.harmonyConfig != oldCfg.harmonyConfig &&
                 v1CurrentNote >= 0
@@ -295,9 +304,7 @@ class MidiService : Service() {
     private fun effectiveVoiceConfig(cfg: VoiceConfig): VoiceConfig {
         return if (cfg.mode == VoiceMode.INDEPENDENT && cfg.independentConfig.useSharedPro) {
             cfg.copy(independentConfig = cfg.independentConfig.copy(proSettings = v1Params.proSettings))
-        } else {
-            cfg
-        }
+        } else cfg
     }
 
     private fun notifyParamsChanged() {
@@ -310,10 +317,7 @@ class MidiService : Service() {
         midiManager?.openDevice(
             info,
             { device ->
-                if (device == null) {
-                    notifyStatus("Failed to open device")
-                    return@openDevice
-                }
+                if (device == null) { notifyStatus("Failed to open device"); return@openDevice }
                 midiDevice = device
                 if (info.inputPortCount > 0) {
                     try {
@@ -355,8 +359,8 @@ class MidiService : Service() {
             Log.e(TAG, "startForeground failed", e)
         }
 
-        voice2Engine?.let { if (v2Config.enabled && (v2Config.mode == VoiceMode.INDEPENDENT)) it.startIndependent() }
-        voice3Engine?.let { if (v3Config.enabled && (v3Config.mode == VoiceMode.INDEPENDENT)) it.startIndependent() }
+        voice2Engine?.let { if (v2Config.enabled && v2Config.mode == VoiceMode.INDEPENDENT) it.startIndependent() }
+        voice3Engine?.let { if (v3Config.enabled && v3Config.mode == VoiceMode.INDEPENDENT) it.startIndependent() }
 
         scheduler = Executors.newSingleThreadExecutor()
         scheduler?.execute(noteLoop)
@@ -383,19 +387,15 @@ class MidiService : Service() {
             val set = activeNotes[v] ?: continue
             val notes = set.toList()
             set.clear()
-
-            val baseCh = when(v) {
+            val baseCh = when (v) {
                 1 -> v1Params.channel
                 2 -> if (v2Config.mode == VoiceMode.HARMONY) v2Config.harmonyConfig.midiChannel else v2Config.independentConfig.midiChannel
                 3 -> if (v3Config.mode == VoiceMode.HARMONY) v3Config.harmonyConfig.midiChannel else v3Config.independentConfig.midiChannel
                 else -> 0
             }
-
             notes.forEach { note -> sendNoteOffRaw(v, note, baseCh) }
         }
-        (0..15).forEach { ch ->
-            sendRawMidi(byteArrayOf((0xB0 or ch).toByte(), 123, 0))
-        }
+        (0..15).forEach { ch -> sendRawMidi(byteArrayOf((0xB0 or ch).toByte(), 123, 0)) }
     }
 
     private val noteLoop = Runnable {
@@ -463,25 +463,19 @@ class MidiService : Service() {
         val noteNumber: Int
 
         if (p.style == VoiceStyle.SINGLE_NOTE_DRONE) {
-            // ── V1 Single Note Drone ─────────────────────────────────────────
-            // The root note grid directly selects WHICH note to drone on.
-            // The octave slider selects the octave; if min != max the octave is
-            // randomised within the selected range.
+            // Root note grid directly selects the drone pitch.
+            // Octave slider selects the octave; range = randomised octave within range.
             val octRange = (p.maxOctave - p.minOctave + 1).coerceAtLeast(1)
             val selectedOctave = if (octRange == 1) p.minOctave
                                  else p.minOctave + Random.nextInt(octRange)
-            // rootNote == 0 means no root selected yet — fall back to C (0)
             val rootOffset = if (p.rootNote > 0) p.rootNote - 1 else 0
             noteNumber = ((selectedOctave + 1) * 12 + rootOffset).coerceIn(0, 127)
         } else {
-            // ── Generative / Evolving Drone ──────────────────────────────────
             val ps = p.proSettings
             val intervals = scales.getOrNull(p.scale) ?: return
-
             val degreeIdx = if (ps.markovEnabled) {
                 v1MarkovChain?.nextDegree() ?: Random.nextInt(intervals.size)
             } else Random.nextInt(intervals.size)
-
             val interval = intervals[degreeIdx]
             val octRange = (p.maxOctave - p.minOctave + 1).coerceAtLeast(1)
             val selectedOctave = p.minOctave + Random.nextInt(octRange)
@@ -506,8 +500,7 @@ class MidiService : Service() {
     fun sendNoteOnRaw(voiceId: Int, note: Int, vel: Int, ch: Int) {
         val channels = if (ch == 0) (0..15).toList() else listOf(ch - 1)
         channels.forEach { c ->
-            val msg = byteArrayOf((0x90 or c).toByte(), note.toByte(), vel.toByte())
-            sendRawMidi(msg)
+            sendRawMidi(byteArrayOf((0x90 or c).toByte(), note.toByte(), vel.toByte()))
         }
         activeNotes[voiceId]?.add(note)
     }
@@ -515,8 +508,7 @@ class MidiService : Service() {
     fun sendNoteOffRaw(voiceId: Int, note: Int, ch: Int) {
         val channels = if (ch == 0) (0..15).toList() else listOf(ch - 1)
         channels.forEach { c ->
-            val msg = byteArrayOf((0x80 or c).toByte(), note.toByte(), 0)
-            sendRawMidi(msg)
+            sendRawMidi(byteArrayOf((0x80 or c).toByte(), note.toByte(), 0))
         }
         activeNotes[voiceId]?.remove(note)
     }
@@ -530,34 +522,34 @@ class MidiService : Service() {
 
     private fun buildVoiceEngines() {
         voice2Engine = VoiceEngine(
-            voiceId      = 2,
-            mainHandler  = mainHandler,
-            getInputPort = { inputPort },
-            getScales    = { scales },
+            voiceId        = 2,
+            mainHandler    = mainHandler,
+            getInputPort   = { inputPort },
+            getScales      = { scales },
             getGlobalScale = { v1Params.scale },
             getGlobalRoot  = { if (v1Params.rootNote > 0) v1Params.rootNote - 1 else 0 },
-            getV2Note    = { lastV2Note.get() },
-            onNotePlayed = { note -> lastV2Note.set(note) },
-            onNoteOnRaw  = { n, v, ch -> sendNoteOnRaw(2, n, v, ch) },
-            onNoteOffRaw = { n, ch -> sendNoteOffRaw(2, n, ch) }
+            getV2Note      = { lastV2Note.get() },
+            onNotePlayed   = { note -> lastV2Note.set(note) },
+            onNoteOnRaw    = { n, v, ch -> sendNoteOnRaw(2, n, v, ch) },
+            onNoteOffRaw   = { n, ch -> sendNoteOffRaw(2, n, ch) }
         ).also { it.config = effectiveVoiceConfig(v2Config) }
 
         voice3Engine = VoiceEngine(
-            voiceId      = 3,
-            mainHandler  = mainHandler,
-            getInputPort = { inputPort },
-            getScales    = { scales },
+            voiceId        = 3,
+            mainHandler    = mainHandler,
+            getInputPort   = { inputPort },
+            getScales      = { scales },
             getGlobalScale = { v1Params.scale },
             getGlobalRoot  = { if (v1Params.rootNote > 0) v1Params.rootNote - 1 else 0 },
-            getV2Note    = { lastV2Note.get() },
-            onNotePlayed = { /* V3 doesn't seed anyone yet */ },
-            onNoteOnRaw  = { n, v, ch -> sendNoteOnRaw(3, n, v, ch) },
-            onNoteOffRaw = { n, ch -> sendNoteOffRaw(3, n, ch) }
+            getV2Note      = { lastV2Note.get() },
+            onNotePlayed   = { /* V3 doesn't seed anyone yet */ },
+            onNoteOnRaw    = { n, v, ch -> sendNoteOnRaw(3, n, v, ch) },
+            onNoteOffRaw   = { n, ch -> sendNoteOffRaw(3, n, ch) }
         ).also { it.config = effectiveVoiceConfig(v3Config) }
     }
 
     private fun rebuildV1ProHelpers() {
-        val p = v1Params
+        val p  = v1Params
         val ps = p.proSettings
         val scaleSize = scales.getOrNull(p.scale)?.size ?: 7
         v1VelocityShaper = VelocityShaper(ps.velocityPattern, p.velocity).also { it.reset() }
@@ -567,7 +559,7 @@ class MidiService : Service() {
             v1Euclidean = EuclideanRhythm.generate(
                 ps.euclideanSteps.coerceIn(2, 32),
                 ps.euclideanDensity.coerceIn(1, ps.euclideanSteps),
-                ps.euclideanRotation,
+                ps.euclideanRotation
             )
             v1EuclideanStep = 0
         }
@@ -598,8 +590,8 @@ class MidiService : Service() {
             .build()
     }
 
-    private fun notifyStatus(status: String)         { mainHandler.post { listener?.onStatusChanged(status) } }
-    private fun notifyPlaybackState(playing: Boolean) { mainHandler.post { listener?.onPlaybackStateChanged(playing) } }
+    private fun notifyStatus(status: String)          { mainHandler.post { listener?.onStatusChanged(status) } }
+    private fun notifyPlaybackState(playing: Boolean)  { mainHandler.post { listener?.onPlaybackStateChanged(playing) } }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         try {
