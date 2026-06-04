@@ -91,6 +91,13 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
 
         deviceListView.adapter = deviceAdapter
 
+        // Populate MIDI channel spinner: 0 (Omni), 1–16
+        val channelLabels = listOf("0 (Omni)") + (1..16).map { "Ch $it" }
+        spinnerChannel.adapter = ArrayAdapter(requireContext(),
+            android.R.layout.simple_spinner_item, channelLabels).also {
+            it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        }
+
         seekBpm.setOnSeekBarChangeListener(simpleSeek { p ->
             currentParams = currentParams.copy(bpm = p + 20)
             tvBpm.text = getString(R.string.label_bpm, currentParams.bpm)
