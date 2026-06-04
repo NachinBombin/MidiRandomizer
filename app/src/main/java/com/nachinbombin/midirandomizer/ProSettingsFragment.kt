@@ -31,7 +31,6 @@ class ProSettingsFragment : Fragment() {
     private lateinit var switchMarkov:      Switch
     private lateinit var layoutMarkov:      View
     private lateinit var spinnerLogicStyle: Spinner
-    private lateinit var spinnerPreset:     Spinner
 
     override fun onAttach(context: android.content.Context) {
         super.onAttach(context)
@@ -73,28 +72,26 @@ class ProSettingsFragment : Fragment() {
         switchMarkov      = v.findViewById(R.id.switchMarkov)
         layoutMarkov      = v.findViewById(R.id.layoutMarkov)
         spinnerLogicStyle = v.findViewById(R.id.spinnerLogicStyle)
-        spinnerPreset     = v.findViewById(R.id.spinnerPreset)
+        // spinnerPreset removed — ProPreset enum does not exist; preset logic is deferred
     }
+
+    private fun enumDisplayName(name: String): String =
+        name.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
 
     private fun populateSpinners() {
         spinnerJitterType.adapter = ArrayAdapter(
             requireContext(), android.R.layout.simple_spinner_item,
-            JitterType.entries.map { it.label }
+            JitterType.entries.map { enumDisplayName(it.name) }
         ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
 
         spinnerVelPattern.adapter = ArrayAdapter(
             requireContext(), android.R.layout.simple_spinner_item,
-            VelocityPattern.entries.map { it.label }
+            VelocityPattern.entries.map { enumDisplayName(it.name) }
         ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
 
         spinnerLogicStyle.adapter = ArrayAdapter(
             requireContext(), android.R.layout.simple_spinner_item,
-            MelodicLogicStyle.entries.map { it.label }
-        ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-
-        spinnerPreset.adapter = ArrayAdapter(
-            requireContext(), android.R.layout.simple_spinner_item,
-            ProPreset.entries.map { it.label }
+            MelodicLogicStyle.entries.map { enumDisplayName(it.name) }
         ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
     }
 
@@ -114,7 +111,6 @@ class ProSettingsFragment : Fragment() {
         switchMarkov.isChecked  = current.markovEnabled
         layoutMarkov.visibility = if (current.markovEnabled) View.VISIBLE else View.GONE
         spinnerLogicStyle.setSelection(current.melodicLogicStyle.ordinal)
-        spinnerPreset.setSelection(current.activePreset.ordinal)
     }
 
     private fun setupListeners() {
@@ -153,9 +149,6 @@ class ProSettingsFragment : Fragment() {
         }
         spinnerLogicStyle.onItemSelectedListener = simpleSpinner { pos ->
             current = current.copy(melodicLogicStyle = MelodicLogicStyle.entries[pos]); push()
-        }
-        spinnerPreset.onItemSelectedListener = simpleSpinner { pos ->
-            current = current.copy(activePreset = ProPreset.entries[pos]); push()
         }
     }
 

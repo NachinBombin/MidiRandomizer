@@ -2,6 +2,7 @@ package com.nachinbombin.midirandomizer
 
 import android.os.Parcelable
 import kotlinx.parcelize.Parcelize
+import kotlinx.parcelize.RawValue
 import kotlin.random.Random
 
 @Parcelize
@@ -20,31 +21,30 @@ data class HarmonyConfig(
     val skipProbability: Float = 0f,
     val masterVelocity:  Int   = 100,
     val velocityDrift:   Int   = 8,
-    // Fix 4: default MIDI channel 0 (Omni) for all voices
     val midiChannel:     Int   = 0,
     val referenceVoice:  Int   = 1
 ) : Parcelable
 
 @Parcelize
 data class IndependentConfig(
-    val bpm:              Int            = 120,
-    val velocity:         Int            = 90,
-    val minOctave:        Int            = 3,
-    val maxOctave:        Int            = 5,
-    // Fix 4: default MIDI channel 0 (Omni) for all voices
-    val midiChannel:      Int            = 0,
-    val selectedScale:    Int            = 1,
-    val timingMode:       Int            = 0,
-    val rootNote:         Int            = 0,   // 0 = follow global root; 1..12 = C..B
-    val proSettings:      ProSettings    = ProSettings(),
-    val useSharedPro:     Boolean        = true,
-    val style:            VoiceStyle     = VoiceStyle.GENERATIVE,
-    val droneTiming:      DroneTimingMode = DroneTimingMode.CONSTANT,
-    val droneMinBeats:    Int            = 16,
-    val droneMaxBeats:    Int            = 64,
-    // Octave range used in Single-Note Drone, Generative, and Evolving Drone for V2/V3
-    val droneOctaveMin:   Int            = 3,
-    val droneOctaveMax:   Int            = 5
+    val bpm:              Int              = 120,
+    val velocity:         Int              = 90,
+    val minOctave:        Int              = 3,
+    val maxOctave:        Int              = 5,
+    val midiChannel:      Int              = 0,
+    val selectedScale:    Int              = 1,
+    val timingMode:       Int              = 0,
+    val rootNote:         Int              = 0,
+    // ProSettings is a data class with many nested configs; @RawValue tells
+    // Parcelize to serialise it via writeValue() / Serializable fallback.
+    val proSettings:      @RawValue ProSettings = ProSettings(),
+    val useSharedPro:     Boolean          = true,
+    val style:            VoiceStyle       = VoiceStyle.GENERATIVE,
+    val droneTiming:      DroneTimingMode  = DroneTimingMode.CONSTANT,
+    val droneMinBeats:    Int              = 16,
+    val droneMaxBeats:    Int              = 64,
+    val droneOctaveMin:   Int              = 3,
+    val droneOctaveMax:   Int              = 5
 ) : Parcelable
 
 @Parcelize
@@ -78,11 +78,11 @@ object DiatonicHarmony {
         wrapAround:   Boolean = false
     ): Int {
         if (allowedNotes.isEmpty()) return v1MidiNote
-        val idx = indexOf(v1MidiNote, allowedNotes)
+        val idx       = indexOf(v1MidiNote, allowedNotes)
         val targetIdx = idx + stepOffset
         val clampedIdx = when {
-            wrapAround  -> ((targetIdx % allowedNotes.size) + allowedNotes.size) % allowedNotes.size
-            else        -> targetIdx.coerceIn(0, allowedNotes.lastIndex)
+            wrapAround -> ((targetIdx % allowedNotes.size) + allowedNotes.size) % allowedNotes.size
+            else       -> targetIdx.coerceIn(0, allowedNotes.lastIndex)
         }
         return allowedNotes[clampedIdx]
     }
