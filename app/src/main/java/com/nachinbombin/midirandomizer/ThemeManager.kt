@@ -2,25 +2,27 @@ package com.nachinbombin.midirandomizer
 
 import android.content.Context
 import android.content.res.ColorStateList
-import android.widget.Button
-import android.widget.SeekBar
-import android.widget.TextView
+import android.graphics.drawable.GradientDrawable
+import android.widget.*
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ScrollView
 import com.google.android.material.slider.RangeSlider
 
 /**
  * Handles persistence and runtime application of [ThemePreset].
  *
- * Call [applyToView] with the fragment's root view after selecting a theme.
- * It paints ONLY the scroll background, sliders, seekbars, the start/stop
- * button, and status/last-note text — intentionally skipping RadioButton
- * chips and inner ViewGroups so their drawable-based backgrounds are preserved.
+ * ## Window rules
+ * | Window      | Background token | Call                              |
+ * |-------------|-----------------|-----------------------------------|
+ * | Main        | [ThemePreset.bg]        | applyToView(root, p)              |
+ * | Pro         | [ThemePreset.bg]        | applyToView(root, p)              |
+ * | Voices      | [ThemePreset.bgVoices]  | applyToView(root, p, voices=true) |
+ * | Performance | [ThemePreset.bgVoices]  | applyToView(root, p, voices=true) |
  *
- * Usage:
- *   ThemeManager.saveTheme(context, ThemePreset.VAPORWAVE)
- *   ThemeManager.applyToView(requireView(), ThemeManager.loadTheme(context))
+ * ## Lock button rule
+ * Lock icons in PerformanceFragment are ALWAYS red when locked, regardless of theme.
+ * applyToView intentionally skips ImageButtons tagged "lockBtn" — PerformanceFragment
+ * manages their tint itself.
  */
 object ThemeManager {
 
@@ -39,54 +41,117 @@ object ThemeManager {
     }
 
     /**
-     * Applies [preset] colors to the fragment view.
-     * Only touches the scroll background, known-ID widgets, and sliders.
-     * Does NOT recurse into ViewGroups generically to avoid clobbering
-     * drawable-backed widgets (chips, radio buttons, spinners, etc.).
+     * Applies [preset] to every eligible widget in [root]'s tree.
+     *
+     * @param root        The fragment's root view.
+     * @param preset      The theme to apply.
+     * @param forVoices   true → use [ThemePreset.bgVoices] as the window background
+     *                    (Voices and Performance windows).
      */
-    fun applyToView(root: View, preset: ThemePreset) {
-        // 1. Page background (ScrollView)
-        if (root is ScrollView) root.setBackgroundColor(preset.bg)
-
-        // 2. Walk the full tree but only paint leaf widgets we know about
-        applyLeaves(root, preset)
+    fun applyToView(root: View, preset: ThemePreset, forVoices: Boolean = false) {
+        val windowBg = if (forVoices) preset.bgVoices else preset.bg
+        root.setBackgroundColor(windowBg)
+        applyNode(root, preset, windowBg)
     }
 
-    private fun applyLeaves(view: View, p: ThemePreset) {
+    // ── Recursive node painter ────────────────────────────────────────────
+
+    private fun applyNode(view: View, p: ThemePreset, windowBg: Int) {
         when {
-            // ── Start/Stop button — keep its red/green state, only tint Theme btn
+            // Lock buttons in PerformanceFragment — SKIP, they manage their own tint
+            view is ImageButton && view.tag == "lockBtn" -> return
+
+            // Theme selector button — accent text, transparent bg
             view is Button && view.id == R.id.btnTheme -> {
-                // Outlined button: just update stroke color to match accent
                 view.setTextColor(p.accent)
+                view.backgroundTintList = ColorStateList.valueOf(p.borderSubtle)
             }
 
-            // ── SeekBars (BPM, Velocity)
+            // Start/Stop button — managed by playback state; skip
+            view is Button && view.id == R.id.btnStartStop -> { /* leave alone */ }
+
+            // All other Buttons
+            view is Button -> {
+                view.backgroundTintList = ColorStateList.valueOf(p.accentSoft)
+                view.setTextColor(p.textPrimary)
+            }
+
+            // SeekBars
             view is SeekBar -> {
                 view.progressTintList           = ColorStateList.valueOf(p.accent)
                 view.thumbTintList              = ColorStateList.valueOf(p.accent)
                 view.progressBackgroundTintList = ColorStateList.valueOf(p.borderSubtle)
             }
 
-            // ── RangeSliders (Octave, DroneBeats)
+            // RangeSliders (Material)
             view is RangeSlider -> {
                 view.thumbTintList         = ColorStateList.valueOf(p.accent)
                 view.trackActiveTintList   = ColorStateList.valueOf(p.accent)
                 view.trackInactiveTintList = ColorStateList.valueOf(p.borderSubtle)
+                view.haloTintList          = ColorStateList.valueOf(p.accentSoft)
             }
 
-            // ── Status / last note TextViews — keep their semantic colors
+            // Switches
+            view is Switch -> {
+                view.thumbTintList  = ColorStateList.valueOf(p.accent)
+                view.trackTintList  = ColorStateList.valueOf(p.accentSoft)
+                view.setTextColor(p.textPrimary)
+            }
+
+            // CheckBoxes (Link toggles in PerformanceFragment)
+            view is CheckBox -> {
+                view.buttonTintList = ColorStateList.valueOf(p.accent)
+                view.setTextColor(p.textMuted)
+            }
+
+            // RadioButtons — used in root-note chip rows and timing rows
+            // Leave background drawable untouched; only recolor text
+            view is RadioButton -> {
+                view.setTextColor(
+                    ColorStateList(
+                        arrayOf(
+                            intArrayOf(android.R.attr.state_checked),
+                            intArrayOf()
+                        ),
+                        intArrayOf(p.textPrimary, p.textMuted)
+                    )
+                )
+            }
+
+            // Status / last-note TextViews
             view is TextView && view.id == R.id.tvStatus -> {
                 view.setTextColor(p.accent)
             }
 
-            // ── Don't touch RadioButtons, RadioGroups, Spinners, ListViews,
-            //    other TextViews, or generic ViewGroups — they have their own
-            //    drawable backgrounds or hard-coded semantic colors.
+            // Section-header TextViews (all-caps, muted)
+            view is TextView && view.tag == "sectionHeader" -> {
+                view.setTextColor(p.textMuted)
+            }
+
+            // Generic TextViews — primary text, transparent background
+            view is TextView -> {
+                view.setTextColor(p.textPrimary)
+            }
+
+            // Elevated panels (cards, inner LinearLayouts tagged "panel")
+            view is LinearLayout && view.tag == "panel" -> {
+                view.setBackgroundColor(p.bgElevated)
+            }
+
+            // Dividers tagged "divider"
+            view is View && view.tag == "divider" -> {
+                view.setBackgroundColor(p.borderSubtle)
+            }
+
+            // ListViews
+            view is ListView -> {
+                view.setBackgroundColor(p.bgElevated)
+            }
         }
 
         // Recurse into children
         if (view is ViewGroup) {
-            for (i in 0 until view.childCount) applyLeaves(view.getChildAt(i), p)
+            for (i in 0 until view.childCount) applyNode(view.getChildAt(i), p, windowBg)
         }
     }
 }

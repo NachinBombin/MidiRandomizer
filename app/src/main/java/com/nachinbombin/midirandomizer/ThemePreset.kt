@@ -6,18 +6,21 @@ import android.graphics.Color
  * Represents an Opera GX-inspired color theme.
  *
  * Token roles:
- *   [bg]            App background (deepest layer).
- *   [bgElevated]    Cards, panels, ListView backgrounds.
- *   [accent]        Primary accent: buttons, sliders, active tab borders, Start/Stop tint.
- *   [accentSoft]    Secondary accent: hover fills, chip selected state, RangeSlider track active.
+ *   [bg]            App background — Main window & Pro window.
+ *   [bgVoices]      Background for Voices window & Perform window.
+ *                   Each theme gives this a distinct hue that pairs with [accent].
+ *   [bgElevated]    Cards, panels, inner ViewGroup surfaces.
+ *   [accent]        Primary accent: buttons, sliders, active borders.
+ *   [accentSoft]    Secondary accent: hover fills, chip selected state, track active.
  *   [accentAlt]     Tertiary accent: small highlights, success badges, link color.
- *   [borderSubtle]  Low-contrast separators and RangeSlider track inactive.
- *   [textPrimary]   Main label / body text color.
+ *   [borderSubtle]  Low-contrast separators, slider track inactive.
+ *   [textPrimary]   Main label / body text.
  *   [textMuted]     Secondary labels (BPM value, section headers).
  */
 data class ThemePreset(
     val name: String,
     val bg: Int,
+    val bgVoices: Int,
     val bgElevated: Int,
     val accent: Int,
     val accentSoft: Int,
@@ -32,6 +35,7 @@ data class ThemePreset(
         val DEFAULT = ThemePreset(
             name         = "Default",
             bg           = Color.parseColor("#171614"),
+            bgVoices     = Color.parseColor("#111318"),   // original hard-coded value
             bgElevated   = Color.parseColor("#1C1B19"),
             accent       = Color.parseColor("#4F9AA5"),
             accentSoft   = Color.parseColor("#01696F"),
@@ -44,14 +48,13 @@ data class ThemePreset(
         // ── Opera GX themes ──────────────────────────────────────────────────
 
         /**
-         * VAPORWAVE
-         * Dark near-black blue base. Neon pink primary, cyan secondary, mint tertiary.
-         * Use horizontal/diagonal gradients for top bars.
-         * Soft outer glow on interactive elements (blurred box-shadow equivalent).
+         * VAPORWAVE — dark near-black blue / neon pink primary / cyan secondary / mint alt.
+         * bgVoices: deep purple-navy — pairs with the neon pink accent.
          */
         val VAPORWAVE = ThemePreset(
             name         = "Vaporwave",
             bg           = Color.parseColor("#050813"),
+            bgVoices     = Color.parseColor("#0D0A20"),
             bgElevated   = Color.parseColor("#11152A"),
             accent       = Color.parseColor("#FF71CE"),
             accentSoft   = Color.parseColor("#01CDFE"),
@@ -62,13 +65,13 @@ data class ThemePreset(
         )
 
         /**
-         * PAY TO WIN
-         * Deep neutral violet-black base. GX red primary, warm gold secondary, lighter gold tertiary.
-         * Red for primary CTAs. Gold gradient top border on "premium" cards.
+         * PAY TO WIN — deep violet-black / GX red primary / warm gold secondary.
+         * bgVoices: deep crimson-black — reinforces the "win" red accent.
          */
         val PAY_TO_WIN = ThemePreset(
             name         = "Pay To Win",
             bg           = Color.parseColor("#070713"),
+            bgVoices     = Color.parseColor("#130A0A"),
             bgElevated   = Color.parseColor("#121222"),
             accent       = Color.parseColor("#FA1E4E"),
             accentSoft   = Color.parseColor("#FF9B4A"),
@@ -79,13 +82,13 @@ data class ThemePreset(
         )
 
         /**
-         * FRUTTI DI MARE
-         * Deep teal-black base. Teal primary, bright aqua secondary, sea-blue tertiary.
-         * Glassy panels with thin aqua borders. Avoid heavy neon glows.
+         * FRUTTI DI MARE — deep teal-black / teal primary / bright aqua secondary.
+         * bgVoices: deep sea-navy — cooler counterpart to the warm teal bg.
          */
         val FRUTTI_DI_MARE = ThemePreset(
             name         = "Frutti di Mare",
             bg           = Color.parseColor("#031017"),
+            bgVoices     = Color.parseColor("#060F1A"),
             bgElevated   = Color.parseColor("#081C25"),
             accent       = Color.parseColor("#1FB2AA"),
             accentSoft   = Color.parseColor("#41E3C1"),
@@ -96,14 +99,13 @@ data class ThemePreset(
         )
 
         /**
-         * LAMBDA
-         * Neutral black base. Industrial orange primary, softer orange secondary, sci-fi blue alt.
-         * Sharp edges, 1px borders, minimal glows.
-         * Angled accent strip on major headers (left border in accent color).
+         * LAMBDA — neutral black / industrial orange primary / sci-fi blue alt.
+         * bgVoices: dark charcoal with very faint amber warmth.
          */
         val LAMBDA = ThemePreset(
             name         = "Lambda",
             bg           = Color.parseColor("#050608"),
+            bgVoices     = Color.parseColor("#0E0C09"),
             bgElevated   = Color.parseColor("#101215"),
             accent       = Color.parseColor("#FF9100"),
             accentSoft   = Color.parseColor("#FFB547"),
@@ -114,14 +116,13 @@ data class ThemePreset(
         )
 
         /**
-         * ULTRA VIOLET
-         * Very dark indigo base. Saturated violet primary, deeper violet for hovers, cyan for focus rings.
-         * Strong purple glows around active/focus states.
-         * Reserve cyan for small highlights only — do not flood surfaces.
+         * ULTRA VIOLET — very dark indigo / saturated violet primary / cyan for focus.
+         * bgVoices: near-black with a strong indigo cast.
          */
         val ULTRA_VIOLET = ThemePreset(
             name         = "Ultra Violet",
             bg           = Color.parseColor("#060513"),
+            bgVoices     = Color.parseColor("#0C0A1E"),
             bgElevated   = Color.parseColor("#120F26"),
             accent       = Color.parseColor("#A855FF"),
             accentSoft   = Color.parseColor("#7C3AED"),
@@ -132,14 +133,13 @@ data class ThemePreset(
         )
 
         /**
-         * AFTER EIGHT
-         * Almost-black with green hint base. Bright mint primary, darker mint secondary, ice-blue alt.
-         * Chill, clean vibe. Panel depth via slight top-edge lightness, no aggressive glows.
-         * Mint for progress/success feedback; pair with calm animations.
+         * AFTER EIGHT — almost-black green-hint / bright mint primary / ice-blue alt.
+         * bgVoices: very dark forest green — gives depth behind the mint accent.
          */
         val AFTER_EIGHT = ThemePreset(
             name         = "After Eight",
             bg           = Color.parseColor("#050909"),
+            bgVoices     = Color.parseColor("#070F0C"),
             bgElevated   = Color.parseColor("#101717"),
             accent       = Color.parseColor("#38F1B4"),
             accentSoft   = Color.parseColor("#24C79B"),
@@ -150,14 +150,13 @@ data class ThemePreset(
         )
 
         /**
-         * ROSE QUARTZ
-         * Dark plum base. Soft neon rose primary, pastel pink secondary, light periwinkle alt.
-         * Use more rounded corners and softer shadows than harsher themes.
-         * Reserve pink for interactive/focus states — avoid flooding large backgrounds.
+         * ROSE QUARTZ — dark plum / soft neon rose primary / pastel pink secondary.
+         * bgVoices: deep wine-plum — darker, richer counterpart to the bg.
          */
         val ROSE_QUARTZ = ThemePreset(
             name         = "Rose Quartz",
             bg           = Color.parseColor("#0B0710"),
+            bgVoices     = Color.parseColor("#100810"),
             bgElevated   = Color.parseColor("#15101F"),
             accent       = Color.parseColor("#FF7DAB"),
             accentSoft   = Color.parseColor("#F9A8D4"),
@@ -168,14 +167,13 @@ data class ThemePreset(
         )
 
         /**
-         * PURPLE HAZE
-         * Dark neutral base. Warm magenta-purple primary, soft purple hover, warm orange accent.
-         * Use blurred background gradients for the "haze" effect on major panels.
-         * Let accent dominate; use accentAlt (orange) only for rare special highlights.
+         * PURPLE HAZE — dark neutral / warm magenta-purple primary / warm orange alt.
+         * bgVoices: deep grape-black — intensifies the haze atmosphere.
          */
         val PURPLE_HAZE = ThemePreset(
             name         = "Purple Haze",
             bg           = Color.parseColor("#06060F"),
+            bgVoices     = Color.parseColor("#0A0814"),
             bgElevated   = Color.parseColor("#141428"),
             accent       = Color.parseColor("#C04DF9"),
             accentSoft   = Color.parseColor("#8B5CF6"),
@@ -186,16 +184,15 @@ data class ThemePreset(
         )
 
         /**
-         * WHITE WOLF
-         * Very light cool-gray base — this is a LIGHT theme, unlike all others.
-         * Bright cold blue primary, crisp green secondary, slightly darker blue for hovers.
-         * No glows. Crisp 1px borders, high-contrast near-black text.
-         * On hover: light fill with darker accent text, no heavy background changes.
+         * WHITE WOLF — light arctic theme. Very light cool-gray bg.
+         * bgVoices: pure white — crisp contrast against the slightly gray main bg.
+         * No glows. High-contrast near-black text.
          */
         val WHITE_WOLF = ThemePreset(
             name         = "White Wolf",
             bg           = Color.parseColor("#F4F7FB"),
-            bgElevated   = Color.parseColor("#FFFFFF"),
+            bgVoices     = Color.parseColor("#FFFFFF"),
+            bgElevated   = Color.parseColor("#E8EDF5"),
             accent       = Color.parseColor("#38BDF8"),
             accentSoft   = Color.parseColor("#22C55E"),
             accentAlt    = Color.parseColor("#0EA5E9"),
@@ -206,16 +203,8 @@ data class ThemePreset(
 
         /** Ordered list used by the theme picker. DEFAULT is always first. */
         val ALL: List<ThemePreset> = listOf(
-            DEFAULT,
-            VAPORWAVE,
-            PAY_TO_WIN,
-            FRUTTI_DI_MARE,
-            LAMBDA,
-            ULTRA_VIOLET,
-            AFTER_EIGHT,
-            ROSE_QUARTZ,
-            PURPLE_HAZE,
-            WHITE_WOLF
+            DEFAULT, VAPORWAVE, PAY_TO_WIN, FRUTTI_DI_MARE,
+            LAMBDA, ULTRA_VIOLET, AFTER_EIGHT, ROSE_QUARTZ, PURPLE_HAZE, WHITE_WOLF
         )
     }
 }

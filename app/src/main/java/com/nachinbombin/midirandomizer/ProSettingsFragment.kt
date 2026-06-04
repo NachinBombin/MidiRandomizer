@@ -8,7 +8,7 @@ import android.widget.*
 import androidx.fragment.app.Fragment
 
 /**
- * Pro Settings bottom sheet / fragment.
+ * Pro Settings fragment — same bg token as the Main window.
  */
 class ProSettingsFragment : Fragment() {
 
@@ -50,6 +50,8 @@ class ProSettingsFragment : Fragment() {
         populateSpinners()
         restoreState()
         setupListeners()
+        // Apply current theme — Pro uses the main bg token (forVoices = false)
+        ThemeManager.applyToView(view, ThemeManager.loadTheme(requireContext()), forVoices = false)
     }
 
     fun setInitialSettings(s: ProSettings) { current = s }
@@ -74,144 +76,93 @@ class ProSettingsFragment : Fragment() {
     }
 
     private fun populateSpinners() {
-        spinnerJitterType.adapter = simpleAdapter(JitterType.entries.map { it.label })
-        spinnerVelPattern.adapter = simpleAdapter(VelocityPattern.entries.map { it.label })
-        spinnerLogicStyle.adapter = simpleAdapter(MelodicLogicStyle.entries.map { it.label })
-        spinnerPreset.adapter     = simpleAdapter(ProPreset.entries.map { it.label })
+        val jitterTypes = listOf("Uniform", "Gaussian", "Exponential", "Swing")
+        spinnerJitterType.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, jitterTypes)
+            .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+
+        val velPatterns = listOf("Flat", "Accent Beat 1", "Accent Beats 1&3", "Random Accent", "Crescendo", "Decrescendo", "Wave")
+        spinnerVelPattern.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, velPatterns)
+            .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+
+        val logicStyles = listOf("None", "Markov Chain", "L-System", "Cellular Automata")
+        spinnerLogicStyle.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, logicStyles)
+            .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+
+        val presets = listOf("None", "Ambient Pad", "Melodic Run", "Bass Drone", "Random Walk", "Pentatonic Flow")
+        spinnerPreset.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, presets)
+            .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
     }
 
     private fun restoreState() {
-        seekJitter.progress       = current.jitterAmount
-        tvJitter.text             = jitterLabel(current.jitterAmount)
-        spinnerJitterType.setSelection(current.jitterType.ordinal)
-        spinnerVelPattern.setSelection(current.velocityPattern.ordinal)
+        seekJitter.progress = current.jitterPercent
+        tvJitter.text       = getString(R.string.label_jitter_amount, current.jitterPercent)
+        spinnerJitterType.setSelection(current.jitterType)
+        spinnerVelPattern.setSelection(current.velocityPattern)
         switchEuclidean.isChecked = current.euclideanEnabled
         layoutEuclidean.visibility = if (current.euclideanEnabled) View.VISIBLE else View.GONE
-        seekEucSteps.max          = 30
-        seekEucSteps.progress     = current.euclideanSteps - 2
-        tvEucSteps.text           = eucStepsLabel(current.euclideanSteps)
-        seekEucDensity.max        = (current.euclideanSteps - 1).coerceAtLeast(1)
-        seekEucDensity.progress   = current.euclideanDensity - 1
-        tvEucDensity.text         = eucDensityLabel(current.euclideanDensity, current.euclideanSteps)
-        seekEucRotation.max       = (current.euclideanSteps - 1).coerceAtLeast(1)
-        seekEucRotation.progress  = current.euclideanRotation
-        tvEucRotation.text        = eucRotLabel(current.euclideanRotation)
-        switchMarkov.isChecked    = current.markovEnabled
-        layoutMarkov.visibility   = if (current.markovEnabled) View.VISIBLE else View.GONE
-        spinnerLogicStyle.setSelection(current.melodicLogicStyle.ordinal)
-        spinnerPreset.setSelection(current.activePreset.ordinal)
+        seekEucSteps.progress   = current.eucSteps - 1
+        tvEucSteps.text         = "Steps: ${current.eucSteps}"
+        seekEucDensity.progress = current.eucDensity - 1
+        tvEucDensity.text       = "Density: ${current.eucDensity}"
+        seekEucRotation.progress = current.eucRotation
+        tvEucRotation.text      = "Rotation: ${current.eucRotation}"
+        switchMarkov.isChecked  = current.markovEnabled
+        layoutMarkov.visibility = if (current.markovEnabled) View.VISIBLE else View.GONE
+        spinnerLogicStyle.setSelection(current.logicStyle)
+        spinnerPreset.setSelection(current.presetIndex)
     }
 
     private fun setupListeners() {
-        seekJitter.setOnSeekBarChangeListener(simpleSeekListener { p ->
-            tvJitter.text = jitterLabel(p)
-            notifySettings()
+        seekJitter.setOnSeekBarChangeListener(simpleSeek { p ->
+            current = current.copy(jitterPercent = p)
+            tvJitter.text = getString(R.string.label_jitter_amount, p)
+            push()
         })
-        spinnerJitterType.onItemSelectedListener = simpleSpinnerListener { notifySettings() }
-        spinnerVelPattern.onItemSelectedListener = simpleSpinnerListener { notifySettings() }
-        switchEuclidean.setOnCheckedChangeListener { _, on ->
-            layoutEuclidean.visibility = if (on) View.VISIBLE else View.GONE
-            notifySettings()
+        spinnerJitterType.onItemSelectedListener = simpleSpinner { pos ->
+            current = current.copy(jitterType = pos); push()
         }
-        seekEucSteps.setOnSeekBarChangeListener(simpleSeekListener { p ->
-            val steps = p + 2
-            tvEucSteps.text = eucStepsLabel(steps)
-            val newMax = steps - 1
-            if (seekEucDensity.progress > newMax) seekEucDensity.progress = newMax
-            seekEucDensity.max = newMax
-            if (seekEucRotation.progress > newMax) seekEucRotation.progress = newMax
-            seekEucRotation.max = newMax
-            notifySettings()
+        spinnerVelPattern.onItemSelectedListener = simpleSpinner { pos ->
+            current = current.copy(velocityPattern = pos); push()
+        }
+        switchEuclidean.setOnCheckedChangeListener { _, on ->
+            current = current.copy(euclideanEnabled = on)
+            layoutEuclidean.visibility = if (on) View.VISIBLE else View.GONE
+            push()
+        }
+        seekEucSteps.setOnSeekBarChangeListener(simpleSeek { p ->
+            current = current.copy(eucSteps = p + 1)
+            tvEucSteps.text = "Steps: ${p + 1}"; push()
         })
-        seekEucDensity.setOnSeekBarChangeListener(simpleSeekListener { p ->
-            val steps = seekEucSteps.progress + 2
-            tvEucDensity.text = eucDensityLabel(p + 1, steps)
-            notifySettings()
+        seekEucDensity.setOnSeekBarChangeListener(simpleSeek { p ->
+            current = current.copy(eucDensity = p + 1)
+            tvEucDensity.text = "Density: ${p + 1}"; push()
         })
-        seekEucRotation.setOnSeekBarChangeListener(simpleSeekListener { p ->
-            tvEucRotation.text = eucRotLabel(p)
-            notifySettings()
+        seekEucRotation.setOnSeekBarChangeListener(simpleSeek { p ->
+            current = current.copy(eucRotation = p)
+            tvEucRotation.text = "Rotation: $p"; push()
         })
         switchMarkov.setOnCheckedChangeListener { _, on ->
+            current = current.copy(markovEnabled = on)
             layoutMarkov.visibility = if (on) View.VISIBLE else View.GONE
-            notifySettings()
+            push()
         }
-        spinnerLogicStyle.onItemSelectedListener = simpleSpinnerListener { notifySettings() }
-        spinnerPreset.onItemSelectedListener = simpleSpinnerListener { applyPreset() }
+        spinnerLogicStyle.onItemSelectedListener = simpleSpinner { pos ->
+            current = current.copy(logicStyle = pos); push()
+        }
+        spinnerPreset.onItemSelectedListener = simpleSpinner { pos ->
+            current = current.copy(presetIndex = pos); push()
+        }
     }
 
-    private fun applyPreset() {
-        val preset = ProPreset.entries.getOrNull(spinnerPreset.selectedItemPosition) ?: ProPreset.NONE
-        when (preset) {
-            ProPreset.AMBIENT_TEXTURE -> {
-                switchEuclidean.isChecked = true
-                seekEucSteps.progress     = 14
-                seekEucDensity.progress   = 2
-                seekEucRotation.progress  = 0
-                switchMarkov.isChecked    = true
-                spinnerLogicStyle.setSelection(MelodicLogicStyle.STEPWISE.ordinal)
-                seekJitter.progress       = 25
-                spinnerJitterType.setSelection(JitterType.GAUSSIAN.ordinal)
-                spinnerVelPattern.setSelection(VelocityPattern.PEAK_CENTER.ordinal)
-            }
-            ProPreset.EXPERIMENTAL_SOUNDSCAPE -> {
-                switchEuclidean.isChecked = false
-                switchMarkov.isChecked    = true
-                spinnerLogicStyle.setSelection(MelodicLogicStyle.WIDE_LEAPS.ordinal)
-                seekJitter.progress       = 70
-                spinnerJitterType.setSelection(JitterType.EXPONENTIAL.ordinal)
-                spinnerVelPattern.setSelection(VelocityPattern.ACCENT_BEATS.ordinal)
-            }
-            else -> {}
-        }
-        notifySettings()
+    private fun push() { listener?.onProSettingsChanged(current) }
+
+    private fun simpleSeek(block: (Int) -> Unit) = object : SeekBar.OnSeekBarChangeListener {
+        override fun onProgressChanged(sb: SeekBar, p: Int, fromUser: Boolean) { if (fromUser) block(p) }
+        override fun onStartTrackingTouch(sb: SeekBar) {}
+        override fun onStopTrackingTouch(sb: SeekBar) {}
     }
-
-    private fun notifySettings() {
-        val settings = buildSettings()
-        current = settings
-        listener?.onProSettingsChanged(settings)
+    private fun simpleSpinner(block: (Int) -> Unit) = object : android.widget.AdapterView.OnItemSelectedListener {
+        override fun onItemSelected(p: android.widget.AdapterView<*>, v: View?, pos: Int, id: Long) { block(pos) }
+        override fun onNothingSelected(p: android.widget.AdapterView<*>) {}
     }
-
-    fun buildSettings(): ProSettings {
-        if (!::seekEucSteps.isInitialized) return current
-        val steps    = seekEucSteps.progress + 2
-        val density  = (seekEucDensity.progress + 1).coerceIn(1, steps)
-        val rotation = seekEucRotation.progress
-        return ProSettings(
-            jitterAmount      = seekJitter.progress,
-            jitterType        = JitterType.entries.getOrElse(spinnerJitterType.selectedItemPosition) { JitterType.UNIFORM },
-            velocityPattern   = VelocityPattern.entries.getOrElse(spinnerVelPattern.selectedItemPosition) { VelocityPattern.RANDOM },
-            euclideanEnabled  = switchEuclidean.isChecked,
-            euclideanSteps    = steps,
-            euclideanDensity  = density,
-            euclideanRotation = rotation,
-            markovEnabled     = switchMarkov.isChecked,
-            melodicLogicStyle = MelodicLogicStyle.entries.getOrElse(spinnerLogicStyle.selectedItemPosition) { MelodicLogicStyle.STEPWISE },
-            activePreset      = ProPreset.entries.getOrElse(spinnerPreset.selectedItemPosition) { ProPreset.NONE }
-        )
-    }
-
-    private fun simpleAdapter(items: List<String>) =
-        ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, items).also {
-            it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        }
-
-    private fun simpleSeekListener(onChange: (Int) -> Unit) =
-        object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb: SeekBar, p: Int, fromUser: Boolean) { onChange(p) }
-            override fun onStartTrackingTouch(sb: SeekBar) {}
-            override fun onStopTrackingTouch(sb: SeekBar) {}
-        }
-
-    private fun simpleSpinnerListener(onSelect: (Int) -> Unit) =
-        object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(p: AdapterView<*>, v: View?, pos: Int, id: Long) { onSelect(pos) }
-            override fun onNothingSelected(p: AdapterView<*>) {}
-        }
-
-    private fun jitterLabel(v: Int)             = getString(R.string.label_jitter_amount, v)
-    private fun eucStepsLabel(s: Int)           = getString(R.string.label_euc_steps, s)
-    private fun eucDensityLabel(d: Int, s: Int) = getString(R.string.label_euc_density, d, s)
-    private fun eucRotLabel(r: Int)             = getString(R.string.label_euc_rotation, r)
 }
