@@ -185,8 +185,13 @@ class MidiService : Service() {
         voice2Engine?.config = effectiveVoiceConfig(cfg)
 
         if (isPlaying) {
+            val oldIc2 = oldCfg.independentConfig; val newIc2 = cfg.independentConfig
+            val singleDroneChanged2 = cfg.mode == VoiceMode.INDEPENDENT &&
+                newIc2.style == VoiceStyle.SINGLE_NOTE_DRONE &&
+                (newIc2.rootNote != oldIc2.rootNote || newIc2.minOctave != oldIc2.minOctave || newIc2.maxOctave != oldIc2.maxOctave)
             val needsRestart = (cfg.enabled != oldCfg.enabled) || (cfg.mode != oldCfg.mode) ||
-                               (cfg.mode == VoiceMode.INDEPENDENT && cfg.independentConfig.style != oldCfg.independentConfig.style)
+                               (cfg.mode == VoiceMode.INDEPENDENT && cfg.independentConfig.style != oldCfg.independentConfig.style) ||
+                               singleDroneChanged2
 
             if (needsRestart) {
                 voice2Engine?.stopIndependent()
@@ -203,8 +208,13 @@ class MidiService : Service() {
         voice3Engine?.config = effectiveVoiceConfig(cfg)
 
         if (isPlaying) {
+            val oldIc3 = oldCfg.independentConfig; val newIc3 = cfg.independentConfig
+            val singleDroneChanged3 = cfg.mode == VoiceMode.INDEPENDENT &&
+                newIc3.style == VoiceStyle.SINGLE_NOTE_DRONE &&
+                (newIc3.rootNote != oldIc3.rootNote || newIc3.minOctave != oldIc3.minOctave || newIc3.maxOctave != oldIc3.maxOctave)
             val needsRestart = (cfg.enabled != oldCfg.enabled) || (cfg.mode != oldCfg.mode) ||
-                               (cfg.mode == VoiceMode.INDEPENDENT && cfg.independentConfig.style != oldCfg.independentConfig.style)
+                               (cfg.mode == VoiceMode.INDEPENDENT && cfg.independentConfig.style != oldCfg.independentConfig.style) ||
+                               singleDroneChanged3
 
             if (needsRestart) {
                 voice3Engine?.stopIndependent()
