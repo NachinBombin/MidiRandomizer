@@ -218,10 +218,11 @@ class ProSettingsFragment : Fragment() {
             requireContext(), android.R.layout.simple_spinner_item, items.toList()
         ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
 
-        spinnerJitterType.adapter    = arr(*JitterType.entries.map { it.displayName }.toTypedArray())
-        spinnerVelPattern.adapter    = arr(*VelocityPattern.entries.map { it.displayName }.toTypedArray())
-        spinnerMelodicEngine.adapter = arr(*MelodicEngine.entries.map { it.displayName }.toTypedArray())
-        spinnerLogicStyle.adapter    = arr(*MelodicLogicStyle.entries.map { it.displayName }.toTypedArray())
+        // Fixed: enums are plain (no displayName property) — use .name instead
+        spinnerJitterType.adapter    = arr(*JitterType.entries.map { it.name }.toTypedArray())
+        spinnerVelPattern.adapter    = arr(*VelocityPattern.entries.map { it.name }.toTypedArray())
+        spinnerMelodicEngine.adapter = arr(*MelodicEngine.entries.map { it.name }.toTypedArray())
+        spinnerLogicStyle.adapter    = arr(*MelodicLogicStyle.entries.map { it.name }.toTypedArray())
 
         val curvePres = arrayOf("Flat","Rising arch","Falling arch","Sawtooth","Reverse sawtooth","S-curve")
         spinnerGesturePitch.adapter    = arr(*curvePres)
