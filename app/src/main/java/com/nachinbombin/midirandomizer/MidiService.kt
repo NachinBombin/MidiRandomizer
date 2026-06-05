@@ -163,9 +163,13 @@ class MidiService : Service() {
         }
 
         if (proChanged) {
-            if (v2Config.mode == VoiceMode.INDEPENDENT && v2Config.independentConfig.useSharedPro)
+            // Fix: include MELODIC in the mode check — both INDEPENDENT and MELODIC
+            // use ic.proSettings, so shared ProSettings must be injected for both.
+            val v2IsIndOrMel = v2Config.mode == VoiceMode.INDEPENDENT || v2Config.mode == VoiceMode.MELODIC
+            val v3IsIndOrMel = v3Config.mode == VoiceMode.INDEPENDENT || v3Config.mode == VoiceMode.MELODIC
+            if (v2IsIndOrMel && v2Config.independentConfig.useSharedPro)
                 voice2Engine?.config = effectiveVoiceConfig(v2Config)
-            if (v3Config.mode == VoiceMode.INDEPENDENT && v3Config.independentConfig.useSharedPro)
+            if (v3IsIndOrMel && v3Config.independentConfig.useSharedPro)
                 voice3Engine?.config = effectiveVoiceConfig(v3Config)
         }
 
@@ -193,9 +197,12 @@ class MidiService : Service() {
         v1Params = v1Params.copy(proSettings = settings)
         rebuildV1ProHelpers()
 
-        if (v2Config.mode == VoiceMode.INDEPENDENT && v2Config.independentConfig.useSharedPro)
+        // Fix: include MELODIC in the mode check here too.
+        val v2IsIndOrMel = v2Config.mode == VoiceMode.INDEPENDENT || v2Config.mode == VoiceMode.MELODIC
+        val v3IsIndOrMel = v3Config.mode == VoiceMode.INDEPENDENT || v3Config.mode == VoiceMode.MELODIC
+        if (v2IsIndOrMel && v2Config.independentConfig.useSharedPro)
             voice2Engine?.config = effectiveVoiceConfig(v2Config)
-        if (v3Config.mode == VoiceMode.INDEPENDENT && v3Config.independentConfig.useSharedPro)
+        if (v3IsIndOrMel && v3Config.independentConfig.useSharedPro)
             voice3Engine?.config = effectiveVoiceConfig(v3Config)
 
         notifyParamsChanged()

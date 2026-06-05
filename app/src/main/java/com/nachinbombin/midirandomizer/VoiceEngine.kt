@@ -104,13 +104,16 @@ class VoiceEngine(
     // ── Independent / Melodic mode ─────────────────────────────────────
 
     fun startIndependent() {
+        // Fix: read from the live `config` field — MidiService calls effectiveVoiceConfig()
+        // and writes the injected ProSettings into engine.config *before* startIndependent(),
+        // so reading `config` here guarantees rebuildHelpers() sees fresh ProSettings for
+        // both INDEPENDENT and MELODIC modes, eliminating the stale-snapshot race.
         val cfg = config
-        // Accept both INDEPENDENT and MELODIC — they share the same loop
         if (!cfg.enabled) return
         if (cfg.mode != VoiceMode.INDEPENDENT && cfg.mode != VoiceMode.MELODIC) return
         if (running) return
         running = true
-        rebuildHelpers(cfg.independentConfig)
+        rebuildHelpers()
         scheduler = Executors.newSingleThreadExecutor()
         scheduler?.execute(independentLoop)
     }
@@ -225,14 +228,14 @@ class VoiceEngine(
             // MELODIC contrast filter – only active when:
             //   1. mode == MELODIC
             //   2. melodicRelationConfig.enabled == true
-            // Builds the full allowed note pool for the voice’s own scale then
+            // Builds the full allowed note pool for the voice's own scale then
             // narrows it via applyMelodicRelation before picking a note.
             // ───────────────────────────────────────────────────────
             val mrc = config.melodicRelationConfig
             if (config.mode == VoiceMode.MELODIC && mrc.enabled) {
                 val voiceScale = getScales().getOrNull(ic.selectedScale) ?: intervals
                 val voiceRoot  = if (ic.rootNote > 0) ic.rootNote - 1 else getGlobalRoot()
-                // Build a candidate pool: all scale notes in the voice’s octave window
+                // Build a candidate pool: all scale notes in the voice's octave window
                 val poolList = mutableListOf<Int>()
                 for (o in shiftedMin..shiftedMax) {
                     for (iv in voiceScale) {
@@ -319,7 +322,7 @@ class VoiceEngine(
                 onNoteOnRaw(note, vel, ch)
             }
         } else {
-            // Staggered — schedule on mainHandler so we don’t block the loop thread
+            // Staggered — schedule on mainHandler so we don't block the loop thread
             orderedNotes.take(strumSize).forEachIndexed { idx, note ->
                 if (idx == 0) {
                     onNoteOnRaw(note, vel, ch)
@@ -363,8 +366,17 @@ class VoiceEngine(
         return JitterEngine.applyJitter(modeMs, ps.jitterAmount, ps.jitterType)
     }
 
-    private fun rebuildHelpers(ic: IndependentConfig) {
-        val ps        = ic.proSettings
+    /**
+     * Rebuild velocity shaper, melodic dispatcher, and euclidean pattern.
+     *
+     * Fix: reads from the live `config` field (not a stale local snapshot) so
+     * that shared ProSettings injected by MidiService.effectiveVoiceConfig()
+     * are always picked up — critical for MELODIC mode where the dispatcher
+     * (MARKOV, NRT, GestureCurve, Euclidean) must be built from fresh settings.
+     */
+    private fun rebuildHelpers() {
+        val ic = config.independentConfig
+        val ps = ic.proSettings
         val intervals = getScales().getOrNull(ic.selectedScale) ?: listOf(0, 2, 4, 5, 7, 9, 11)
 
         velocityShaper = VelocityShaper(ps.velocityPattern, ic.velocity).also { it.reset() }
