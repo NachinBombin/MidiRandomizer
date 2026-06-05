@@ -28,6 +28,7 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
     private var isUpdatingFromSync = false
 
     // ── Child ProSettingsFragments for custom-pro panels ─────────────────
+    // proFragV2/V3 are kept for future resync (e.g. setInitialSettings on restore).
     private var proFragV2: ProSettingsFragment? = null
     private var proFragV3: ProSettingsFragment? = null
     private var customProSettingsV2: ProSettings = ProSettings()
@@ -108,6 +109,10 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         val existing = childFragmentManager.findFragmentByTag(tag) as? ProSettingsFragment
         val frag = existing ?: ProSettingsFragment()
 
+        // FIX Bug 3: assign the ref BEFORE calling setInitialSettings so the
+        // variable is valid if anything reads it during initialisation.
+        if (voiceId == 2) proFragV2 = frag else proFragV3 = frag
+
         val initSettings = if (voiceId == 2) customProSettingsV2 else customProSettingsV3
         frag.setInitialSettings(initSettings)
         frag.setListener { settings ->
@@ -120,7 +125,6 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
                 .add(containerId, frag, tag)
                 .commitAllowingStateLoss()
         }
-        if (voiceId == 2) proFragV2 = frag else proFragV3 = frag
     }
 
     // ── Voice panel builder ───────────────────────────────────────────────
@@ -205,8 +209,12 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         harmonyBtn.setOnClickListener     { switchMode(true)  }
         independentBtn.setOnClickListener { switchMode(false) }
 
-        attachSyncListeners(harmonyPanel,     { syncConfig() }, skipSeekBars = true)
-        attachSyncListeners(independentPanel, { syncConfig() }, skipSeekBars = true)
+        // FIX Bug 1: was skipSeekBars=true on both calls, which caused the
+        // condition `view is Spinner && !skipSeekBars` to always be false,
+        // so ALL spinner changes were silently ignored. Changed to false so
+        // scale / timing / style / root spinners fire syncConfig correctly.
+        attachSyncListeners(harmonyPanel,     { syncConfig() }, skipSeekBars = false)
+        attachSyncListeners(independentPanel, { syncConfig() }, skipSeekBars = false)
 
         return panel
     }
@@ -404,20 +412,21 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
     private fun readIndependentConfig(panel: LinearLayout, voiceId: Int): IndependentConfig {
         fun seekVal(tag: String): Int = panel.findViewWithTag<SeekBar>(tag)?.progress ?: 0
         val shared = panel.findViewWithTag<RadioButton>("sharedPro")?.isChecked ?: true
-        return IndependentConfig(
-            bpm           = seekVal("indBpm") + 20,
-            velocity      = seekVal("indVel"),
-            minOctave     = seekVal("indMinOct"),
-            maxOctave     = seekVal("indMaxOct"),
-            midiChannel   = seekVal("indMidiCh"),
-            selectedScale = panel.findViewWithTag<Spinner>("indScale")?.selectedItemPosition ?: 0,
-            timingMode    = panel.findViewWithTag<Spinner>("indTiming")?.selectedItemPosition ?: 0,
-            style         = VoiceStyle.entries.getOrElse(
-                panel.findViewWithTag<Spinner>("indStyle")?.selectedItemPosition ?: 0
-            ) { VoiceStyle.GENERATIVE },
-            rootNote      = panel.findViewWithTag<Spinner>("indRoot")?.selectedItemPosition ?: 0,
-            useSharedPro  = shared,
-            proSettings   = if (shared) ProSettings() else ProSettings(
+
+        // FIX Bug 2: previously this rebuilt a full inline ProSettings() even when
+        // custom pro was on, discarding all advanced engine settings (Narmour,
+        // Gesture curves, NRT, L-System, etc.) stored by the child
+        // ProSettingsFragment in customProSettingsV2/V3.
+        //
+        // Now when !shared we start from the child fragment's full ProSettings
+        // and only override the fields that the inline basic controls own
+        // (jitter, euclidean, markov, velocity pattern).  This merges both
+        // sources correctly without losing any advanced engine config.
+        val baseCustomPro = if (voiceId == 2) customProSettingsV2 else customProSettingsV3
+        val resolvedPro: ProSettings = if (shared) {
+            ProSettings()
+        } else {
+            baseCustomPro.copy(
                 jitterAmount      = seekVal("jitAmt"),
                 jitterType        = JitterType.entries.getOrElse(
                     panel.findViewWithTag<Spinner>("jitType")?.selectedItemPosition ?: 0
@@ -434,6 +443,22 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
                     panel.findViewWithTag<Spinner>("mStyle")?.selectedItemPosition ?: 0
                 ) { MelodicLogicStyle.STEPWISE }
             )
+        }
+
+        return IndependentConfig(
+            bpm           = seekVal("indBpm") + 20,
+            velocity      = seekVal("indVel"),
+            minOctave     = seekVal("indMinOct"),
+            maxOctave     = seekVal("indMaxOct"),
+            midiChannel   = seekVal("indMidiCh"),
+            selectedScale = panel.findViewWithTag<Spinner>("indScale")?.selectedItemPosition ?: 0,
+            timingMode    = panel.findViewWithTag<Spinner>("indTiming")?.selectedItemPosition ?: 0,
+            style         = VoiceStyle.entries.getOrElse(
+                panel.findViewWithTag<Spinner>("indStyle")?.selectedItemPosition ?: 0
+            ) { VoiceStyle.GENERATIVE },
+            rootNote      = panel.findViewWithTag<Spinner>("indRoot")?.selectedItemPosition ?: 0,
+            useSharedPro  = shared,
+            proSettings   = resolvedPro
         )
     }
 
@@ -471,6 +496,11 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             panel.findViewWithTag<RadioButton>("customPro")?.isChecked = !ic.useSharedPro
             panel.findViewWithTag<View>("customProPanel")?.visibility  =
                 if (ic.useSharedPro) View.GONE else View.VISIBLE
+            // Push stored custom pro settings back into the child fragment on resync
+            if (!ic.useSharedPro) {
+                val frag = if (panel === panelV2) proFragV2 else proFragV3
+                frag?.setInitialSettings(ic.proSettings)
+            }
         }
     }
 
@@ -536,6 +566,8 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             for (i in 0 until view.childCount) attachSyncListeners(view.getChildAt(i), onSync, skipSeekBars)
         }
         when {
+            // skipSeekBars=false means spinners DO get listeners (used for harmony + independent panels).
+            // The parameter name is intentionally kept to match the original signature.
             view is Spinner && !skipSeekBars -> view.onItemSelectedListener =
                 object : AdapterView.OnItemSelectedListener {
                     override fun onItemSelected(a: AdapterView<*>?, v: View?, p: Int, id: Long) {
