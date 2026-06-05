@@ -71,10 +71,6 @@ class VoiceEngine(
         currentNoteCh = ch
     }
 
-    /**
-     * Silences whatever note is currently playing (on whatever channel it was
-     * sent to) and resets internal state.  Safe to call in any mode.
-     */
     fun silenceCurrentNote() {
         val note = currentNote
         val ch   = currentNoteCh
@@ -105,9 +101,7 @@ class VoiceEngine(
         silenceCurrentNote()
     }
 
-    fun stop() {
-        stopIndependent()
-    }
+    fun stop() { stopIndependent() }
 
     private val independentLoop = Runnable {
         try {
@@ -149,21 +143,18 @@ class VoiceEngine(
 
         if (!isDrone && prevNote >= 0) onNoteOffRaw(prevNote, prevCh)
 
-        // Use droneOctaveMin/Max for all modes in V2/V3
-        val octMin = ic.droneOctaveMin
-        val octMax = ic.droneOctaveMax
+        val octMin   = ic.droneOctaveMin
+        val octMax   = ic.droneOctaveMax
         val octRange = (octMax - octMin + 1).coerceAtLeast(1)
 
         val noteNumber: Int
 
         if (ic.style == VoiceStyle.SINGLE_NOTE_DRONE) {
-            val selectedOctave = if (octRange == 1) octMin
-                                 else octMin + Random.nextInt(octRange)
-
+            val selectedOctave = if (octRange == 1) octMin else octMin + Random.nextInt(octRange)
             if (ic.rootNote == 0) {
-                val globalRoot = getGlobalRoot()
+                val globalRoot     = getGlobalRoot()
                 val scaleIntervals = getScales().getOrNull(getGlobalScale()) ?: listOf(0)
-                val rootInterval = scaleIntervals[0]
+                val rootInterval   = scaleIntervals[0]
                 noteNumber = ((selectedOctave + 1) * 12 + globalRoot + rootInterval).coerceIn(0, 127)
             } else {
                 val rootOffset = ic.rootNote - 1
@@ -220,8 +211,15 @@ class VoiceEngine(
         val ps   = ic.proSettings
         val scSz = getScales().getOrNull(ic.selectedScale)?.size ?: 7
         velocityShaper = VelocityShaper(ps.velocityPattern, ic.velocity).also { it.reset() }
-        markovChain    = if (ps.markovEnabled)
-            MarkovMelody(scSz, ps.melodicLogicStyle).also { it.reset() } else null
+        markovChain = if (ps.markovEnabled)
+            MarkovMelody(
+                scaleSize   = scSz,
+                style       = ps.melodicLogicStyle,
+                secondOrder = ps.secondOrderMarkov,
+                narmour     = ps.narmourConfig,
+                gravity     = ps.contourGravityConfig
+            ).also { it.reset() }
+        else null
         if (ps.euclideanEnabled) {
             euclideanPattern = EuclideanRhythm.generate(
                 ps.euclideanSteps.coerceIn(2, 32),
