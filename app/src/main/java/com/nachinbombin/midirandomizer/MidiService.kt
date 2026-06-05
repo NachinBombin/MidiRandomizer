@@ -36,6 +36,10 @@ class MidiService : Service() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var scheduler: ExecutorService? = null
 
+    // Dedicated single-thread executor for chord note-off events so strum
+    // delays don't block the main note loop.
+    private val chordHandler = Handler(Looper.getMainLooper())
+
     private var midiManager: MidiManager? = null
     private var midiDevice: MidiDevice?   = null
     private var inputPort: MidiInputPort? = null
@@ -48,26 +52,34 @@ class MidiService : Service() {
     @Volatile private var v3Config = VoiceConfig()
 
     data class Voice1Params(
-        val bpm: Int = 120,
-        val velocity: Int = 100,
-        val minOctave: Int = 3,
-        val maxOctave: Int = 5,
-        val channel: Int = 0,
-        val scale: Int = 0,
-        val rootNote: Int = 0,
-        val timingMode: Int = TIMING_METRONOME,
-        val proSettings: ProSettings = ProSettings(),
-        val style: VoiceStyle = VoiceStyle.GENERATIVE,
-        val droneTiming: DroneTimingMode = DroneTimingMode.CONSTANT,
-        val droneMinBeats: Int = 16,
-        val droneMaxBeats: Int = 64
+        val bpm:          Int              = 120,
+        val velocity:     Int              = 100,
+        val minOctave:    Int              = 3,
+        val maxOctave:    Int              = 5,
+        val channel:      Int              = 0,
+        val scale:        Int              = 0,
+        val rootNote:     Int              = 0,
+        val timingMode:   Int              = TIMING_METRONOME,
+        val proSettings:  ProSettings      = ProSettings(),
+        val style:        VoiceStyle       = VoiceStyle.GENERATIVE,
+        val droneTiming:  DroneTimingMode  = DroneTimingMode.CONSTANT,
+        val droneMinBeats: Int             = 16,
+        val droneMaxBeats: Int             = 64,
+        // Full chord configuration – defaults reproduce naïve behaviour
+        val chordConfig:  ChordConfig      = ChordConfig()
     )
 
     private var voice2Engine: VoiceEngine? = null
     private var voice3Engine: VoiceEngine? = null
 
     private val activeNotes = ConcurrentHashMap<Int, MutableSet<Int>>()
-    private val lastV2Note = AtomicInteger(60)
+    private val lastV2Note  = AtomicInteger(60)
+
+    // Tracks the notes fired in the most recent chord strum for voice-leading
+    private var lastChordNotes: List<Int> = emptyList()
+
+    // Tracks the current OSTINATO step index
+    private var ostinatoStep = 0
 
     private val scales = listOf(
         listOf(0,1,2,3,4,5,6,7,8,9,10,11),   // 0  Chromatic
@@ -123,9 +135,9 @@ class MidiService : Service() {
     }
 
     fun isMidiPlaying() = isPlaying
-    fun getV1Params() = v1Params
-    fun getV2Config() = v2Config
-    fun getV3Config() = v3Config
+    fun getV1Params()   = v1Params
+    fun getV2Config()   = v2Config
+    fun getV3Config()   = v3Config
 
     @Synchronized
     fun updateV1Parameters(p: Voice1Params) {
@@ -200,9 +212,7 @@ class MidiService : Service() {
             val ic    = cfg.independentConfig
             val oldIc = oldCfg.independentConfig
 
-            // MELODIC is treated the same as INDEPENDENT for start/stop purposes.
-            // The chord-aware melody engine will be wired in the chord update phase.
-            val isIndependent = cfg.mode == VoiceMode.INDEPENDENT || cfg.mode == VoiceMode.MELODIC
+            val isIndependent  = cfg.mode == VoiceMode.INDEPENDENT || cfg.mode == VoiceMode.MELODIC
             val wasIndependent = oldCfg.mode == VoiceMode.INDEPENDENT || oldCfg.mode == VoiceMode.MELODIC
 
             val switchedToHarmony     = cfg.mode == VoiceMode.HARMONY && oldCfg.mode != VoiceMode.HARMONY
@@ -257,7 +267,7 @@ class MidiService : Service() {
             val ic    = cfg.independentConfig
             val oldIc = oldCfg.independentConfig
 
-            val isIndependent = cfg.mode == VoiceMode.INDEPENDENT || cfg.mode == VoiceMode.MELODIC
+            val isIndependent  = cfg.mode == VoiceMode.INDEPENDENT || cfg.mode == VoiceMode.MELODIC
             val wasIndependent = oldCfg.mode == VoiceMode.INDEPENDENT || oldCfg.mode == VoiceMode.MELODIC
 
             val switchedToHarmony     = cfg.mode == VoiceMode.HARMONY && oldCfg.mode != VoiceMode.HARMONY
@@ -361,7 +371,6 @@ class MidiService : Service() {
             Log.e(TAG, "startForeground failed", e)
         }
 
-        // MELODIC mode boots the same independent engine as INDEPENDENT
         voice2Engine?.let {
             val isInd = v2Config.mode == VoiceMode.INDEPENDENT || v2Config.mode == VoiceMode.MELODIC
             if (v2Config.enabled && isInd) it.startIndependent()
@@ -384,6 +393,7 @@ class MidiService : Service() {
         scheduler = null
         old?.shutdownNow()
 
+        chordHandler.removeCallbacksAndMessages(null)
         allNotesOff()
         voice2Engine?.stop()
         voice3Engine?.stop()
@@ -473,16 +483,24 @@ class MidiService : Service() {
         return JitterEngine.applyJitter(modeInterval, ps.jitterAmount, ps.jitterType)
     }
 
+    // ── V1 note dispatch ─────────────────────────────────────────────────────
+
     private fun sendRandomV1Note() {
         val p = v1Params
-        val isDrone = p.style == VoiceStyle.SINGLE_NOTE_DRONE || p.style == VoiceStyle.EVOLVING_DRONE
+        // Route to dedicated chord engine for CHORDS style
+        if (p.style == VoiceStyle.CHORDS) {
+            sendChordV1()
+            return
+        }
+
+        val isDrone  = p.style == VoiceStyle.SINGLE_NOTE_DRONE || p.style == VoiceStyle.EVOLVING_DRONE
         val prevNote = v1CurrentNote
 
         if (!isDrone && prevNote >= 0) sendNoteOffRaw(1, prevNote, p.channel)
 
-        val baseVel = v1VelocityShaper.next()
+        val baseVel    = v1VelocityShaper.next()
         val gestureScale = v1MelodicDispatcher?.gestureVelocityScale() ?: 1f
-        val vel = (baseVel * gestureScale).toInt().coerceIn(1, 127)
+        val vel        = (baseVel * gestureScale).toInt().coerceIn(1, 127)
 
         val noteNumber: Int
 
@@ -493,8 +511,8 @@ class MidiService : Service() {
             val rootOffset = if (p.rootNote > 0) p.rootNote - 1 else 0
             noteNumber = ((selectedOctave + 1) * 12 + rootOffset).coerceIn(0, 127)
         } else {
-            val intervals = scales.getOrNull(p.scale) ?: return
-            val rawDegree = v1MelodicDispatcher?.nextDegree() ?: Random.nextInt(intervals.size)
+            val intervals  = scales.getOrNull(p.scale) ?: return
+            val rawDegree  = v1MelodicDispatcher?.nextDegree() ?: Random.nextInt(intervals.size)
             if (rawDegree < 0) return
             val degreeIdx  = rawDegree.coerceIn(0, intervals.size - 1)
             val interval   = intervals[degreeIdx]
@@ -519,6 +537,132 @@ class MidiService : Service() {
         val noteName = noteNumberToName(noteNumber)
         mainHandler.post { listener?.onNotePlayed(noteName, noteNumber, vel) }
     }
+
+    /**
+     * Chord engine for VoiceStyle.CHORDS.
+     *
+     * 1. Pick a root note the same way GENERATIVE does.
+     * 2. Build chord tones via DiatonicHarmony.buildChordNotes().
+     * 3. Apply inversion (including AUTO voice-leading from lastChordNotes).
+     * 4. Handle rhythmic figure (SUSTAINED / REATTACK / BROKEN / OSTINATO).
+     * 5. Dispatch via plucking style (Simultaneous / Ascending / Descending / Random / PercussiveUp).
+     */
+    private fun sendChordV1() {
+        val p   = v1Params
+        val cc  = p.chordConfig
+
+        // ── 1. Silence previous chord ────────────────────────────────────────
+        val prevNotes = lastChordNotes.toList()
+        if (prevNotes.isNotEmpty()) {
+            prevNotes.forEach { sendNoteOffRaw(1, it, p.channel) }
+        }
+
+        // ── 2. Pick a root note (same logic as GENERATIVE) ───────────────────
+        val intervals = scales.getOrNull(p.scale) ?: return
+        val rawDegree = v1MelodicDispatcher?.nextDegree() ?: Random.nextInt(intervals.size)
+        if (rawDegree < 0) return
+        val degreeIdx     = rawDegree.coerceIn(0, intervals.size - 1)
+        val interval      = intervals[degreeIdx]
+        val octRange      = (p.maxOctave - p.minOctave + 1).coerceAtLeast(1)
+        val regShift      = v1MelodicDispatcher?.gestureRegisterShift() ?: 0
+        val rawOctave     = p.minOctave + Random.nextInt(octRange) + regShift
+        val selectedOctave = rawOctave.coerceIn(p.minOctave, p.maxOctave)
+        val rootOffset    = if (p.rootNote > 0) p.rootNote - 1 else 0
+        val rootMidi      = ((selectedOctave + 1) * 12 + interval + rootOffset).coerceIn(0, 127)
+
+        // ── 3. Build chord tones ─────────────────────────────────────────────
+        val rawNotes = DiatonicHarmony.buildChordNotes(
+            rootMidi        = rootMidi,
+            scaleIntervals  = intervals,
+            rootNote        = p.rootNote,
+            cfg             = cc
+        )
+
+        // ── 4. Apply inversion ───────────────────────────────────────────────
+        val chordNotes = DiatonicHarmony.applyInversion(
+            notes          = rawNotes,
+            mode           = cc.inversionMode,
+            prevChordNotes = lastChordNotes
+        )
+        lastChordNotes = chordNotes
+        v1CurrentNote  = chordNotes.firstOrNull() ?: rootMidi
+
+        // ── 5. Rhythmic figure gate ──────────────────────────────────────────
+        val shouldFire = when (cc.rhythmicFigure) {
+            RhythmicFigure.SUSTAINED  -> true
+            RhythmicFigure.REATTACK   -> true   // always fires; gate logic could be added
+            RhythmicFigure.BROKEN     -> true    // broken-chord pattern handled in dispatch
+            RhythmicFigure.OSTINATO   -> {
+                // Binary ostinato pattern [true, false, true, true]
+                val pattern = booleanArrayOf(true, false, true, true)
+                val hit     = pattern[ostinatoStep % pattern.size]
+                ostinatoStep++
+                hit
+            }
+        }
+        if (!shouldFire) {
+            // update observers with root even on silence
+            voice2Engine?.onV1NoteOn(v1CurrentNote, p.velocity)
+            voice3Engine?.onV1NoteOn(v1CurrentNote, p.velocity)
+            mainHandler.post { listener?.onNotePlayed(noteNumberToName(v1CurrentNote), v1CurrentNote, 0) }
+            return
+        }
+
+        // ── 6. Velocity ──────────────────────────────────────────────────────
+        val baseVel    = v1VelocityShaper.next()
+        val gestureScale = v1MelodicDispatcher?.gestureVelocityScale() ?: 1f
+        val baseVelFinal = (baseVel * gestureScale).toInt().coerceIn(1, 127)
+
+        // ── 7. Dispatch via plucking style ───────────────────────────────────
+        val notesToPlay: List<Int> = if (cc.rhythmicFigure == RhythmicFigure.BROKEN) {
+            // Broken/Alberti: cycle through bass, upper, middle, upper
+            val bs = if (chordNotes.size >= 3) {
+                val b = chordNotes[0]
+                val m = chordNotes[1]
+                val t = chordNotes[chordNotes.lastIndex]
+                listOf(b, t, m, t)
+            } else chordNotes
+            listOf(bs[ostinatoStep % bs.size])
+        } else chordNotes
+
+        val strum = cc.strumLength.coerceIn(1, notesToPlay.size)
+        val orderedNotes: List<Int> = when (cc.pluckingStyle) {
+            1 -> notesToPlay.take(strum).sorted()                        // Ascending
+            2 -> notesToPlay.take(strum).sortedDescending()              // Descending
+            3 -> notesToPlay.take(strum).shuffled()                      // Random
+            4 -> notesToPlay.take(strum).sorted()                        // PercussiveUp (asc + vel decay)
+            else -> notesToPlay.take(strum)                               // Simultaneous
+        }
+
+        val delayMs = cc.pluckingDelayMs.coerceIn(0L, 500L)
+        val holdMs  = calculateV1Interval().coerceAtLeast(100L)
+
+        orderedNotes.forEachIndexed { i, note ->
+            val velForNote = if (cc.pluckingStyle == 4) {
+                // PercussiveUp: velocity decays ~15% per note
+                (baseVelFinal * (1.0 - i * 0.15)).toInt().coerceIn(1, 127)
+            } else {
+                baseVelFinal
+            }
+            val fireDelay = if (cc.pluckingStyle == 0) 0L else delayMs * i
+            chordHandler.postDelayed({
+                if (isPlaying) sendNoteOnRaw(1, note, velForNote, p.channel)
+            }, fireDelay)
+        }
+
+        // Schedule note-off for all chord notes after hold duration
+        chordHandler.postDelayed({
+            if (isPlaying) orderedNotes.forEach { sendNoteOffRaw(1, it, p.channel) }
+        }, holdMs)
+
+        // Notify V2/V3 engines and UI with the root note
+        voice2Engine?.onV1NoteOn(v1CurrentNote, baseVelFinal)
+        voice3Engine?.onV1NoteOn(v1CurrentNote, baseVelFinal)
+        val noteName = noteNumberToName(v1CurrentNote)
+        mainHandler.post { listener?.onNotePlayed(noteName, v1CurrentNote, baseVelFinal) }
+    }
+
+    // ── MIDI raw I/O ─────────────────────────────────────────────────────────
 
     fun sendNoteOnRaw(voiceId: Int, note: Int, vel: Int, ch: Int) {
         val channels = if (ch == 0) (0..15).toList() else listOf(ch - 1)
@@ -638,5 +782,10 @@ class MidiService : Service() {
         return START_STICKY
     }
 
-    override fun onDestroy() { closeDevice(); scheduler?.shutdownNow(); super.onDestroy() }
+    override fun onDestroy() {
+        chordHandler.removeCallbacksAndMessages(null)
+        closeDevice()
+        scheduler?.shutdownNow()
+        super.onDestroy()
+    }
 }
