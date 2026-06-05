@@ -90,10 +90,7 @@ class MidiService : Service() {
     )
 
     private var v1VelocityShaper: VelocityShaper = VelocityShaper(VelocityPattern.RANDOM, 100)
-
-    // ── NEW: replaces the old v1MarkovChain field ─────────────────────────
     private var v1MelodicDispatcher: MelodicEngineDispatcher? = null
-
     private var v1Euclidean:     BooleanArray    = BooleanArray(0)
     private var v1EuclideanStep                  = 0
     private var v1CurrentNote                    = -1
@@ -203,8 +200,13 @@ class MidiService : Service() {
             val ic    = cfg.independentConfig
             val oldIc = oldCfg.independentConfig
 
-            val switchedToHarmony     = cfg.mode == VoiceMode.HARMONY     && oldCfg.mode != VoiceMode.HARMONY
-            val switchedToIndependent = cfg.mode == VoiceMode.INDEPENDENT && oldCfg.mode != VoiceMode.INDEPENDENT
+            // MELODIC is treated the same as INDEPENDENT for start/stop purposes.
+            // The chord-aware melody engine will be wired in the chord update phase.
+            val isIndependent = cfg.mode == VoiceMode.INDEPENDENT || cfg.mode == VoiceMode.MELODIC
+            val wasIndependent = oldCfg.mode == VoiceMode.INDEPENDENT || oldCfg.mode == VoiceMode.MELODIC
+
+            val switchedToHarmony     = cfg.mode == VoiceMode.HARMONY && oldCfg.mode != VoiceMode.HARMONY
+            val switchedToIndependent = isIndependent && !wasIndependent
 
             when {
                 switchedToHarmony -> {
@@ -220,17 +222,16 @@ class MidiService : Service() {
                 else -> {
                     val needsRestart =
                         (cfg.enabled != oldCfg.enabled) ||
-                        (cfg.mode == VoiceMode.INDEPENDENT && (
+                        (isIndependent && (
                             ic.style != oldIc.style ||
                             (ic.style == VoiceStyle.SINGLE_NOTE_DRONE &&
                                 (ic.rootNote != oldIc.rootNote ||
                                  ic.droneOctaveMin != oldIc.droneOctaveMin ||
                                  ic.droneOctaveMax != oldIc.droneOctaveMax))
                         ))
-
                     if (needsRestart) {
                         voice2Engine?.stopIndependent()
-                        if (cfg.enabled && cfg.mode == VoiceMode.INDEPENDENT) voice2Engine?.startIndependent()
+                        if (cfg.enabled && isIndependent) voice2Engine?.startIndependent()
                     }
                 }
             }
@@ -256,8 +257,11 @@ class MidiService : Service() {
             val ic    = cfg.independentConfig
             val oldIc = oldCfg.independentConfig
 
-            val switchedToHarmony     = cfg.mode == VoiceMode.HARMONY     && oldCfg.mode != VoiceMode.HARMONY
-            val switchedToIndependent = cfg.mode == VoiceMode.INDEPENDENT && oldCfg.mode != VoiceMode.INDEPENDENT
+            val isIndependent = cfg.mode == VoiceMode.INDEPENDENT || cfg.mode == VoiceMode.MELODIC
+            val wasIndependent = oldCfg.mode == VoiceMode.INDEPENDENT || oldCfg.mode == VoiceMode.MELODIC
+
+            val switchedToHarmony     = cfg.mode == VoiceMode.HARMONY && oldCfg.mode != VoiceMode.HARMONY
+            val switchedToIndependent = isIndependent && !wasIndependent
 
             when {
                 switchedToHarmony -> {
@@ -273,17 +277,16 @@ class MidiService : Service() {
                 else -> {
                     val needsRestart =
                         (cfg.enabled != oldCfg.enabled) ||
-                        (cfg.mode == VoiceMode.INDEPENDENT && (
+                        (isIndependent && (
                             ic.style != oldIc.style ||
                             (ic.style == VoiceStyle.SINGLE_NOTE_DRONE &&
                                 (ic.rootNote != oldIc.rootNote ||
                                  ic.droneOctaveMin != oldIc.droneOctaveMin ||
                                  ic.droneOctaveMax != oldIc.droneOctaveMax))
                         ))
-
                     if (needsRestart) {
                         voice3Engine?.stopIndependent()
-                        if (cfg.enabled && cfg.mode == VoiceMode.INDEPENDENT) voice3Engine?.startIndependent()
+                        if (cfg.enabled && isIndependent) voice3Engine?.startIndependent()
                     }
                 }
             }
@@ -300,7 +303,8 @@ class MidiService : Service() {
     }
 
     private fun effectiveVoiceConfig(cfg: VoiceConfig): VoiceConfig {
-        return if (cfg.mode == VoiceMode.INDEPENDENT && cfg.independentConfig.useSharedPro) {
+        val isIndependent = cfg.mode == VoiceMode.INDEPENDENT || cfg.mode == VoiceMode.MELODIC
+        return if (isIndependent && cfg.independentConfig.useSharedPro) {
             cfg.copy(independentConfig = cfg.independentConfig.copy(proSettings = v1Params.proSettings))
         } else cfg
     }
@@ -357,8 +361,15 @@ class MidiService : Service() {
             Log.e(TAG, "startForeground failed", e)
         }
 
-        voice2Engine?.let { if (v2Config.enabled && v2Config.mode == VoiceMode.INDEPENDENT) it.startIndependent() }
-        voice3Engine?.let { if (v3Config.enabled && v3Config.mode == VoiceMode.INDEPENDENT) it.startIndependent() }
+        // MELODIC mode boots the same independent engine as INDEPENDENT
+        voice2Engine?.let {
+            val isInd = v2Config.mode == VoiceMode.INDEPENDENT || v2Config.mode == VoiceMode.MELODIC
+            if (v2Config.enabled && isInd) it.startIndependent()
+        }
+        voice3Engine?.let {
+            val isInd = v3Config.mode == VoiceMode.INDEPENDENT || v3Config.mode == VoiceMode.MELODIC
+            if (v3Config.enabled && isInd) it.startIndependent()
+        }
 
         scheduler = Executors.newSingleThreadExecutor()
         scheduler?.execute(noteLoop)
@@ -385,10 +396,19 @@ class MidiService : Service() {
             val set = activeNotes[v] ?: continue
             val notes = set.toList()
             set.clear()
+            val cfg2 = v2Config; val cfg3 = v3Config
             val baseCh = when (v) {
                 1 -> v1Params.channel
-                2 -> if (v2Config.mode == VoiceMode.HARMONY) v2Config.harmonyConfig.midiChannel else v2Config.independentConfig.midiChannel
-                3 -> if (v3Config.mode == VoiceMode.HARMONY) v3Config.harmonyConfig.midiChannel else v3Config.independentConfig.midiChannel
+                2 -> when (cfg2.mode) {
+                    VoiceMode.HARMONY     -> cfg2.harmonyConfig.midiChannel
+                    VoiceMode.INDEPENDENT,
+                    VoiceMode.MELODIC     -> cfg2.independentConfig.midiChannel
+                }
+                3 -> when (cfg3.mode) {
+                    VoiceMode.HARMONY     -> cfg3.harmonyConfig.midiChannel
+                    VoiceMode.INDEPENDENT,
+                    VoiceMode.MELODIC     -> cfg3.independentConfig.midiChannel
+                }
                 else -> 0
             }
             notes.forEach { note -> sendNoteOffRaw(v, note, baseCh) }
@@ -460,7 +480,6 @@ class MidiService : Service() {
 
         if (!isDrone && prevNote >= 0) sendNoteOffRaw(1, prevNote, p.channel)
 
-        // ── velocity: apply gesture scale on top of shaper ────────────────
         val baseVel = v1VelocityShaper.next()
         val gestureScale = v1MelodicDispatcher?.gestureVelocityScale() ?: 1f
         val vel = (baseVel * gestureScale).toInt().coerceIn(1, 127)
@@ -474,24 +493,15 @@ class MidiService : Service() {
             val rootOffset = if (p.rootNote > 0) p.rootNote - 1 else 0
             noteNumber = ((selectedOctave + 1) * 12 + rootOffset).coerceIn(0, 127)
         } else {
-            val ps        = p.proSettings
             val intervals = scales.getOrNull(p.scale) ?: return
-
-            // ── central dispatch: MelodicEngineDispatcher ─────────────────
             val rawDegree = v1MelodicDispatcher?.nextDegree() ?: Random.nextInt(intervals.size)
-
-            // -1 means gesture density gate suppressed this note
             if (rawDegree < 0) return
-
-            val degreeIdx = rawDegree.coerceIn(0, intervals.size - 1)
-            val interval  = intervals[degreeIdx]
-
-            // gesture register shift applied to octave selection
-            val regShift  = v1MelodicDispatcher?.gestureRegisterShift() ?: 0
-            val octRange  = (p.maxOctave - p.minOctave + 1).coerceAtLeast(1)
-            val rawOctave = p.minOctave + Random.nextInt(octRange) + regShift
+            val degreeIdx  = rawDegree.coerceIn(0, intervals.size - 1)
+            val interval   = intervals[degreeIdx]
+            val regShift   = v1MelodicDispatcher?.gestureRegisterShift() ?: 0
+            val octRange   = (p.maxOctave - p.minOctave + 1).coerceAtLeast(1)
+            val rawOctave  = p.minOctave + Random.nextInt(octRange) + regShift
             val selectedOctave = rawOctave.coerceIn(p.minOctave, p.maxOctave)
-
             val rootOffset = if (p.rootNote > 0) p.rootNote - 1 else 0
             noteNumber = ((selectedOctave + 1) * 12 + interval + rootOffset).coerceIn(0, 127)
         }
@@ -568,9 +578,6 @@ class MidiService : Service() {
 
         v1VelocityShaper = VelocityShaper(ps.velocityPattern, p.velocity).also { it.reset() }
 
-        // ── Build the dispatcher for whatever engine is selected ──────────
-        // NAIVE with markovEnabled=false falls through to dispatcher NAIVE mode;
-        // legacy markovEnabled=true maps to MARKOV for backwards compatibility.
         val effectiveSettings = if (ps.melodicEngine == MelodicEngine.NAIVE && ps.markovEnabled) {
             ps.copy(melodicEngine = MelodicEngine.MARKOV)
         } else ps
@@ -608,7 +615,7 @@ class MidiService : Service() {
         }
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("MIDI Randomizer")
-            .setContentText("Generating notes…")
+            .setContentText("Generating notes\u2026")
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentIntent(pi)
             .setOngoing(true)

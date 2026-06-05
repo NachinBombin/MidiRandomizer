@@ -6,10 +6,10 @@ import kotlinx.parcelize.RawValue
 import kotlin.random.Random
 
 @Parcelize
-enum class VoiceMode : Parcelable { HARMONY, INDEPENDENT }
+enum class VoiceMode : Parcelable { HARMONY, INDEPENDENT, MELODIC }
 
 @Parcelize
-enum class VoiceStyle : Parcelable { GENERATIVE, SINGLE_NOTE_DRONE, EVOLVING_DRONE }
+enum class VoiceStyle : Parcelable { GENERATIVE, SINGLE_NOTE_DRONE, EVOLVING_DRONE, CHORDS }
 
 @Parcelize
 enum class DroneTimingMode : Parcelable { CONSTANT, RANDOM }
@@ -35,8 +35,6 @@ data class IndependentConfig(
     val selectedScale:    Int              = 1,
     val timingMode:       Int              = 0,
     val rootNote:         Int              = 0,
-    // ProSettings is a data class with many nested configs; @RawValue tells
-    // Parcelize to serialise it via writeValue() / Serializable fallback.
     val proSettings:      @RawValue ProSettings = ProSettings(),
     val useSharedPro:     Boolean          = true,
     val style:            VoiceStyle       = VoiceStyle.GENERATIVE,
@@ -44,7 +42,10 @@ data class IndependentConfig(
     val droneMinBeats:    Int              = 16,
     val droneMaxBeats:    Int              = 64,
     val droneOctaveMin:   Int              = 3,
-    val droneOctaveMax:   Int              = 5
+    val droneOctaveMax:   Int              = 5,
+    // Chords-mode specific
+    val chordsType:       Int              = 0,   // 0=Triad, 1=7th, 2=Suspended, 3=Power
+    val chordsRhythm:     Int              = 0    // 0=On beat, 1=Syncopated, 2=Arpeggio
 ) : Parcelable
 
 @Parcelize
@@ -78,8 +79,8 @@ object DiatonicHarmony {
         wrapAround:   Boolean = false
     ): Int {
         if (allowedNotes.isEmpty()) return v1MidiNote
-        val idx       = indexOf(v1MidiNote, allowedNotes)
-        val targetIdx = idx + stepOffset
+        val idx        = indexOf(v1MidiNote, allowedNotes)
+        val targetIdx  = idx + stepOffset
         val clampedIdx = when {
             wrapAround -> ((targetIdx % allowedNotes.size) + allowedNotes.size) % allowedNotes.size
             else       -> targetIdx.coerceIn(0, allowedNotes.lastIndex)
