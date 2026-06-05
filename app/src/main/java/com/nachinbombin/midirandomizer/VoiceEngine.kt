@@ -33,11 +33,14 @@ class VoiceEngine(
     private var currentNoteCh  = 0
 
     private var velocityShaper: VelocityShaper = VelocityShaper(VelocityPattern.RANDOM, 90)
-    private var markovChain:    MarkovMelody?   = null
+
+    // Replaced markovChain: MarkovMelody? with a full dispatcher
+    private var dispatcher: MelodicEngineDispatcher? = null
+
     private var euclideanPattern: BooleanArray  = BooleanArray(0)
     private var euclideanStep = 0
 
-    // ── Harmony mode ───────────────────────────────────────────────────────
+    // ── Harmony mode ──────────────────────────────────────────────────────
 
     fun onV1NoteOn(v1Note: Int, v1Velocity: Int) {
         val cfg = config
@@ -122,7 +125,10 @@ class VoiceEngine(
                     hit
                 } else true
 
-                if (isOnset) fireIndependentNote(ic)
+                if (isOnset) {
+                    dispatcher?.advanceBeat()
+                    fireIndependentNote(ic)
+                }
 
                 try {
                     Thread.sleep(calcInterval(ic).coerceAtLeast(10L))
@@ -164,17 +170,29 @@ class VoiceEngine(
             val intervals = getScales().getOrNull(ic.selectedScale) ?: return
             val ps        = ic.proSettings
 
-            val degreeIdx = if (ps.markovEnabled) {
-                markovChain?.nextDegree() ?: Random.nextInt(intervals.size)
-            } else Random.nextInt(intervals.size)
+            // — Dispatch through MelodicEngineDispatcher (replaces direct markovChain call) —
+            val degreeIdx = dispatcher?.nextDegree() ?: Random.nextInt(intervals.size)
+
+            // -1 means the density gate suppressed this onset; skip the note
+            if (degreeIdx == -1) return
 
             val interval = intervals[degreeIdx]
-            val oct      = octMin + Random.nextInt(octRange)
-            val root     = if (ic.rootNote > 0) ic.rootNote - 1 else getGlobalRoot()
-            noteNumber   = ((oct + 1) * 12 + interval + root).coerceIn(0, 127)
+
+            // Gesture register shift adjusts the octave selection window
+            val regShift = dispatcher?.gestureRegisterShift() ?: 0
+            val shiftedMin = (octMin + regShift).coerceIn(0, 8)
+            val shiftedMax = (octMax + regShift).coerceIn(shiftedMin, 9)
+            val shiftedRange = (shiftedMax - shiftedMin + 1).coerceAtLeast(1)
+
+            val oct  = shiftedMin + Random.nextInt(shiftedRange)
+            val root = if (ic.rootNote > 0) ic.rootNote - 1 else getGlobalRoot()
+            noteNumber = ((oct + 1) * 12 + interval + root).coerceIn(0, 127)
         }
 
-        val vel = velocityShaper.next()
+        // Gesture velocity scale applied on top of shaper output
+        val baseVel = velocityShaper.next()
+        val gScale  = dispatcher?.gestureVelocityScale() ?: 1f
+        val vel     = (baseVel * gScale).toInt().coerceIn(1, 127)
 
         onNoteOnRaw(noteNumber, vel, ic.midiChannel)
         onNotePlayed(noteNumber)
@@ -209,17 +227,14 @@ class VoiceEngine(
 
     private fun rebuildHelpers(ic: IndependentConfig) {
         val ps   = ic.proSettings
-        val scSz = getScales().getOrNull(ic.selectedScale)?.size ?: 7
+        val intervals = getScales().getOrNull(ic.selectedScale) ?: listOf(0, 2, 4, 5, 7, 9, 11)
+
         velocityShaper = VelocityShaper(ps.velocityPattern, ic.velocity).also { it.reset() }
-        markovChain = if (ps.markovEnabled)
-            MarkovMelody(
-                scaleSize   = scSz,
-                style       = ps.melodicLogicStyle,
-                secondOrder = ps.secondOrderMarkov,
-                narmour     = ps.narmourConfig,
-                gravity     = ps.contourGravityConfig
-            ).also { it.reset() }
-        else null
+
+        // Build dispatcher for any engine (NAIVE, MARKOV, PWG, L_SYSTEM, CELL_AUTOMATA, NRT_MELODIC)
+        // NAIVE mode: dispatcher.nextDegree() returns Random.nextInt(scaleSize) — same as before
+        dispatcher = MelodicEngineDispatcher(intervals, ps).also { /* already reset internally */ }
+
         if (ps.euclideanEnabled) {
             euclideanPattern = EuclideanRhythm.generate(
                 ps.euclideanSteps.coerceIn(2, 32),
