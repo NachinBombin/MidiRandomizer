@@ -91,15 +91,20 @@ data class HarmonyConfig(
 ) : Parcelable
 
 @Parcelize
+enum class ParamFollowMode : Parcelable { CUSTOM, FOLLOW_MAIN, FRACTION_MAIN }
+
+@Parcelize
 data class IndependentConfig(
-    val bpm:              Int              = 120,
+    val bpmMode:          ParamFollowMode  = ParamFollowMode.CUSTOM,
+    val bpmFraction:      Float            = 1f,     // used when mode = FRACTION_MAIN
+    val bpm:              Int              = 120,    // used when mode = CUSTOM
+    val selectedScale:    Int              = 1,      // 0 = Follow Main, 1..N = Specific Scale
+    val rootNote:         Int              = 0,      // 0 = Follow Main, 1..12 = Specific Root
     val velocity:         Int              = 90,
     val minOctave:        Int              = 3,
     val maxOctave:        Int              = 5,
-    val midiChannel:      Int              = 0,
-    val selectedScale:    Int              = 1,
+    val midiChannel:      Int              = 0,      // 0..16, 17 = Follow Main
     val timingMode:       Int              = 0,
-    val rootNote:         Int              = 0,
     val proSettings:      @RawValue ProSettings = ProSettings(),
     val useSharedPro:     Boolean          = true,
     val style:            VoiceStyle       = VoiceStyle.GENERATIVE,
@@ -289,7 +294,7 @@ object DiatonicHarmony {
             MelodicRelationMode.COUNTER_MOTION -> {
                 // Prefer notes moving away from v1LastNote direction
                 // Simple heuristic: if last V1 note is in upper half, prefer lower candidates
-                val v1Mid = v1ChordNotes.average()
+                val v1Mid = try { v1ChordNotes.average() } catch (e: Exception) { 60.0 }
                 val prefer = if (v1Mid > 60) candidateNotes.filter { it < 60 }
                              else            candidateNotes.filter { it >= 60 }
                 prefer.ifEmpty { candidateNotes.toList() }
@@ -323,6 +328,6 @@ object DiatonicHarmony {
                     .ifEmpty { candidateNotes.toList() }
             }
         }
-        return filtered.toIntArray()
+        return if (filtered.isEmpty()) candidateNotes else filtered.toIntArray()
     }
 }

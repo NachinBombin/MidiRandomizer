@@ -45,16 +45,16 @@ class VoiceEngine(
     private var scheduler: ExecutorService? = null
     @Volatile private var running = false
 
-    private var currentNote   = -1
-    private var currentNoteCh = 0
+    @Volatile private var currentNote   = -1
+    @Volatile private var currentNoteCh = 0
 
     // Tracks previous chord for voice-leading AUTO inversion
-    private var lastChordNotes: List<Int> = emptyList()
+    @Volatile private var lastChordNotes: List<Int> = emptyList()
 
-    private var velocityShaper: VelocityShaper = VelocityShaper(VelocityPattern.RANDOM, 90)
-    private var dispatcher:     MelodicEngineDispatcher? = null
+    @Volatile private var velocityShaper: VelocityShaper = VelocityShaper(VelocityPattern.RANDOM, 90)
+    @Volatile private var dispatcher:     MelodicEngineDispatcher? = null
 
-    private var euclideanPattern: BooleanArray = BooleanArray(0)
+    @Volatile private var euclideanPattern: BooleanArray = BooleanArray(0)
     private var euclideanStep = 0
 
     // ── Harmony mode ────────────────────────────────────────────────
@@ -95,7 +95,11 @@ class VoiceEngine(
         val note = currentNote
         val ch   = currentNoteCh
         if (note >= 0) {
-            onNoteOffRaw(note, ch)
+            try {
+                onNoteOffRaw(note, ch)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in silenceCurrentNote: ${e.message}")
+            }
             currentNote   = -1
             currentNoteCh = 0
         }
@@ -128,34 +132,50 @@ class VoiceEngine(
 
     fun stop() { stopIndependent() }
 
+    /**
+     * Public hook for MidiService to trigger a rebuild when shared ProSettings change.
+     */
+    fun forceRebuildHelpers() {
+        if (running) rebuildHelpers()
+    }
+
     private val independentLoop = Runnable {
         try {
             while (running) {
-                val ic = config.independentConfig
-
-                if (ic.style == VoiceStyle.SINGLE_NOTE_DRONE) {
-                    fireIndependentNote(ic)
-                    try { Thread.sleep(Long.MAX_VALUE) } catch (_: InterruptedException) {}
-                    break
-                }
-
-                val ps       = ic.proSettings
-                val euclidOn = ps.euclideanEnabled && ic.timingMode == MidiService.TIMING_EUCLIDEAN
-                val isOnset  = if (euclidOn) {
-                    val hit = euclideanPattern.getOrElse(euclideanStep) { false }
-                    euclideanStep = (euclideanStep + 1) % euclideanPattern.size.coerceAtLeast(1)
-                    hit
-                } else true
-
-                if (isOnset) {
-                    dispatcher?.advanceBeat()
-                    fireIndependentNote(ic)
-                }
-
                 try {
+                    val ic = config.independentConfig
+
+                    if (ic.style == VoiceStyle.SINGLE_NOTE_DRONE) {
+                        fireIndependentNote(ic)
+                        try {
+                            Thread.sleep(Long.MAX_VALUE)
+                        } catch (_: InterruptedException) {
+                        }
+                        break
+                    }
+
+                    val ps = ic.proSettings
+                    val euclidOn = ps.euclideanEnabled && ic.timingMode == MidiService.TIMING_METRONOME
+                    val isOnset = if (euclidOn) {
+                        val pattern = euclideanPattern
+                        val hit = pattern.getOrElse(euclideanStep) { false }
+                        if (pattern.isNotEmpty()) {
+                            euclideanStep = (euclideanStep + 1) % pattern.size
+                        }
+                        hit
+                    } else true
+
+                    if (isOnset) {
+                        dispatcher?.advanceBeat()
+                        fireIndependentNote(ic)
+                    }
+
                     Thread.sleep(calcInterval(ic).coerceAtLeast(10L))
                 } catch (_: InterruptedException) {
                     break
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error in independentLoop iteration: ${e.message}")
+                    try { Thread.sleep(100) } catch (_: InterruptedException) { break }
                 }
             }
         } finally {
@@ -174,101 +194,99 @@ class VoiceEngine(
      * through DiatonicHarmony.applyMelodicRelation before picking a pitch.
      */
     private fun fireIndependentNote(ic: IndependentConfig) {
-        val isDrone  = ic.style == VoiceStyle.SINGLE_NOTE_DRONE || ic.style == VoiceStyle.EVOLVING_DRONE
-        val isChords = ic.style == VoiceStyle.CHORDS
-        val prevNote = currentNote
-        val prevCh   = currentNoteCh
+        try {
+            val isDrone = ic.style == VoiceStyle.SINGLE_NOTE_DRONE || ic.style == VoiceStyle.EVOLVING_DRONE
+            val isChords = ic.style == VoiceStyle.CHORDS
+            val prevNote = currentNote
+            val prevCh = currentNoteCh
 
-        if (!isDrone && !isChords && prevNote >= 0) onNoteOffRaw(prevNote, prevCh)
+            if (!isDrone && !isChords && prevNote >= 0) onNoteOffRaw(prevNote, prevCh)
 
-        // ─────────────────────────────────────────────────────────────────
-        //  CHORDS path – build and strum a chord
-        // ─────────────────────────────────────────────────────────────────
-        if (isChords) {
-            fireChordNotes(ic)
-            return
-        }
-
-        val octMin   = ic.droneOctaveMin
-        val octMax   = ic.droneOctaveMax
-        val octRange = (octMax - octMin + 1).coerceAtLeast(1)
-
-        val noteNumber: Int
-
-        if (ic.style == VoiceStyle.SINGLE_NOTE_DRONE) {
-            val selectedOctave = if (octRange == 1) octMin else octMin + Random.nextInt(octRange)
-            noteNumber = if (ic.rootNote == 0) {
-                val globalRoot     = getGlobalRoot()
-                val scaleIntervals = getScales().getOrNull(getGlobalScale()) ?: listOf(0)
-                ((selectedOctave + 1) * 12 + globalRoot + scaleIntervals[0]).coerceIn(0, 127)
-            } else {
-                ((selectedOctave + 1) * 12 + (ic.rootNote - 1)).coerceIn(0, 127)
+            // ─────────────────────────────────────────────────────────────────
+            //  CHORDS path – build and strum a chord
+            // ─────────────────────────────────────────────────────────────────
+            if (isChords) {
+                fireChordNotes(ic)
+                return
             }
-        } else {
-            val intervals = getScales().getOrNull(ic.selectedScale) ?: return
-            val ps        = ic.proSettings
 
-            // Get degree index from dispatcher (NAIVE / MARKOV / PWG / etc.)
-            val rawDegreeIdx = dispatcher?.nextDegree() ?: Random.nextInt(intervals.size)
-            if (rawDegreeIdx == -1) return   // density gate suppressed this onset
+            val octMin = ic.minOctave
+            val octMax = ic.maxOctave.coerceAtLeast(octMin)
+            val octRange = (octMax - octMin + 1).coerceAtLeast(1)
 
-            val interval = intervals[rawDegreeIdx]
+            val noteNumber: Int
 
-            // Gesture register shift
-            val regShift    = dispatcher?.gestureRegisterShift() ?: 0
-            val shiftedMin  = (octMin + regShift).coerceIn(0, 8)
-            val shiftedMax  = (octMax + regShift).coerceIn(shiftedMin, 9)
-            val shiftedRange= (shiftedMax - shiftedMin + 1).coerceAtLeast(1)
+            if (ic.style == VoiceStyle.SINGLE_NOTE_DRONE) {
+                val selectedOctave = if (octRange <= 1) octMin else octMin + Random.nextInt(octRange)
+                val rootOffset = if (ic.rootNote > 0) ic.rootNote - 1 else 0
+                noteNumber = ((selectedOctave + 1) * 12 + rootOffset).coerceIn(0, 127)
+            } else {
+                val intervals = getScales().getOrNull(ic.selectedScale) ?: return
 
-            val oct  = shiftedMin + Random.nextInt(shiftedRange)
-            val root = if (ic.rootNote > 0) ic.rootNote - 1 else getGlobalRoot()
-            var candidate = ((oct + 1) * 12 + interval + root).coerceIn(0, 127)
+                // Get degree index from dispatcher (NAIVE / MARKOV / PWG / etc.)
+                val rawDegreeIdx = dispatcher?.nextDegree() ?: Random.nextInt(intervals.size)
+                if (rawDegreeIdx == -1) return   // density gate suppressed this onset
 
-            // ───────────────────────────────────────────────────────
-            // MELODIC contrast filter – only active when:
-            //   1. mode == MELODIC
-            //   2. melodicRelationConfig.enabled == true
-            // Builds the full allowed note pool for the voice's own scale then
-            // narrows it via applyMelodicRelation before picking a note.
-            // ───────────────────────────────────────────────────────
-            val mrc = config.melodicRelationConfig
-            if (config.mode == VoiceMode.MELODIC && mrc.enabled) {
-                val voiceScale = getScales().getOrNull(ic.selectedScale) ?: intervals
-                val voiceRoot  = if (ic.rootNote > 0) ic.rootNote - 1 else getGlobalRoot()
-                // Build a candidate pool: all scale notes in the voice's octave window
-                val poolList = mutableListOf<Int>()
-                for (o in shiftedMin..shiftedMax) {
-                    for (iv in voiceScale) {
-                        val n = ((o + 1) * 12 + iv + voiceRoot).coerceIn(0, 127)
-                        poolList.add(n)
+                val interval = intervals.getOrElse(rawDegreeIdx % intervals.size) { intervals[0] }
+
+                // Gesture register shift
+                val regShift = dispatcher?.gestureRegisterShift() ?: 0
+                val shiftedMin = (octMin + regShift).coerceIn(0, 8)
+                val shiftedMax = (octMax + regShift).coerceIn(shiftedMin, 9)
+                val shiftedRange = (shiftedMax - shiftedMin + 1).coerceAtLeast(1)
+
+                val oct = if (shiftedRange <= 1) shiftedMin else shiftedMin + Random.nextInt(shiftedRange)
+                val rootOffset = if (ic.rootNote > 0) ic.rootNote - 1 else 0
+                var candidate = ((oct + 1) * 12 + interval + rootOffset).coerceIn(0, 127)
+
+                // ───────────────────────────────────────────────────────
+                // MELODIC contrast filter – only active when:
+                //   1. mode == MELODIC
+                //   2. melodicRelationConfig.enabled == true
+                // Builds the full allowed note pool for the voice's own scale then
+                // narrows it via applyMelodicRelation before picking a note.
+                // ───────────────────────────────────────────────────────
+                val mrc = config.melodicRelationConfig
+                if (config.mode == VoiceMode.MELODIC && mrc.enabled) {
+                    val voiceScale = getScales().getOrNull(ic.selectedScale) ?: intervals
+                    val voiceRootOffset = if (ic.rootNote > 0) ic.rootNote - 1 else 0
+                    // Build a candidate pool: all scale notes in the voice's octave window
+                    val poolList = mutableListOf<Int>()
+                    for (o in shiftedMin..shiftedMax) {
+                        for (iv in voiceScale) {
+                            val n = ((o + 1) * 12 + iv + voiceRootOffset).coerceIn(0, 127)
+                            poolList.add(n)
+                        }
+                    }
+                    val filteredPool = DiatonicHarmony.applyMelodicRelation(
+                        candidateNotes = poolList.toIntArray(),
+                        v1ChordNotes = getV1ChordNotes().toList(), // Send a snapshot
+                        v1LastNote = getV1LastNote(),
+                        relationCfg = mrc
+                    )
+                    if (filteredPool.isNotEmpty()) {
+                        candidate = filteredPool[Random.nextInt(filteredPool.size)]
                     }
                 }
-                val filteredPool = DiatonicHarmony.applyMelodicRelation(
-                    candidateNotes = poolList.toIntArray(),
-                    v1ChordNotes   = getV1ChordNotes(),
-                    v1LastNote     = getV1LastNote(),
-                    relationCfg    = mrc
-                )
-                if (filteredPool.isNotEmpty()) {
-                    candidate = filteredPool[Random.nextInt(filteredPool.size)]
-                }
+
+                noteNumber = candidate
             }
 
-            noteNumber = candidate
-        }
+            // Gesture velocity scale
+            val baseVel = velocityShaper.next()
+            val gScale = dispatcher?.gestureVelocityScale() ?: 1f
+            val vel = (baseVel * gScale).toInt().coerceIn(1, 127)
 
-        // Gesture velocity scale
-        val baseVel = velocityShaper.next()
-        val gScale  = dispatcher?.gestureVelocityScale() ?: 1f
-        val vel     = (baseVel * gScale).toInt().coerceIn(1, 127)
+            onNoteOnRaw(noteNumber, vel, ic.midiChannel)
+            onNotePlayed(noteNumber)
+            currentNote = noteNumber
+            currentNoteCh = ic.midiChannel
 
-        onNoteOnRaw(noteNumber, vel, ic.midiChannel)
-        onNotePlayed(noteNumber)
-        currentNote   = noteNumber
-        currentNoteCh = ic.midiChannel
-
-        if (isDrone && prevNote >= 0 && prevNote != noteNumber) {
-            onNoteOffRaw(prevNote, prevCh)
+            if (isDrone && prevNote >= 0 && prevNote != noteNumber) {
+                onNoteOffRaw(prevNote, prevCh)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in fireIndependentNote: ${e.message}")
         }
     }
 
@@ -279,70 +297,79 @@ class VoiceEngine(
      * avoid blocking the note loop thread.
      */
     private fun fireChordNotes(ic: IndependentConfig) {
-        val cc           = ic.chordConfig
-        val scaleIdx     = ic.selectedScale
-        val scaleIntervals = getScales().getOrNull(scaleIdx) ?: return
-        val root         = if (ic.rootNote > 0) ic.rootNote - 1 else getGlobalRoot()
+        try {
+            val cc = ic.chordConfig
+            val scaleIdx = ic.selectedScale
+            val scaleIntervals = getScales().getOrNull(scaleIdx) ?: return
+            val rootOffset = if (ic.rootNote > 0) ic.rootNote - 1 else 0
 
-        // Choose a root pitch in the allowed octave window
-        val octMin   = ic.minOctave
-        val octMax   = ic.maxOctave.coerceAtLeast(octMin)
-        val oct      = octMin + Random.nextInt(octMax - octMin + 1)
-        val rootMidi = ((oct + 1) * 12 + scaleIntervals[Random.nextInt(scaleIntervals.size)] + root)
-            .coerceIn(0, 127)
+            // Choose a root pitch in the allowed octave window
+            val octMin = ic.minOctave
+            val octMax = ic.maxOctave.coerceAtLeast(octMin)
+            val octRange = octMax - octMin + 1
+            val oct = if (octRange <= 1) octMin else octMin + Random.nextInt(octRange)
+            val rootMidi = ((oct + 1) * 12 + scaleIntervals[Random.nextInt(scaleIntervals.size)] + rootOffset)
+                .coerceIn(0, 127)
 
-        // Build chord
-        var chordNotes = DiatonicHarmony.buildChordNotes(rootMidi, scaleIntervals, root + 1, cc)
-        chordNotes     = DiatonicHarmony.applyInversion(chordNotes, cc.inversionMode, lastChordNotes)
-        lastChordNotes = chordNotes
+            // Build chord
+            var chordNotes = DiatonicHarmony.buildChordNotes(rootMidi, scaleIntervals, ic.rootNote, cc)
+            chordNotes = DiatonicHarmony.applyInversion(chordNotes, cc.inversionMode, lastChordNotes.toList())
+            lastChordNotes = chordNotes
 
-        // Silence previous chord
-        if (currentNote >= 0) onNoteOffRaw(currentNote, currentNoteCh)
+            // Silence previous chord
+            if (currentNote >= 0) onNoteOffRaw(currentNote, currentNoteCh)
 
-        val baseVel = velocityShaper.next()
-        val gScale  = dispatcher?.gestureVelocityScale() ?: 1f
-        val vel     = (baseVel * gScale).toInt().coerceIn(1, 127)
-        val ch      = ic.midiChannel
+            val baseVel = velocityShaper.next()
+            val gScale = dispatcher?.gestureVelocityScale() ?: 1f
+            val vel = (baseVel * gScale).toInt().coerceIn(1, 127)
+            val ch = ic.midiChannel
 
-        // Emit notes according to plucking style
-        val orderedNotes = when (cc.pluckingStyle) {
-            1    -> chordNotes.sorted()                                    // Ascending
-            2    -> chordNotes.sortedDescending()                          // Descending
-            3    -> chordNotes.shuffled()                                  // Random
-            4    -> chordNotes.sorted()                                    // Percussive Up (same order, accent handled by velocity)
-            else -> chordNotes                                             // 0 = Simultaneous
-        }
-
-        val delayMs   = cc.pluckingDelayMs
-        val strumSize = cc.strumLength.coerceIn(1, orderedNotes.size)
-
-        if (cc.pluckingStyle == 0 || delayMs <= 0L) {
-            // Simultaneous
-            orderedNotes.forEach { note ->
-                onNoteOnRaw(note, vel, ch)
+            // Emit notes according to plucking style
+            val orderedNotes = when (cc.pluckingStyle) {
+                1 -> chordNotes.sorted()                                    // Ascending
+                2 -> chordNotes.sortedDescending()                          // Descending
+                3 -> chordNotes.shuffled()                                  // Random
+                4 -> chordNotes.sorted()                                    // Percussive Up (same order, accent handled by velocity)
+                else -> chordNotes                                             // 0 = Simultaneous
             }
-        } else {
-            // Staggered — schedule on mainHandler so we don't block the loop thread
-            orderedNotes.take(strumSize).forEachIndexed { idx, note ->
-                if (idx == 0) {
+
+            val delayMs = cc.pluckingDelayMs
+            val strumSize = cc.strumLength.coerceIn(1, orderedNotes.size)
+
+            if (cc.pluckingStyle == 0 || delayMs <= 0L) {
+                // Simultaneous
+                orderedNotes.forEach { note ->
                     onNoteOnRaw(note, vel, ch)
-                } else {
-                    mainHandler.postDelayed({ onNoteOnRaw(note, vel, ch) }, delayMs * idx)
+                }
+            } else {
+                // Staggered — schedule on mainHandler so we don't block the loop thread
+                orderedNotes.take(strumSize).forEachIndexed { idx, note ->
+                    if (idx == 0) {
+                        onNoteOnRaw(note, vel, ch)
+                    } else {
+                        mainHandler.postDelayed({
+                            if (running) onNoteOnRaw(note, vel, ch)
+                        }, delayMs * idx)
+                    }
+                }
+                // Remaining notes (beyond strumSize) fire simultaneously with the last strum note
+                if (orderedNotes.size > strumSize) {
+                    val lastDelay = delayMs * strumSize
+                    orderedNotes.drop(strumSize).forEach { note ->
+                        mainHandler.postDelayed({
+                            if (running) onNoteOnRaw(note, vel, ch)
+                        }, lastDelay)
+                    }
                 }
             }
-            // Remaining notes (beyond strumSize) fire simultaneously with the last strum note
-            if (orderedNotes.size > strumSize) {
-                val lastDelay = delayMs * strumSize
-                orderedNotes.drop(strumSize).forEach { note ->
-                    mainHandler.postDelayed({ onNoteOnRaw(note, vel, ch) }, lastDelay)
-                }
-            }
-        }
 
-        // Track first chord note for note-off bookkeeping (simple: use root)
-        currentNote   = orderedNotes.firstOrNull() ?: rootMidi
-        currentNoteCh = ch
-        onNotePlayed(currentNote)
+            // Track first chord note for note-off bookkeeping (simple: use root)
+            currentNote = orderedNotes.firstOrNull() ?: rootMidi
+            currentNoteCh = ch
+            onNotePlayed(currentNote)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in fireChordNotes: ${e.message}")
+        }
     }
 
     private fun calcInterval(ic: IndependentConfig): Long {
@@ -374,21 +401,28 @@ class VoiceEngine(
      * are always picked up — critical for MELODIC mode where the dispatcher
      * (MARKOV, NRT, GestureCurve, Euclidean) must be built from fresh settings.
      */
+    @Synchronized
     private fun rebuildHelpers() {
-        val ic = config.independentConfig
-        val ps = ic.proSettings
-        val intervals = getScales().getOrNull(ic.selectedScale) ?: listOf(0, 2, 4, 5, 7, 9, 11)
+        try {
+            val ic = config.independentConfig
+            val ps = ic.proSettings
+            val intervals = getScales().getOrNull(ic.selectedScale) ?: listOf(0, 2, 4, 5, 7, 9, 11)
 
-        velocityShaper = VelocityShaper(ps.velocityPattern, ic.velocity).also { it.reset() }
-        dispatcher     = MelodicEngineDispatcher(intervals, ps)
+            velocityShaper = VelocityShaper(ps.velocityPattern, ic.velocity).also { it.reset() }
+            dispatcher = MelodicEngineDispatcher(intervals, ps)
 
-        if (ps.euclideanEnabled) {
-            euclideanPattern = EuclideanRhythm.generate(
-                ps.euclideanSteps.coerceIn(2, 32),
-                ps.euclideanDensity.coerceIn(1, ps.euclideanSteps),
-                ps.euclideanRotation
-            )
-            euclideanStep = 0
+            if (ps.euclideanEnabled) {
+                euclideanPattern = EuclideanRhythm.generate(
+                    ps.euclideanSteps.coerceIn(2, 32),
+                    ps.euclideanDensity.coerceIn(1, ps.euclideanSteps),
+                    ps.euclideanRotation
+                )
+                euclideanStep = 0
+            } else {
+                euclideanPattern = BooleanArray(0)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in rebuildHelpers: ${e.message}")
         }
     }
 }

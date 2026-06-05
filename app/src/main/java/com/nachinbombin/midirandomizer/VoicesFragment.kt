@@ -330,6 +330,178 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
 
     // ── Panel builders ────────────────────────────────────────────────────
 
+    private fun labeledRangeSlider(
+        ctx: Context, label: String, min: Int, max: Int, defMin: Int, defMax: Int,
+        tag: String, onSync: () -> Unit
+    ): LinearLayout {
+        val row = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 8, 0, 4) }
+        val tv  = TextView(ctx).apply {
+            text = "$label: $defMin - $defMax"; setTextColor(0xFFE8E6E1.toInt())
+        }
+        val rs = com.google.android.material.slider.RangeSlider(ctx).apply {
+            this.tag = tag; valueFrom = min.toFloat(); valueTo = max.toFloat()
+            stepSize = 1.0f; values = listOf(defMin.toFloat(), defMax.toFloat())
+            addOnChangeListener { _, _, fromUser ->
+                val v = values
+                tv.text = "$label: ${v[0].toInt()} - ${v[1].toInt()}"
+                if (fromUser) onSync()
+            }
+        }
+        row.addView(tv); row.addView(rs)
+        return row
+    }
+
+    private fun labeledSeekBarFollow(
+        ctx: Context, label: String, min: Int, max: Int, default: Int,
+        tag: String, followLabel: String, onSync: () -> Unit
+    ): LinearLayout {
+        val row = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 8, 0, 4) }
+        val tv  = TextView(ctx).apply {
+            text = "$label: $default"; minWidth = 350; setTextColor(0xFFE8E6E1.toInt())
+        }
+        val sb  = SeekBar(ctx).apply {
+            this.tag = tag; this.max = max - min + 1; progress = default - min
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        sb.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                val actualVal = p + min
+                tv.text = if (actualVal > max) "$label: $followLabel" else "$label: $actualVal"
+                if (fromUser) onSync()
+            }
+            override fun onStartTrackingTouch(s: SeekBar?) {}
+            override fun onStopTrackingTouch(s: SeekBar?) {}
+        })
+        row.addView(tv); row.addView(sb)
+        return row
+    }
+
+    private fun buildFollowBpmGroup(
+        ctx: Context, prefix: String, onSync: () -> Unit
+    ): LinearLayout {
+        val root = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 8, 0, 8) }
+        
+        val modeNames = listOf("Custom BPM", "Follow Main", "Fraction of Main")
+        val spinner = spinnerRow(ctx, "BPM Mode", modeNames, "${prefix}BpmMode", null)
+        root.addView(spinner)
+
+        val customPanel = LinearLayout(ctx).apply { 
+            orientation = LinearLayout.VERTICAL; visibility = View.VISIBLE; tag = "${prefix}CustomBpmPanel" 
+        }
+        customPanel.addView(labeledNumberInput(ctx, "BPM", 20, 300, 120, "${prefix}Bpm", onSync))
+        root.addView(customPanel)
+
+        val fractionPanel = LinearLayout(ctx).apply { 
+            orientation = LinearLayout.VERTICAL; visibility = View.GONE; tag = "${prefix}FractionBpmPanel" 
+        }
+        val fractionLabels = mapOf(
+            0 to "1/8x", 1 to "1/4x", 2 to "1/2x", 3 to "1x", 4 to "1.5x", 5 to "2x"
+        )
+        val fractionValues = mapOf(
+            0 to 0.125f, 1 to 0.25f, 2 to 0.5f, 3 to 1.0f, 4 to 1.5f, 5 to 2.0f
+        )
+        
+        val fractionSlider = labeledSeekBarWithLabels(
+            ctx, "BPM Fraction", 0, 5, 3, "${prefix}BpmFraction", fractionLabels, onSync
+        )
+        fractionPanel.addView(fractionSlider)
+        root.addView(fractionPanel)
+
+        root.findViewWithTag<Spinner>("${prefix}BpmMode")?.onItemSelectedListener = 
+            object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(a: AdapterView<*>?, v: View?, pos: Int, id: Long) {
+                    customPanel.visibility = if (pos == 0) View.VISIBLE else View.GONE
+                    fractionPanel.visibility = if (pos == 2) View.VISIBLE else View.GONE
+                    if (!isUpdatingFromSync) onSync()
+                }
+                override fun onNothingSelected(a: AdapterView<*>?) {}
+            }
+        
+        return root
+    }
+
+    private fun labeledNumberInput(
+        ctx: Context, label: String, min: Int, max: Int, default: Int, tag: String, onSync: () -> Unit
+    ): LinearLayout {
+        val row = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 8, 0, 4) }
+        val tvLabel = TextView(ctx).apply { text = "$label: "; setTextColor(0xFFE8E6E1.toInt()) }
+        
+        val tvValue = TextView(ctx).apply {
+            text = default.toString(); textSize = 16f; setTextColor(0xFF4F9AA5.toInt())
+            setPadding(16, 0, 16, 0); this.tag = "${tag}Value"
+            setOnClickListener {
+                showNumberInputDialog(ctx, label, min, max, this, onSync)
+            }
+        }
+
+        val sb = SeekBar(ctx).apply {
+            this.tag = tag; this.max = max - min; progress = default - min
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        sb.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                tvValue.text = (p + min).toString()
+                if (fromUser) onSync()
+            }
+            override fun onStartTrackingTouch(s: SeekBar?) {}
+            override fun onStopTrackingTouch(s: SeekBar?) {}
+        })
+
+        row.addView(tvLabel); row.addView(tvValue); row.addView(sb)
+        return row
+    }
+
+    private fun showNumberInputDialog(
+        ctx: Context, label: String, min: Int, max: Int, target: TextView, onSync: () -> Unit
+    ) {
+        val et = EditText(ctx).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            setText(target.text)
+        }
+        android.app.AlertDialog.Builder(ctx)
+            .setTitle("Set $label ($min-$max)")
+            .setView(et)
+            .setPositiveButton("OK") { _, _ ->
+                val newVal = et.text.toString().toIntOrNull()?.coerceIn(min, max)
+                if (newVal != null) {
+                    target.text = newVal.toString()
+                    val tag = target.tag.toString().removeSuffix("Value")
+                    // We need to find the specific panel to find the seekBar
+                    var parent = target.parent
+                    while (parent != null && parent !is LinearLayout) { parent = parent.parent }
+                    (parent as? LinearLayout)?.findViewWithTag<SeekBar>(tag)?.progress = newVal - min
+                    onSync()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun labeledSeekBarWithLabels(
+        ctx: Context, label: String, min: Int, max: Int, default: Int, 
+        tag: String, labels: Map<Int, String>, onSync: () -> Unit
+    ): LinearLayout {
+        val root = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 8, 0, 4) }
+        val header = TextView(ctx).apply {
+            text = "$label: ${labels[default]}"; setTextColor(0xFFE8E6E1.toInt())
+        }
+        root.addView(header)
+
+        val sb = SeekBar(ctx).apply {
+            this.tag = tag; this.max = max - min; progress = default - min
+        }
+        sb.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                header.text = "$label: ${labels[p + min]}"
+                if (fromUser) onSync()
+            }
+            override fun onStartTrackingTouch(s: SeekBar?) {}
+            override fun onStopTrackingTouch(s: SeekBar?) {}
+        })
+        root.addView(sb)
+        return root
+    }
+
     private fun buildHarmonyPanel(voiceId: Int, onSync: () -> Unit): LinearLayout {
         val ctx   = requireContext()
         val panel = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; setPadding(16, 8, 0, 0) }
@@ -365,20 +537,26 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         val ctx   = requireContext()
         val panel = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; setPadding(16, 8, 0, 0) }
 
-        panel.addView(labeledSeekBar(ctx, "BPM",                    20, 300, 120, "indBpm",    onSync))
+        panel.addView(buildFollowBpmGroup(ctx, "ind", onSync))
         panel.addView(labeledSeekBar(ctx, "Velocity",                0, 127,  90, "indVel",    onSync))
-        panel.addView(labeledSeekBar(ctx, "Min Octave",              0, 8,     3, "indMinOct", onSync))
-        panel.addView(labeledSeekBar(ctx, "Max Octave",              0, 8,     5, "indMaxOct", onSync))
-        panel.addView(labeledSeekBar(ctx, "MIDI Channel (0=Omni)",   0, 16,    0, "indMidiCh", onSync))
+        
+        val octRow = labeledRangeSlider(ctx, "Octave Range", 0, 8, 3, 5, "indOctave", onSync)
+        panel.addView(octRow)
+        
+        panel.addView(labeledSeekBarFollow(ctx, "MIDI Channel", 0, 16, 0, "indMidiCh", "Follow Main", onSync))
 
-        val scaleNames = listOf("Chromatic","Major","Minor Natural","Minor Harmonic",
+        val scaleNames = listOf("Follow Main", "Chromatic","Major","Minor Natural","Minor Harmonic",
             "Pentatonic Maj","Pentatonic Min","Blues","Dorian","Mixolydian","Whole Tone",
             "Kurd (Annaziska / Aeolian)","Celtic Minor (Amara)","Pygmy","SaBye / SaByeD",
             "Aegean (Lydian)","Hijaz","Akebono")
-        panel.addView(spinnerRow(ctx, "Scale",  scaleNames, "indScale",  onSync))
+            
+        panel.addView(spinnerRow(ctx, "Scale", scaleNames, "indScaleValue", onSync))
+        
+        val rootNames = listOf("Follow Main", "C","C#","D","D#","E","F","F#","G","G#","A","A#","B")
+        panel.addView(spinnerRow(ctx, "Root", rootNames, "indRootValue", onSync))
+            
         panel.addView(spinnerRow(ctx, "Timing", listOf("Metronome","Mixed","Randomized","Euclidean"), "indTiming", onSync))
         panel.addView(spinnerRow(ctx, "Style",  listOf("Generative","Single-Note Drone","Evolving Drone","Chords"), "indStyle", null))
-        panel.addView(spinnerRow(ctx, "Root",   listOf("C","C#","D","D#","E","F","F#","G","G#","A","A#","B"), "indRoot", onSync))
 
         // ── Full Chords sub-panel ─────────────────────────────────────────
         val chordsPanel = buildChordsSubPanel(ctx, "ind", onSync)
@@ -444,19 +622,25 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         val ctx   = requireContext()
         val panel = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; setPadding(16, 8, 0, 0) }
 
-        panel.addView(labeledSeekBar(ctx, "BPM",                    20, 300, 120, "melBpm",    onSync))
+        panel.addView(buildFollowBpmGroup(ctx, "mel", onSync))
         panel.addView(labeledSeekBar(ctx, "Velocity",                0, 127,  90, "melVel",    onSync))
-        panel.addView(labeledSeekBar(ctx, "Min Octave",              0, 8,     3, "melMinOct", onSync))
-        panel.addView(labeledSeekBar(ctx, "Max Octave",              0, 8,     5, "melMaxOct", onSync))
-        panel.addView(labeledSeekBar(ctx, "MIDI Channel (0=Omni)",   0, 16,    0, "melMidiCh", onSync))
+        
+        val octRow = labeledRangeSlider(ctx, "Octave Range", 0, 8, 3, 5, "melOctave", onSync)
+        panel.addView(octRow)
+        
+        panel.addView(labeledSeekBarFollow(ctx, "MIDI Channel", 0, 16, 0, "melMidiCh", "Follow Main", onSync))
 
-        val scaleNames = listOf("Chromatic","Major","Minor Natural","Minor Harmonic",
+        val scaleNames = listOf("Follow Main", "Chromatic","Major","Minor Natural","Minor Harmonic",
             "Pentatonic Maj","Pentatonic Min","Blues","Dorian","Mixolydian","Whole Tone",
             "Kurd (Annaziska / Aeolian)","Celtic Minor (Amara)","Pygmy","SaBye / SaByeD",
             "Aegean (Lydian)","Hijaz","Akebono")
-        panel.addView(spinnerRow(ctx, "Scale",  scaleNames, "melScale",  onSync))
+            
+        panel.addView(spinnerRow(ctx, "Scale", scaleNames, "melScaleValue", onSync))
+
+        val rootNames = listOf("Follow Main", "C","C#","D","D#","E","F","F#","G","G#","A","A#","B")
+        panel.addView(spinnerRow(ctx, "Root", rootNames, "melRootValue", onSync))
+            
         panel.addView(spinnerRow(ctx, "Timing", listOf("Metronome","Mixed","Randomized","Euclidean"), "melTiming", onSync))
-        panel.addView(spinnerRow(ctx, "Root",   listOf("C","C#","D","D#","E","F","F#","G","G#","A","A#","B"), "melRoot", onSync))
 
         // ── Melodic Relation / Contrast controls ──────────────────────────
         val contrastHeader = TextView(ctx).apply {
@@ -624,20 +808,27 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
     }
 
     private fun readIndependentConfig(panel: LinearLayout, voiceId: Int): IndependentConfig {
-        val isMelodic = panel.findViewWithTag<SeekBar>("melBpm") != null
+        val isMelodic = panel.findViewWithTag<SeekBar>("melVel") != null
+        val prefix = if (isMelodic) "mel" else "ind"
 
         fun seekVal(tag: String): Int = panel.findViewWithTag<SeekBar>(tag)?.progress ?: 0
         fun sp(tag: String): Int      = panel.findViewWithTag<Spinner>(tag)?.selectedItemPosition ?: 0
+        fun rsVal(tag: String): List<Float> = panel.findViewWithTag<com.google.android.material.slider.RangeSlider>(tag)?.values ?: listOf(0f, 0f)
 
-        val bpm    = if (isMelodic) seekVal("melBpm") + 20   else seekVal("indBpm") + 20
-        val vel    = if (isMelodic) seekVal("melVel")         else seekVal("indVel")
-        val minOct = if (isMelodic) seekVal("melMinOct")      else seekVal("indMinOct")
-        val maxOct = if (isMelodic) seekVal("melMaxOct")      else seekVal("indMaxOct")
-        val midiCh = if (isMelodic) seekVal("melMidiCh")      else seekVal("indMidiCh")
-        val scale  = if (isMelodic) sp("melScale")            else sp("indScale")
-        val timing = if (isMelodic) sp("melTiming")           else sp("indTiming")
-        val root   = if (isMelodic) sp("melRoot")             else sp("indRoot")
-        // FIX: read the correct tag for each panel's shared/custom pro radio button
+        val bpmMode = ParamFollowMode.entries.getOrElse(sp("${prefix}BpmMode")) { ParamFollowMode.CUSTOM }
+        val bpm = seekVal("${prefix}Bpm") + 20
+        val bpmFraction = when (seekVal("${prefix}BpmFraction")) {
+            0 -> 0.125f; 1 -> 0.25f; 2 -> 0.5f; 3 -> 1.0f; 4 -> 1.5f; 5 -> 2.0f; else -> 1.0f
+        }
+
+        val scale = sp("${prefix}ScaleValue")
+        val root = sp("${prefix}RootValue")
+
+        val vel    = seekVal("${prefix}Vel")
+        val octs   = rsVal("${prefix}Octave")
+        val midiCh = seekVal("${prefix}MidiCh")
+        val timing = sp("${prefix}Timing")
+        
         val sharedTag = if (isMelodic) "melSharedPro" else "sharedPro"
         val shared = panel.findViewWithTag<RadioButton>(sharedTag)?.isChecked ?: true
 
@@ -649,15 +840,17 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         val resolvedPro: ProSettings = if (shared) ProSettings() else baseCustomPro
 
         return IndependentConfig(
+            bpmMode       = bpmMode,
             bpm           = bpm,
-            velocity      = vel,
-            minOctave     = minOct,
-            maxOctave     = maxOct,
-            midiChannel   = midiCh,
+            bpmFraction   = bpmFraction,
             selectedScale = scale,
+            rootNote      = root,
+            velocity      = vel,
+            minOctave     = octs[0].toInt(),
+            maxOctave     = octs[1].toInt(),
+            midiChannel   = midiCh,
             timingMode    = timing,
             style         = if (isMelodic) VoiceStyle.GENERATIVE else style,
-            rootNote      = root,
             useSharedPro  = shared,
             proSettings   = resolvedPro,
             chordConfig   = chordCfg
@@ -694,11 +887,28 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             }
             VoiceMode.INDEPENDENT -> {
                 val ic = cfg.independentConfig
-                panel.findViewWithTag<SeekBar>("indVel")?.progress     = ic.velocity
-                panel.findViewWithTag<SeekBar>("indMidiCh")?.progress  = ic.midiChannel
-                panel.findViewWithTag<Spinner>("indStyle")?.setSelection(ic.style.ordinal)
-                panel.findViewWithTag<Spinner>("indRoot")?.setSelection(ic.rootNote)
-                panel.findViewWithTag<Spinner>("indScale")?.setSelection(ic.selectedScale)
+                val prefix = "ind"
+                panel.findViewWithTag<Spinner>("${prefix}BpmMode")?.setSelection(ic.bpmMode.ordinal)
+                panel.findViewWithTag<SeekBar>("${prefix}Bpm")?.progress = ic.bpm - 20
+                panel.findViewWithTag<TextView>("${prefix}BpmValue")?.text = ic.bpm.toString()
+                val fracIdx = when (ic.bpmFraction) {
+                    0.125f -> 0; 0.25f -> 1; 0.5f -> 2; 1.0f -> 3; 1.5f -> 4; 2.0f -> 5; else -> 3
+                }
+                panel.findViewWithTag<SeekBar>("${prefix}BpmFraction")?.progress = fracIdx
+                
+                // Set visibility based on mode
+                panel.findViewWithTag<View>("${prefix}CustomBpmPanel")?.visibility = if (ic.bpmMode == ParamFollowMode.CUSTOM) View.VISIBLE else View.GONE
+                panel.findViewWithTag<View>("${prefix}FractionBpmPanel")?.visibility = if (ic.bpmMode == ParamFollowMode.FRACTION_MAIN) View.VISIBLE else View.GONE
+                
+                panel.findViewWithTag<Spinner>("${prefix}ScaleValue")?.setSelection(ic.selectedScale)
+                panel.findViewWithTag<Spinner>("${prefix}RootValue")?.setSelection(ic.rootNote)
+
+                panel.findViewWithTag<SeekBar>("${prefix}Vel")?.progress     = ic.velocity
+                panel.findViewWithTag<com.google.android.material.slider.RangeSlider>("${prefix}Octave")?.values = listOf(ic.minOctave.toFloat(), ic.maxOctave.toFloat())
+                panel.findViewWithTag<SeekBar>("${prefix}MidiCh")?.progress  = ic.midiChannel
+                panel.findViewWithTag<Spinner>("${prefix}Style")?.setSelection(ic.style.ordinal)
+                panel.findViewWithTag<Spinner>("${prefix}Timing")?.setSelection(ic.timingMode)
+
                 panel.findViewWithTag<View>("chordsPanel")?.visibility =
                     if (ic.style == VoiceStyle.CHORDS) View.VISIBLE else View.GONE
                 applyChordConfigToPanel(panel, ic.chordConfig, "ind")
@@ -714,10 +924,27 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             }
             VoiceMode.MELODIC -> {
                 val ic = cfg.independentConfig
-                panel.findViewWithTag<SeekBar>("melVel")?.progress    = ic.velocity
-                panel.findViewWithTag<SeekBar>("melMidiCh")?.progress = ic.midiChannel
-                panel.findViewWithTag<Spinner>("melRoot")?.setSelection(ic.rootNote)
-                panel.findViewWithTag<Spinner>("melScale")?.setSelection(ic.selectedScale)
+                val prefix = "mel"
+                panel.findViewWithTag<Spinner>("${prefix}BpmMode")?.setSelection(ic.bpmMode.ordinal)
+                panel.findViewWithTag<SeekBar>("${prefix}Bpm")?.progress = ic.bpm - 20
+                panel.findViewWithTag<TextView>("${prefix}BpmValue")?.text = ic.bpm.toString()
+                val fracIdx = when (ic.bpmFraction) {
+                    0.125f -> 0; 0.25f -> 1; 0.5f -> 2; 1.0f -> 3; 1.5f -> 4; 2.0f -> 5; else -> 3
+                }
+                panel.findViewWithTag<SeekBar>("${prefix}BpmFraction")?.progress = fracIdx
+                
+                // Set visibility based on mode
+                panel.findViewWithTag<View>("${prefix}CustomBpmPanel")?.visibility = if (ic.bpmMode == ParamFollowMode.CUSTOM) View.VISIBLE else View.GONE
+                panel.findViewWithTag<View>("${prefix}FractionBpmPanel")?.visibility = if (ic.bpmMode == ParamFollowMode.FRACTION_MAIN) View.VISIBLE else View.GONE
+
+                panel.findViewWithTag<Spinner>("${prefix}ScaleValue")?.setSelection(ic.selectedScale)
+                panel.findViewWithTag<Spinner>("${prefix}RootValue")?.setSelection(ic.rootNote)
+
+                panel.findViewWithTag<SeekBar>("${prefix}Vel")?.progress    = ic.velocity
+                panel.findViewWithTag<com.google.android.material.slider.RangeSlider>("${prefix}Octave")?.values = listOf(ic.minOctave.toFloat(), ic.maxOctave.toFloat())
+                panel.findViewWithTag<SeekBar>("${prefix}MidiCh")?.progress = ic.midiChannel
+                panel.findViewWithTag<Spinner>("${prefix}Timing")?.setSelection(ic.timingMode)
+
                 val mrc = cfg.melodicRelationConfig
                 panel.findViewWithTag<Switch>("melContrastEnabled")?.isChecked = mrc.enabled
                 panel.findViewWithTag<SeekBar>("melContrastDepth")?.progress   = mrc.contrastDepth

@@ -97,6 +97,18 @@
             android:layout_width="match_parent"
             android:layout_height="48dp"
             android:background="#1C1B19"
+            android:layout_marginBottom="4dp"/>
+
+        <TextView
+            android:id="@+id/tvChordHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Chord Options at the bottom of the window"
+            android:textSize="12sp"
+            android:textColor="#FF4444"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:visibility="gone"
             android:layout_marginBottom="12dp"/>
 
         <!-- ── Drone Timing (Evolving Drone only) ────────────────────────── -->

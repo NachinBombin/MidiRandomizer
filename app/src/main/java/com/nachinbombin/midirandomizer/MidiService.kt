@@ -162,15 +162,26 @@ class MidiService : Service() {
             scheduler?.execute(noteLoop)
         }
 
-        if (proChanged) {
+        if (proChanged || rootChanged || scaleChanged) {
             // Fix: include MELODIC in the mode check — both INDEPENDENT and MELODIC
             // use ic.proSettings, so shared ProSettings must be injected for both.
             val v2IsIndOrMel = v2Config.mode == VoiceMode.INDEPENDENT || v2Config.mode == VoiceMode.MELODIC
             val v3IsIndOrMel = v3Config.mode == VoiceMode.INDEPENDENT || v3Config.mode == VoiceMode.MELODIC
-            if (v2IsIndOrMel && v2Config.independentConfig.useSharedPro)
-                voice2Engine?.config = effectiveVoiceConfig(v2Config)
-            if (v3IsIndOrMel && v3Config.independentConfig.useSharedPro)
-                voice3Engine?.config = effectiveVoiceConfig(v3Config)
+            
+            if (v2IsIndOrMel) {
+                val ic2 = v2Config.independentConfig
+                if (ic2.useSharedPro || ic2.selectedScale == 0 || ic2.rootNote == 0) {
+                    voice2Engine?.config = effectiveVoiceConfig(v2Config)
+                    voice2Engine?.forceRebuildHelpers()
+                }
+            }
+            if (v3IsIndOrMel) {
+                val ic3 = v3Config.independentConfig
+                if (ic3.useSharedPro || ic3.selectedScale == 0 || ic3.rootNote == 0) {
+                    voice3Engine?.config = effectiveVoiceConfig(v3Config)
+                    voice3Engine?.forceRebuildHelpers()
+                }
+            }
         }
 
         if (rootChanged || scaleChanged) {
@@ -200,10 +211,15 @@ class MidiService : Service() {
         // Fix: include MELODIC in the mode check here too.
         val v2IsIndOrMel = v2Config.mode == VoiceMode.INDEPENDENT || v2Config.mode == VoiceMode.MELODIC
         val v3IsIndOrMel = v3Config.mode == VoiceMode.INDEPENDENT || v3Config.mode == VoiceMode.MELODIC
-        if (v2IsIndOrMel && v2Config.independentConfig.useSharedPro)
+
+        if (v2IsIndOrMel && v2Config.independentConfig.useSharedPro) {
             voice2Engine?.config = effectiveVoiceConfig(v2Config)
-        if (v3IsIndOrMel && v3Config.independentConfig.useSharedPro)
+            voice2Engine?.forceRebuildHelpers()
+        }
+        if (v3IsIndOrMel && v3Config.independentConfig.useSharedPro) {
             voice3Engine?.config = effectiveVoiceConfig(v3Config)
+            voice3Engine?.forceRebuildHelpers()
+        }
 
         notifyParamsChanged()
     }
@@ -247,6 +263,9 @@ class MidiService : Service() {
                     if (needsRestart) {
                         voice2Engine?.stopIndependent()
                         if (cfg.enabled && isIndependent) voice2Engine?.startIndependent()
+                    } else if (cfg.enabled && isIndependent) {
+                        // Force rebuild even if not restarted, to pick up Scale/Root/Pro sync changes
+                        voice2Engine?.forceRebuildHelpers()
                     }
                 }
             }
@@ -298,6 +317,9 @@ class MidiService : Service() {
                     if (needsRestart) {
                         voice3Engine?.stopIndependent()
                         if (cfg.enabled && isIndependent) voice3Engine?.startIndependent()
+                    } else if (cfg.enabled && isIndependent) {
+                        // Force rebuild even if not restarted, to pick up Scale/Root/Pro sync changes
+                        voice3Engine?.forceRebuildHelpers()
                     }
                 }
             }
@@ -311,10 +333,28 @@ class MidiService : Service() {
     }
 
     private fun effectiveVoiceConfig(cfg: VoiceConfig): VoiceConfig {
+        val ic = cfg.independentConfig
         val isIndependent = cfg.mode == VoiceMode.INDEPENDENT || cfg.mode == VoiceMode.MELODIC
-        return if (isIndependent && cfg.independentConfig.useSharedPro)
-            cfg.copy(independentConfig = cfg.independentConfig.copy(proSettings = v1Params.proSettings))
-        else cfg
+        if (!isIndependent) return cfg
+
+        val v1 = v1Params
+        val resolvedBpm = when (ic.bpmMode) {
+            ParamFollowMode.FOLLOW_MAIN   -> v1.bpm
+            ParamFollowMode.FRACTION_MAIN -> (v1.bpm * ic.bpmFraction).toInt().coerceIn(20, 300)
+            ParamFollowMode.CUSTOM        -> ic.bpm
+        }
+        val resolvedScale = if (ic.selectedScale == 0) v1.scale else ic.selectedScale - 1
+        val resolvedRoot  = if (ic.rootNote == 0) v1.rootNote else ic.rootNote
+        val resolvedCh    = if (ic.midiChannel == 17) v1.channel else ic.midiChannel
+
+        val newIc = ic.copy(
+            bpm           = resolvedBpm,
+            selectedScale = resolvedScale,
+            rootNote      = resolvedRoot,
+            midiChannel   = resolvedCh,
+            proSettings   = if (ic.useSharedPro) v1.proSettings else ic.proSettings
+        )
+        return cfg.copy(independentConfig = newIc)
     }
 
     private fun notifyParamsChanged() {
@@ -431,8 +471,11 @@ class MidiService : Service() {
                 val ps = p.proSettings
                 val euclidOn = ps.euclideanEnabled && p.timingMode == TIMING_EUCLIDEAN
                 val isOnset = if (euclidOn) {
-                    val hit = v1Euclidean.getOrElse(v1EuclideanStep) { false }
-                    v1EuclideanStep = (v1EuclideanStep + 1) % v1Euclidean.size.coerceAtLeast(1)
+                    val pattern = v1Euclidean
+                    val hit = pattern.getOrElse(v1EuclideanStep) { false }
+                    if (pattern.isNotEmpty()) {
+                        v1EuclideanStep = (v1EuclideanStep + 1) % pattern.size
+                    }
                     hit
                 } else true
 
@@ -447,7 +490,7 @@ class MidiService : Service() {
                 break
             } catch (e: Exception) {
                 Log.e(TAG, "Error in noteLoop: ${e.message}", e)
-                try { Thread.sleep(500) } catch (_: InterruptedException) { break }
+                try { Thread.sleep(100) } catch (_: InterruptedException) { break }
             }
         }
     }

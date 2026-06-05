@@ -46,6 +46,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
     private lateinit var rgRootRow1: RadioGroup
     private lateinit var rgRootRow2: RadioGroup
     private lateinit var rgRootFree: RadioGroup
+    private lateinit var tvChordHint: TextView
 
     // ── Chord-settings panel views ───────────────────────────────────────
     private lateinit var layoutChordSettings:   View
@@ -177,6 +178,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         rgRootRow1        = v.findViewById(R.id.rgRootRow1)
         rgRootRow2        = v.findViewById(R.id.rgRootRow2)
         rgRootFree        = v.findViewById(R.id.rgRootFree)
+        tvChordHint       = v.findViewById(R.id.tvChordHint)
 
         // ── Chord panel ──────────────────────────────────────────────────
         layoutChordSettings  = v.findViewById(R.id.layoutChordSettings)
@@ -433,8 +435,10 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         rgTiming.visibility   = if (isSingle || isEvolving) View.GONE else View.VISIBLE
         layoutDroneTiming.visibility = if (isEvolving) View.VISIBLE else View.GONE
         layoutDroneRange.visibility  = if (isRandDrone) View.VISIBLE else View.GONE
+        
         // Show chord settings panel only when CHORDS is selected
         layoutChordSettings.visibility = if (isChords) View.VISIBLE else View.GONE
+        tvChordHint.visibility = if (isChords) View.VISIBLE else View.GONE
     }
 
     private fun push() {
