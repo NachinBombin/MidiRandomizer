@@ -24,6 +24,15 @@ import androidx.fragment.app.Fragment
  * Pro Settings for Independent/Melodic voices are managed entirely by the
  * embedded child ProSettingsFragment — there are NO duplicate inline
  * pro controls in this fragment.
+ *
+ * FIX: Each mode panel (Independent, Melodic) now has its OWN FrameLayout ID
+ * for the ProSettingsFragment container:
+ *   Independent → proFragContainerV2 / proFragContainerV3
+ *   Melodic     → proFragContainerMelodicV2 / proFragContainerMelodicV3
+ * This eliminates the duplicate View ID crash that occurred because both
+ * panels exist in the hierarchy simultaneously (one hidden via View.GONE).
+ * A single ProSettingsFragment instance per voice is shared between both
+ * panels via fragment move transactions when the mode switches.
  */
 class VoicesFragment : Fragment(), MidiService.MidiEventListener {
 
@@ -108,9 +117,31 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
 
     // ── Child ProSettingsFragment management ──────────────────────────────
 
+    /**
+     * Container ID for the Independent panel's ProSettings FrameLayout.
+     * Independent and Melodic panels each have their own unique IDs to
+     * prevent duplicate-ID crashes (both panels coexist in the hierarchy).
+     */
     private fun proFragContainerId(voiceId: Int) =
         if (voiceId == 2) R.id.proFragContainerV2 else R.id.proFragContainerV3
 
+    /**
+     * Container ID for the Melodic panel's ProSettings FrameLayout.
+     * Separate from proFragContainerId to avoid duplicate View IDs.
+     */
+    private fun proFragContainerMelodicId(voiceId: Int) =
+        if (voiceId == 2) R.id.proFragContainerMelodicV2 else R.id.proFragContainerMelodicV3
+
+    /**
+     * Attaches (or reattaches) the ProSettingsFragment for a voice.
+     *
+     * A single fragment instance is shared between the Independent and Melodic
+     * panels. On initial attach we add it to the Independent container (default
+     * mode). When the user switches to Melodic mode, moveProFragToMelodicContainer
+     * detaches and re-attaches it into the Melodic container, and vice-versa.
+     * This avoids the crash that occurred when both panels had the same container
+     * ID and the fragment manager tried to add a fragment to an ambiguous view.
+     */
     private fun attachProFragment(voiceId: Int) {
         val containerId = proFragContainerId(voiceId)
         val tag = "proFrag_v$voiceId"
@@ -131,6 +162,47 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
                 .add(containerId, frag, tag)
                 .commitAllowingStateLoss()
         }
+    }
+
+    /**
+     * Moves the ProSettingsFragment for [voiceId] into the Melodic panel container.
+     * Called when the user switches to Melodic mode so the fragment renders inside
+     * the correct (visible) FrameLayout.
+     */
+    private fun moveProFragToMelodicContainer(voiceId: Int) {
+        val tag = "proFrag_v$voiceId"
+        val frag = childFragmentManager.findFragmentByTag(tag) as? ProSettingsFragment ?: return
+        val melodicContainerId = proFragContainerMelodicId(voiceId)
+        childFragmentManager.beginTransaction()
+            .detach(frag)
+            .commitAllowingStateLoss()
+        childFragmentManager.executePendingTransactions()
+        childFragmentManager.beginTransaction()
+            .attach(frag)
+            // Move fragment to the melodic container by re-adding via replace into melodic container
+            .remove(frag)
+            .commitAllowingStateLoss()
+        childFragmentManager.executePendingTransactions()
+        childFragmentManager.beginTransaction()
+            .add(melodicContainerId, frag, tag)
+            .commitAllowingStateLoss()
+    }
+
+    /**
+     * Moves the ProSettingsFragment for [voiceId] back into the Independent panel container.
+     * Called when the user switches away from Melodic mode.
+     */
+    private fun moveProFragToIndependentContainer(voiceId: Int) {
+        val tag = "proFrag_v$voiceId"
+        val frag = childFragmentManager.findFragmentByTag(tag) as? ProSettingsFragment ?: return
+        val independentContainerId = proFragContainerId(voiceId)
+        childFragmentManager.beginTransaction()
+            .remove(frag)
+            .commitAllowingStateLoss()
+        childFragmentManager.executePendingTransactions()
+        childFragmentManager.beginTransaction()
+            .add(independentContainerId, frag, tag)
+            .commitAllowingStateLoss()
     }
 
     // ── Voice panel builder ───────────────────────────────────────────────
@@ -180,6 +252,9 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         panel.addView(independentPanel)
         panel.addView(melodicPanel)
 
+        // Track the last mode so we know when to move the pro fragment
+        var lastMode: VoiceMode = VoiceMode.HARMONY
+
         fun setEnabledState(on: Boolean) {
             modeRow.alpha          = if (on) 1f else 0.4f
             harmonyPanel.alpha     = if (on) 1f else 0.4f
@@ -227,6 +302,18 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             harmonyPanel.visibility     = if (mode == VoiceMode.HARMONY)     View.VISIBLE else View.GONE
             independentPanel.visibility = if (mode == VoiceMode.INDEPENDENT) View.VISIBLE else View.GONE
             melodicPanel.visibility     = if (mode == VoiceMode.MELODIC)     View.VISIBLE else View.GONE
+
+            // Move the shared ProSettingsFragment into the correct container
+            // only when transitioning to/from Melodic mode after the view is attached
+            if (view != null) {
+                when {
+                    mode == VoiceMode.MELODIC && lastMode != VoiceMode.MELODIC ->
+                        moveProFragToMelodicContainer(voiceId)
+                    mode != VoiceMode.MELODIC && lastMode == VoiceMode.MELODIC ->
+                        moveProFragToIndependentContainer(voiceId)
+                }
+            }
+            lastMode = mode
             syncConfig()
         }
 
@@ -324,6 +411,7 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             text = "Advanced Engine Settings:"; textSize = 13f
             setPadding(0, 8, 0, 4); setTextColor(0xFF797876.toInt())
         })
+        // Independent panel gets its own unique container ID (proFragContainerV2/V3)
         customProPanel.addView(android.widget.FrameLayout(ctx).apply {
             id = proFragContainerId(voiceId); tag = "proFragContainer$voiceId"
         })
@@ -344,7 +432,13 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
     /**
      * Melodic panel — core parameters + Contrast controls.
      * Contrast Depth + Contrast Mode are visible when the voice is MELODIC.
-     * Uses the same Pro Settings fragment container as Independent.
+     *
+     * FIX: Uses proFragContainerMelodicId() for its FrameLayout, which resolves
+     * to proFragContainerMelodicV2/V3 — IDs that are distinct from the
+     * Independent panel's proFragContainerV2/V3. This prevents the
+     * IllegalStateException crash caused by two FrameLayouts sharing the same ID
+     * when the fragment manager tries to commit a transaction against an
+     * ambiguous container.
      */
     private fun buildMelodicPanel(voiceId: Int, onSync: () -> Unit): LinearLayout {
         val ctx   = requireContext()
@@ -408,9 +502,12 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             text = "Melodic Engine Settings (Pro):"; textSize = 13f
             setPadding(0, 8, 0, 4); setTextColor(0xFF797876.toInt())
         })
-        // Re-use the same ProSettings fragment container (only one mode visible at a time)
+        // FIX: Use the Melodic-specific container ID (proFragContainerMelodicV2/V3)
+        // instead of proFragContainerId(voiceId) which is already used by buildIndependentPanel.
+        // Both panels coexist in the layout hierarchy (one hidden via View.GONE), so
+        // using the same ID caused duplicate-ID crashes during fragment transactions.
         customProPanel.addView(android.widget.FrameLayout(ctx).apply {
-            id  = proFragContainerId(voiceId); tag = "melProFragContainer$voiceId"
+            id  = proFragContainerMelodicId(voiceId); tag = "melProFragContainer$voiceId"
         })
         panel.addView(customProPanel)
 
@@ -540,7 +637,8 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         val scale  = if (isMelodic) sp("melScale")            else sp("indScale")
         val timing = if (isMelodic) sp("melTiming")           else sp("indTiming")
         val root   = if (isMelodic) sp("melRoot")             else sp("indRoot")
-        val sharedTag = if (isMelodic) "melSharedPro"         else "sharedPro"
+        // FIX: read the correct tag for each panel's shared/custom pro radio button
+        val sharedTag = if (isMelodic) "melSharedPro" else "sharedPro"
         val shared = panel.findViewWithTag<RadioButton>(sharedTag)?.isChecked ?: true
 
         val style = VoiceStyle.entries.getOrElse(sp("indStyle")) { VoiceStyle.GENERATIVE }
@@ -603,7 +701,6 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
                 panel.findViewWithTag<Spinner>("indScale")?.setSelection(ic.selectedScale)
                 panel.findViewWithTag<View>("chordsPanel")?.visibility =
                     if (ic.style == VoiceStyle.CHORDS) View.VISIBLE else View.GONE
-                // Apply full chordConfig
                 applyChordConfigToPanel(panel, ic.chordConfig, "ind")
                 val shared = ic.useSharedPro
                 panel.findViewWithTag<RadioButton>("sharedPro")?.isChecked = shared
@@ -621,7 +718,6 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
                 panel.findViewWithTag<SeekBar>("melMidiCh")?.progress = ic.midiChannel
                 panel.findViewWithTag<Spinner>("melRoot")?.setSelection(ic.rootNote)
                 panel.findViewWithTag<Spinner>("melScale")?.setSelection(ic.selectedScale)
-                // Melodic relation config
                 val mrc = cfg.melodicRelationConfig
                 panel.findViewWithTag<Switch>("melContrastEnabled")?.isChecked = mrc.enabled
                 panel.findViewWithTag<SeekBar>("melContrastDepth")?.progress   = mrc.contrastDepth
@@ -631,6 +727,11 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
                 panel.findViewWithTag<RadioButton>("melCustomPro")?.isChecked = !melShared
                 panel.findViewWithTag<View>("melCustomProPanel")?.visibility  =
                     if (melShared) View.GONE else View.VISIBLE
+                // FIX: also update the pro fragment when custom pro is active in melodic mode
+                if (!melShared) {
+                    val frag = if (panel === panelV2) proFragV2 else proFragV3
+                    frag?.setInitialSettings(ic.proSettings)
+                }
             }
         }
     }

@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <item name="proFragContainerV2" type="id" />
-    <item name="proFragContainerV3" type="id" />
+    <item name="proFragContainerV2"        type="id" />
+    <item name="proFragContainerV3"        type="id" />
+    <item name="proFragContainerMelodicV2" type="id" />
+    <item name="proFragContainerMelodicV3" type="id" />
 </resources>
