@@ -10,10 +10,16 @@ import androidx.fragment.app.Fragment
  * VoicesFragment – manages V2 and V3 panels.
  *
  * Each voice can run in three modes:
- *   HARMONY    – follows V1 with interval offset + drift
+ *   HARMONY     – follows V1 with interval offset + drift
  *   INDEPENDENT – own generative engine (Generative / Drone / Chords)
- *   MELODIC    – own melodic engine (shares Independent params but uses
- *                Melodic mode label; reserved for chord-aware melody engine)
+ *   MELODIC     – own melodic engine with optional chord-aware contrast controls
+ *
+ * The Independent panel now exposes the full ChordConfig when Style = Chords:
+ *   Chord Type, Build Strategy, Tension, Inversion, Voicing Density,
+ *   Plucking Style, Pluck Delay ms, Strum Length, Note Drop %, Mutation %, Rhythmic Figure.
+ *
+ * The Melodic panel exposes Contrast Depth + Contrast Mode (Counter-Motion /
+ *   Rhythmic Complement / Register Contrast / Chord-Aware).
  *
  * Pro Settings for Independent/Melodic voices are managed entirely by the
  * embedded child ProSettingsFragment — there are NO duplicate inline
@@ -195,13 +201,14 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
                 else                     -> VoiceMode.MELODIC
             }
             val cfg = VoiceConfig(
-                enabled           = enableSwitch.isChecked,
-                mode              = mode,
-                harmonyConfig     = readHarmonyConfig(harmonyPanel, voiceId),
-                independentConfig = readIndependentConfig(
+                enabled              = enableSwitch.isChecked,
+                mode                 = mode,
+                harmonyConfig        = readHarmonyConfig(harmonyPanel, voiceId),
+                independentConfig    = readIndependentConfig(
                     if (mode == VoiceMode.MELODIC) melodicPanel else independentPanel,
                     voiceId
-                )
+                ),
+                melodicRelationConfig = readMelodicRelationConfig(melodicPanel)
             )
             if (voiceId == 2) { currentV2 = cfg; svc.updateVoice2Config(cfg) }
             else              { currentV3 = cfg; svc.updateVoice3Config(cfg) }
@@ -261,11 +268,11 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
     }
 
     /**
-     * Independent panel — core parameters + Style spinner (Generative / Drone / Evolving Drone / Chords)
-     * + conditional Chords sub-panel.
-     * ALL advanced Pro Settings are handled exclusively by the embedded
-     * ProSettingsFragment (attached in onViewCreated → attachProFragment).
-     * There are intentionally NO duplicate Jitter / Euclidean / Markov controls here.
+     * Independent panel — core parameters + Style spinner + full Chords sub-panel.
+     * Chords sub-panel is visible only when Style = "Chords" (index 3).
+     * Contains all 11 chord controls: Type, Build Strategy, Tension, Inversion,
+     * Voicing Density, Plucking Style, Pluck Delay, Strum Length, Note Drop,
+     * Mutation, Rhythmic Figure.
      */
     private fun buildIndependentPanel(voiceId: Int, onSync: () -> Unit): LinearLayout {
         val ctx   = requireContext()
@@ -281,103 +288,45 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             "Pentatonic Maj","Pentatonic Min","Blues","Dorian","Mixolydian","Whole Tone",
             "Kurd (Annaziska / Aeolian)","Celtic Minor (Amara)","Pygmy","SaBye / SaByeD",
             "Aegean (Lydian)","Hijaz","Akebono")
-        val scaleRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 8, 0, 0) }
-        scaleRow.addView(TextView(ctx).apply { text = "Scale: "; setTextColor(0xFFE8E6E1.toInt()) })
-        val scaleSpinner = Spinner(ctx).apply { tag = "indScale" }
-        scaleSpinner.adapter = ArrayAdapter(ctx, android.R.layout.simple_spinner_item, scaleNames)
-            .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-        scaleRow.addView(scaleSpinner)
-        panel.addView(scaleRow)
+        panel.addView(spinnerRow(ctx, "Scale",  scaleNames, "indScale",  onSync))
+        panel.addView(spinnerRow(ctx, "Timing", listOf("Metronome","Mixed","Randomized","Euclidean"), "indTiming", onSync))
+        panel.addView(spinnerRow(ctx, "Style",  listOf("Generative","Single-Note Drone","Evolving Drone","Chords"), "indStyle", null))
+        panel.addView(spinnerRow(ctx, "Root",   listOf("C","C#","D","D#","E","F","F#","G","G#","A","A#","B"), "indRoot", onSync))
 
-        val timingRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 8, 0, 0) }
-        timingRow.addView(TextView(ctx).apply { text = "Timing: "; setTextColor(0xFFE8E6E1.toInt()) })
-        val timingSpinner = Spinner(ctx).apply { tag = "indTiming" }
-        timingSpinner.adapter = ArrayAdapter(ctx, android.R.layout.simple_spinner_item,
-            listOf("Metronome","Mixed","Randomized","Euclidean"))
-            .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-        timingRow.addView(timingSpinner)
-        panel.addView(timingRow)
-
-        val styleRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 8, 0, 0) }
-        styleRow.addView(TextView(ctx).apply { text = "Style: "; setTextColor(0xFFE8E6E1.toInt()) })
-        val styleSpinner = Spinner(ctx).apply { tag = "indStyle" }
-        styleSpinner.adapter = ArrayAdapter(ctx, android.R.layout.simple_spinner_item,
-            listOf("Generative","Single-Note Drone","Evolving Drone","Chords"))
-            .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-        styleRow.addView(styleSpinner)
-        panel.addView(styleRow)
-
-        // Chords sub-panel — visible only when Style = "Chords" (index 3)
-        val chordsPanel = LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(16, 4, 0, 0)
-            visibility = View.GONE
-            tag = "chordsPanel"
-        }
-        val chordTypeRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 4, 0, 0) }
-        chordTypeRow.addView(TextView(ctx).apply { text = "Chord Type: "; setTextColor(0xFF797876.toInt()) })
-        val chordTypeSpinner = Spinner(ctx).apply { tag = "chordType" }
-        chordTypeSpinner.adapter = ArrayAdapter(ctx, android.R.layout.simple_spinner_item,
-            listOf("Triad","7th","Suspended","Power Chord"))
-            .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-        chordTypeRow.addView(chordTypeSpinner)
-        chordsPanel.addView(chordTypeRow)
-
-        val chordRhythmRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 4, 0, 0) }
-        chordRhythmRow.addView(TextView(ctx).apply { text = "Chord Rhythm: "; setTextColor(0xFF797876.toInt()) })
-        val chordRhythmSpinner = Spinner(ctx).apply { tag = "chordRhythm" }
-        chordRhythmSpinner.adapter = ArrayAdapter(ctx, android.R.layout.simple_spinner_item,
-            listOf("On Beat","Syncopated","Arpeggio"))
-            .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-        chordRhythmRow.addView(chordRhythmSpinner)
-        chordsPanel.addView(chordRhythmRow)
+        // ── Full Chords sub-panel ─────────────────────────────────────────
+        val chordsPanel = buildChordsSubPanel(ctx, "ind", onSync)
+            .apply { tag = "chordsPanel"; visibility = View.GONE }
         panel.addView(chordsPanel)
 
-        styleSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(a: AdapterView<*>?, v: View?, pos: Int, id: Long) {
-                chordsPanel.visibility = if (pos == VoiceStyle.CHORDS.ordinal) View.VISIBLE else View.GONE
-                if (!isUpdatingFromSync) onSync()
+        // Wire Style spinner to show/hide chordsPanel
+        panel.findViewWithTag<Spinner>("indStyle")?.onItemSelectedListener =
+            object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(a: AdapterView<*>?, v: View?, pos: Int, id: Long) {
+                    chordsPanel.visibility = if (pos == VoiceStyle.CHORDS.ordinal) View.VISIBLE else View.GONE
+                    if (!isUpdatingFromSync) onSync()
+                }
+                override fun onNothingSelected(a: AdapterView<*>?) {}
             }
-            override fun onNothingSelected(a: AdapterView<*>?) {}
-        }
 
-        val rootRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 8, 0, 0) }
-        rootRow.addView(TextView(ctx).apply { text = "Root: "; setTextColor(0xFFE8E6E1.toInt()) })
-        val rootSpinner = Spinner(ctx).apply { tag = "indRoot" }
-        rootSpinner.adapter = ArrayAdapter(ctx, android.R.layout.simple_spinner_item,
-            listOf("C","C#","D","D#","E","F","F#","G","G#","A","A#","B"))
-            .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-        rootRow.addView(rootSpinner)
-        panel.addView(rootRow)
-
-        // ── Pro Settings: toggle between Shared and Custom ────────────────
+        // ── Pro Settings toggle ───────────────────────────────────────────
         val proRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 16, 0, 0) }
-        val sharedProBtn = radioButton(ctx, "Shared Pro Settings", true).apply  { tag = "sharedPro" }
-        val customProBtn = radioButton(ctx, "Custom Pro Settings", false).apply { tag = "customPro" }
+        val sharedProBtn = radioButton(ctx, "Shared Pro", true).apply  { tag = "sharedPro" }
+        val customProBtn = radioButton(ctx, "Custom Pro", false).apply { tag = "customPro" }
         proRow.addView(sharedProBtn)
         proRow.addView(customProBtn)
         panel.addView(proRow)
 
-        // Custom pro panel: ONLY the ProSettingsFragment container — no duplicates
         val customProPanel = LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(0, 4, 0, 0)
-            visibility  = View.GONE
-            tag = "customProPanel"
+            orientation = LinearLayout.VERTICAL; setPadding(0, 4, 0, 0)
+            visibility  = View.GONE; tag = "customProPanel"
         }
-        val advancedLabel = TextView(ctx).apply {
-            text = "Advanced Engine Settings:"
-            textSize = 13f
-            setPadding(0, 8, 0, 4)
-            setTextColor(0xFF797876.toInt())
-        }
-        customProPanel.addView(advancedLabel)
-
-        val proFragContainer = android.widget.FrameLayout(ctx).apply {
-            id = proFragContainerId(voiceId)
-            tag = "proFragContainer$voiceId"
-        }
-        customProPanel.addView(proFragContainer)
+        customProPanel.addView(TextView(ctx).apply {
+            text = "Advanced Engine Settings:"; textSize = 13f
+            setPadding(0, 8, 0, 4); setTextColor(0xFF797876.toInt())
+        })
+        customProPanel.addView(android.widget.FrameLayout(ctx).apply {
+            id = proFragContainerId(voiceId); tag = "proFragContainer$voiceId"
+        })
         panel.addView(customProPanel)
 
         fun togglePro(shared: Boolean) {
@@ -393,9 +342,9 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
     }
 
     /**
-     * Melodic panel — same core parameters as Independent, but tagged for
-     * VoiceMode.MELODIC. Uses the same Pro Settings fragment container.
-     * Chord-aware melody engine will be wired here in the chord update phase.
+     * Melodic panel — core parameters + Contrast controls.
+     * Contrast Depth + Contrast Mode are visible when the voice is MELODIC.
+     * Uses the same Pro Settings fragment container as Independent.
      */
     private fun buildMelodicPanel(voiceId: Int, onSync: () -> Unit): LinearLayout {
         val ctx   = requireContext()
@@ -411,61 +360,58 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             "Pentatonic Maj","Pentatonic Min","Blues","Dorian","Mixolydian","Whole Tone",
             "Kurd (Annaziska / Aeolian)","Celtic Minor (Amara)","Pygmy","SaBye / SaByeD",
             "Aegean (Lydian)","Hijaz","Akebono")
-        val scaleRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 8, 0, 0) }
-        scaleRow.addView(TextView(ctx).apply { text = "Scale: "; setTextColor(0xFFE8E6E1.toInt()) })
-        val scaleSpinner = Spinner(ctx).apply { tag = "melScale" }
-        scaleSpinner.adapter = ArrayAdapter(ctx, android.R.layout.simple_spinner_item, scaleNames)
-            .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-        scaleRow.addView(scaleSpinner)
-        panel.addView(scaleRow)
+        panel.addView(spinnerRow(ctx, "Scale",  scaleNames, "melScale",  onSync))
+        panel.addView(spinnerRow(ctx, "Timing", listOf("Metronome","Mixed","Randomized","Euclidean"), "melTiming", onSync))
+        panel.addView(spinnerRow(ctx, "Root",   listOf("C","C#","D","D#","E","F","F#","G","G#","A","A#","B"), "melRoot", onSync))
 
-        val timingRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 8, 0, 0) }
-        timingRow.addView(TextView(ctx).apply { text = "Timing: "; setTextColor(0xFFE8E6E1.toInt()) })
-        val timingSpinner = Spinner(ctx).apply { tag = "melTiming" }
-        timingSpinner.adapter = ArrayAdapter(ctx, android.R.layout.simple_spinner_item,
-            listOf("Metronome","Mixed","Randomized","Euclidean"))
-            .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-        timingRow.addView(timingSpinner)
-        panel.addView(timingRow)
+        // ── Melodic Relation / Contrast controls ──────────────────────────
+        val contrastHeader = TextView(ctx).apply {
+            text = "Chord-Aware Contrast"; textSize = 14f
+            setPadding(0, 16, 0, 4)
+            setTextColor(0xFFBDBBB6.toInt())
+        }
+        panel.addView(contrastHeader)
 
-        val rootRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 8, 0, 0) }
-        rootRow.addView(TextView(ctx).apply { text = "Root: "; setTextColor(0xFFE8E6E1.toInt()) })
-        val rootSpinner = Spinner(ctx).apply { tag = "melRoot" }
-        rootSpinner.adapter = ArrayAdapter(ctx, android.R.layout.simple_spinner_item,
-            listOf("C","C#","D","D#","E","F","F#","G","G#","A","A#","B"))
-            .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-        rootRow.addView(rootSpinner)
-        panel.addView(rootRow)
+        val contrastEnableRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 4, 0, 0) }
+        val contrastSwitch = Switch(ctx).apply {
+            text = "Enable Contrast Mode"; isChecked = false
+            setTextColor(0xFFE8E6E1.toInt()); tag = "melContrastEnabled"
+        }
+        contrastEnableRow.addView(contrastSwitch)
+        panel.addView(contrastEnableRow)
 
-        // Pro Settings toggle (shared vs custom) — same fragment container
+        val contrastDepthRow = LinearLayout(ctx)
+        contrastDepthRow.orientation = LinearLayout.VERTICAL
+        contrastDepthRow.tag = "contrastDepthRow"
+        contrastDepthRow.addView(labeledSeekBar(ctx, "Contrast Depth", 0, 100, 50, "melContrastDepth", onSync))
+        panel.addView(contrastDepthRow)
+
+        panel.addView(spinnerRow(ctx, "Contrast Mode",
+            listOf("Counter-Motion","Rhythmic Complement","Register Contrast","Chord-Aware"),
+            "melContrastMode", onSync))
+
+        contrastSwitch.setOnCheckedChangeListener { _, _ -> if (!isUpdatingFromSync) onSync() }
+
+        // ── Pro Settings ──────────────────────────────────────────────────
         val proRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 16, 0, 0) }
-        val sharedProBtn = radioButton(ctx, "Shared Pro Settings", true).apply  { tag = "melSharedPro" }
-        val customProBtn = radioButton(ctx, "Custom Pro Settings", false).apply { tag = "melCustomPro" }
+        val sharedProBtn = radioButton(ctx, "Shared Pro", true).apply  { tag = "melSharedPro" }
+        val customProBtn = radioButton(ctx, "Custom Pro", false).apply { tag = "melCustomPro" }
         proRow.addView(sharedProBtn)
         proRow.addView(customProBtn)
         panel.addView(proRow)
 
         val customProPanel = LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(0, 4, 0, 0)
-            visibility  = View.GONE
-            tag = "melCustomProPanel"
+            orientation = LinearLayout.VERTICAL; setPadding(0, 4, 0, 0)
+            visibility  = View.GONE; tag = "melCustomProPanel"
         }
-        val advancedLabel = TextView(ctx).apply {
-            text = "Melodic Engine Settings (Pro):"
-            textSize = 13f
-            setPadding(0, 8, 0, 4)
-            setTextColor(0xFF797876.toInt())
-        }
-        customProPanel.addView(advancedLabel)
-        // Note: the ProSettingsFragment container is the same as Independent mode
-        // (proFragContainerId). This panel is only shown when mode==MELODIC, so
-        // there is never a visibility conflict.
-        val proFragRef = android.widget.FrameLayout(ctx).apply {
-            id = proFragContainerId(voiceId)
-            tag = "melProFragContainer$voiceId"
-        }
-        customProPanel.addView(proFragRef)
+        customProPanel.addView(TextView(ctx).apply {
+            text = "Melodic Engine Settings (Pro):"; textSize = 13f
+            setPadding(0, 8, 0, 4); setTextColor(0xFF797876.toInt())
+        })
+        // Re-use the same ProSettings fragment container (only one mode visible at a time)
+        customProPanel.addView(android.widget.FrameLayout(ctx).apply {
+            id  = proFragContainerId(voiceId); tag = "melProFragContainer$voiceId"
+        })
         panel.addView(customProPanel)
 
         fun togglePro(shared: Boolean) {
@@ -476,6 +422,62 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         }
         sharedProBtn.setOnClickListener { togglePro(true)  }
         customProBtn.setOnClickListener { togglePro(false) }
+
+        return panel
+    }
+
+    /**
+     * Builds the full chord configuration sub-panel.
+     * [prefix] is "ind" for Independent or "mel" (unused for now, melodic voices
+     * don't have their own chord engine — V1 handles that).
+     * All 11 chord controls:
+     *   Chord Type | Build Strategy | Tension Level | Inversion | Voicing Density
+     *   Plucking Style | Pluck Delay | Strum Length | Note Drop % | Mutation % | Rhythmic Figure
+     */
+    private fun buildChordsSubPanel(ctx: Context, prefix: String, onSync: () -> Unit): LinearLayout {
+        val panel = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(16, 8, 0, 8)
+        }
+
+        val sectionLabel = TextView(ctx).apply {
+            text = "Chord Configuration"; textSize = 13f
+            setPadding(0, 4, 0, 8); setTextColor(0xFFBDBBB6.toInt())
+        }
+        panel.addView(sectionLabel)
+
+        panel.addView(spinnerRow(ctx, "Chord Type",
+            listOf("Triad","7th","9th","Sus2","Sus4","Power"),
+            "${prefix}ChordType", onSync))
+
+        panel.addView(spinnerRow(ctx, "Build Strategy",
+            listOf("Diatonic Stack","Modal Snap"),
+            "${prefix}BuildStrategy", onSync))
+
+        panel.addView(spinnerRow(ctx, "Tension Level",
+            listOf("Triad","7th","9th","11th/13th"),
+            "${prefix}TensionLevel", onSync))
+
+        panel.addView(spinnerRow(ctx, "Inversion",
+            listOf("Root","1st","2nd","Auto (voice-leading)"),
+            "${prefix}Inversion", onSync))
+
+        panel.addView(spinnerRow(ctx, "Voicing Density",
+            listOf("Full","Drop 5","Shell","Drop Root"),
+            "${prefix}VoicingDensity", onSync))
+
+        panel.addView(spinnerRow(ctx, "Plucking Style",
+            listOf("Simultaneous","Ascending","Descending","Random","Percussive Up"),
+            "${prefix}PluckStyle", onSync))
+
+        panel.addView(labeledSeekBar(ctx, "Pluck Delay (ms)",  10, 200,  30, "${prefix}PluckDelay",   onSync))
+        panel.addView(labeledSeekBar(ctx, "Strum Length (notes)", 1, 6,   2, "${prefix}StrumLen",     onSync))
+        panel.addView(labeledSeekBar(ctx, "Note Drop %",          0,  50,  0, "${prefix}NoteDrop",     onSync))
+        panel.addView(labeledSeekBar(ctx, "Mutation %",           0,  30,  0, "${prefix}Mutation",     onSync))
+
+        panel.addView(spinnerRow(ctx, "Rhythmic Figure",
+            listOf("Sustained","Re-attack","Broken","Ostinato"),
+            "${prefix}RhythmicFigure", onSync))
 
         return panel
     }
@@ -497,28 +499,53 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         )
     }
 
+    private fun readChordConfig(panel: LinearLayout, prefix: String): ChordConfig {
+        fun sp(tag: String): Int = panel.findViewWithTag<Spinner>(tag)?.selectedItemPosition ?: 0
+        fun sb(tag: String): Int = panel.findViewWithTag<SeekBar>(tag)?.progress ?: 0
+        return ChordConfig(
+            chordType          = sp("${prefix}ChordType"),
+            chordBuildStrategy = ChordBuildStrategy.entries.getOrElse(sp("${prefix}BuildStrategy")) { ChordBuildStrategy.DIATONIC_STACK },
+            tensionLevel       = TensionLevel.entries.getOrElse(sp("${prefix}TensionLevel")) { TensionLevel.TRIAD },
+            inversionMode      = InversionMode.entries.getOrElse(sp("${prefix}Inversion")) { InversionMode.ROOT },
+            voicingDensity     = VoicingDensity.entries.getOrElse(sp("${prefix}VoicingDensity")) { VoicingDensity.FULL },
+            pluckingStyle      = sp("${prefix}PluckStyle"),
+            pluckingDelayMs    = (sb("${prefix}PluckDelay") + 10).toLong(),
+            strumLength        = sb("${prefix}StrumLen") + 1,
+            noteDropChance     = sb("${prefix}NoteDrop") / 100f,
+            mutationChance     = sb("${prefix}Mutation") / 100f,
+            rhythmicFigure     = RhythmicFigure.entries.getOrElse(sp("${prefix}RhythmicFigure")) { RhythmicFigure.SUSTAINED }
+        )
+    }
+
+    private fun readMelodicRelationConfig(panel: LinearLayout): MelodicRelationConfig {
+        val enabled = panel.findViewWithTag<Switch>("melContrastEnabled")?.isChecked ?: false
+        val depth   = panel.findViewWithTag<SeekBar>("melContrastDepth")?.progress ?: 50
+        val mode    = MelodicRelationMode.entries.getOrElse(
+            panel.findViewWithTag<Spinner>("melContrastMode")?.selectedItemPosition ?: 0
+        ) { MelodicRelationMode.COUNTER_MOTION }
+        return MelodicRelationConfig(enabled = enabled, contrastDepth = depth, mode = mode)
+    }
+
     private fun readIndependentConfig(panel: LinearLayout, voiceId: Int): IndependentConfig {
-        // Determine if this panel belongs to MELODIC mode by checking tag prefix
-        val isMelodic = (panel.tag as? String)?.startsWith("melod") == true
-            || panel.findViewWithTag<SeekBar>("melBpm") != null
+        val isMelodic = panel.findViewWithTag<SeekBar>("melBpm") != null
 
         fun seekVal(tag: String): Int = panel.findViewWithTag<SeekBar>(tag)?.progress ?: 0
-        fun sp(tag: String): Int = panel.findViewWithTag<Spinner>(tag)?.selectedItemPosition ?: 0
+        fun sp(tag: String): Int      = panel.findViewWithTag<Spinner>(tag)?.selectedItemPosition ?: 0
 
-        val bpm       = if (isMelodic) seekVal("melBpm") + 20   else seekVal("indBpm") + 20
-        val vel       = if (isMelodic) seekVal("melVel")         else seekVal("indVel")
-        val minOct    = if (isMelodic) seekVal("melMinOct")      else seekVal("indMinOct")
-        val maxOct    = if (isMelodic) seekVal("melMaxOct")      else seekVal("indMaxOct")
-        val midiCh    = if (isMelodic) seekVal("melMidiCh")      else seekVal("indMidiCh")
-        val scale     = if (isMelodic) sp("melScale")            else sp("indScale")
-        val timing    = if (isMelodic) sp("melTiming")           else sp("indTiming")
-        val root      = if (isMelodic) sp("melRoot")             else sp("indRoot")
-        val sharedTag = if (isMelodic) "melSharedPro"            else "sharedPro"
-        val shared    = panel.findViewWithTag<RadioButton>(sharedTag)?.isChecked ?: true
+        val bpm    = if (isMelodic) seekVal("melBpm") + 20   else seekVal("indBpm") + 20
+        val vel    = if (isMelodic) seekVal("melVel")         else seekVal("indVel")
+        val minOct = if (isMelodic) seekVal("melMinOct")      else seekVal("indMinOct")
+        val maxOct = if (isMelodic) seekVal("melMaxOct")      else seekVal("indMaxOct")
+        val midiCh = if (isMelodic) seekVal("melMidiCh")      else seekVal("indMidiCh")
+        val scale  = if (isMelodic) sp("melScale")            else sp("indScale")
+        val timing = if (isMelodic) sp("melTiming")           else sp("indTiming")
+        val root   = if (isMelodic) sp("melRoot")             else sp("indRoot")
+        val sharedTag = if (isMelodic) "melSharedPro"         else "sharedPro"
+        val shared = panel.findViewWithTag<RadioButton>(sharedTag)?.isChecked ?: true
 
         val style = VoiceStyle.entries.getOrElse(sp("indStyle")) { VoiceStyle.GENERATIVE }
-        val chordsType   = sp("chordType")
-        val chordsRhythm = sp("chordRhythm")
+        val chordCfg = if (!isMelodic && style == VoiceStyle.CHORDS) readChordConfig(panel, "ind")
+                       else ChordConfig()
 
         val baseCustomPro = if (voiceId == 2) customProSettingsV2 else customProSettingsV3
         val resolvedPro: ProSettings = if (shared) ProSettings() else baseCustomPro
@@ -535,8 +562,7 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             rootNote      = root,
             useSharedPro  = shared,
             proSettings   = resolvedPro,
-            chordsType    = chordsType,
-            chordsRhythm  = chordsRhythm
+            chordConfig   = chordCfg
         )
     }
 
@@ -568,41 +594,59 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
                 panel.findViewWithTag<SeekBar>("masterVel")?.progress = cfg.harmonyConfig.masterVelocity
                 panel.findViewWithTag<SeekBar>("midiCh")?.progress    = cfg.harmonyConfig.midiChannel
             }
-            VoiceMode.INDEPENDENT, VoiceMode.MELODIC -> {
+            VoiceMode.INDEPENDENT -> {
                 val ic = cfg.independentConfig
-                val isMelodic = cfg.mode == VoiceMode.MELODIC
-                if (isMelodic) {
-                    panel.findViewWithTag<SeekBar>("melVel")?.progress    = ic.velocity
-                    panel.findViewWithTag<SeekBar>("melMidiCh")?.progress = ic.midiChannel
-                    panel.findViewWithTag<Spinner>("melRoot")?.setSelection(ic.rootNote)
-                    panel.findViewWithTag<Spinner>("melScale")?.setSelection(ic.selectedScale)
-                    val melShared = ic.useSharedPro
-                    panel.findViewWithTag<RadioButton>("melSharedPro")?.isChecked = melShared
-                    panel.findViewWithTag<RadioButton>("melCustomPro")?.isChecked = !melShared
-                    panel.findViewWithTag<View>("melCustomProPanel")?.visibility  =
-                        if (melShared) View.GONE else View.VISIBLE
-                } else {
-                    panel.findViewWithTag<SeekBar>("indVel")?.progress     = ic.velocity
-                    panel.findViewWithTag<SeekBar>("indMidiCh")?.progress  = ic.midiChannel
-                    panel.findViewWithTag<Spinner>("indStyle")?.setSelection(ic.style.ordinal)
-                    panel.findViewWithTag<Spinner>("indRoot")?.setSelection(ic.rootNote)
-                    panel.findViewWithTag<Spinner>("indScale")?.setSelection(ic.selectedScale)
-                    panel.findViewWithTag<View>("chordsPanel")?.visibility =
-                        if (ic.style == VoiceStyle.CHORDS) View.VISIBLE else View.GONE
-                    panel.findViewWithTag<Spinner>("chordType")?.setSelection(ic.chordsType)
-                    panel.findViewWithTag<Spinner>("chordRhythm")?.setSelection(ic.chordsRhythm)
-                    val shared = ic.useSharedPro
-                    panel.findViewWithTag<RadioButton>("sharedPro")?.isChecked = shared
-                    panel.findViewWithTag<RadioButton>("customPro")?.isChecked = !shared
-                    panel.findViewWithTag<View>("customProPanel")?.visibility  =
-                        if (shared) View.GONE else View.VISIBLE
-                    if (!shared) {
-                        val frag = if (panel === panelV2) proFragV2 else proFragV3
-                        frag?.setInitialSettings(ic.proSettings)
-                    }
+                panel.findViewWithTag<SeekBar>("indVel")?.progress     = ic.velocity
+                panel.findViewWithTag<SeekBar>("indMidiCh")?.progress  = ic.midiChannel
+                panel.findViewWithTag<Spinner>("indStyle")?.setSelection(ic.style.ordinal)
+                panel.findViewWithTag<Spinner>("indRoot")?.setSelection(ic.rootNote)
+                panel.findViewWithTag<Spinner>("indScale")?.setSelection(ic.selectedScale)
+                panel.findViewWithTag<View>("chordsPanel")?.visibility =
+                    if (ic.style == VoiceStyle.CHORDS) View.VISIBLE else View.GONE
+                // Apply full chordConfig
+                applyChordConfigToPanel(panel, ic.chordConfig, "ind")
+                val shared = ic.useSharedPro
+                panel.findViewWithTag<RadioButton>("sharedPro")?.isChecked = shared
+                panel.findViewWithTag<RadioButton>("customPro")?.isChecked = !shared
+                panel.findViewWithTag<View>("customProPanel")?.visibility  =
+                    if (shared) View.GONE else View.VISIBLE
+                if (!shared) {
+                    val frag = if (panel === panelV2) proFragV2 else proFragV3
+                    frag?.setInitialSettings(ic.proSettings)
                 }
             }
+            VoiceMode.MELODIC -> {
+                val ic = cfg.independentConfig
+                panel.findViewWithTag<SeekBar>("melVel")?.progress    = ic.velocity
+                panel.findViewWithTag<SeekBar>("melMidiCh")?.progress = ic.midiChannel
+                panel.findViewWithTag<Spinner>("melRoot")?.setSelection(ic.rootNote)
+                panel.findViewWithTag<Spinner>("melScale")?.setSelection(ic.selectedScale)
+                // Melodic relation config
+                val mrc = cfg.melodicRelationConfig
+                panel.findViewWithTag<Switch>("melContrastEnabled")?.isChecked = mrc.enabled
+                panel.findViewWithTag<SeekBar>("melContrastDepth")?.progress   = mrc.contrastDepth
+                panel.findViewWithTag<Spinner>("melContrastMode")?.setSelection(mrc.mode.ordinal)
+                val melShared = ic.useSharedPro
+                panel.findViewWithTag<RadioButton>("melSharedPro")?.isChecked = melShared
+                panel.findViewWithTag<RadioButton>("melCustomPro")?.isChecked = !melShared
+                panel.findViewWithTag<View>("melCustomProPanel")?.visibility  =
+                    if (melShared) View.GONE else View.VISIBLE
+            }
         }
+    }
+
+    private fun applyChordConfigToPanel(panel: LinearLayout, cc: ChordConfig, prefix: String) {
+        panel.findViewWithTag<Spinner>("${prefix}ChordType")?.setSelection(cc.chordType)
+        panel.findViewWithTag<Spinner>("${prefix}BuildStrategy")?.setSelection(cc.chordBuildStrategy.ordinal)
+        panel.findViewWithTag<Spinner>("${prefix}TensionLevel")?.setSelection(cc.tensionLevel.ordinal)
+        panel.findViewWithTag<Spinner>("${prefix}Inversion")?.setSelection(cc.inversionMode.ordinal)
+        panel.findViewWithTag<Spinner>("${prefix}VoicingDensity")?.setSelection(cc.voicingDensity.ordinal)
+        panel.findViewWithTag<Spinner>("${prefix}PluckStyle")?.setSelection(cc.pluckingStyle)
+        panel.findViewWithTag<SeekBar>("${prefix}PluckDelay")?.progress  = (cc.pluckingDelayMs - 10).toInt().coerceIn(0, 190)
+        panel.findViewWithTag<SeekBar>("${prefix}StrumLen")?.progress    = (cc.strumLength - 1).coerceIn(0, 5)
+        panel.findViewWithTag<SeekBar>("${prefix}NoteDrop")?.progress    = (cc.noteDropChance * 100).toInt().coerceIn(0, 50)
+        panel.findViewWithTag<SeekBar>("${prefix}Mutation")?.progress    = (cc.mutationChance * 100).toInt().coerceIn(0, 30)
+        panel.findViewWithTag<Spinner>("${prefix}RhythmicFigure")?.setSelection(cc.rhythmicFigure.ordinal)
     }
 
     // ── Push current config to service (called by child ProSettings) ──────
@@ -623,19 +667,40 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             else                          -> VoiceMode.INDEPENDENT
         }
         val cfg = VoiceConfig(
-            enabled           = enableSwitch?.isChecked ?: false,
-            mode              = mode,
-            harmonyConfig     = readHarmonyConfig(harmonyPanel, voiceId),
-            independentConfig = readIndependentConfig(
+            enabled              = enableSwitch?.isChecked ?: false,
+            mode                 = mode,
+            harmonyConfig        = readHarmonyConfig(harmonyPanel, voiceId),
+            independentConfig    = readIndependentConfig(
                 if (mode == VoiceMode.MELODIC) melodicPanel else independentPanel,
                 voiceId
-            )
+            ),
+            melodicRelationConfig = readMelodicRelationConfig(melodicPanel)
         )
         if (voiceId == 2) { currentV2 = cfg; svc.updateVoice2Config(cfg) }
         else              { currentV3 = cfg; svc.updateVoice3Config(cfg) }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────
+
+    private fun spinnerRow(
+        ctx: Context, label: String, items: List<String>, tag: String, onSync: (() -> Unit)?
+    ): LinearLayout {
+        val row = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 8, 0, 0) }
+        row.addView(TextView(ctx).apply { text = "$label: "; setTextColor(0xFFE8E6E1.toInt()) })
+        val sp = Spinner(ctx).apply { this.tag = tag }
+        sp.adapter = ArrayAdapter(ctx, android.R.layout.simple_spinner_item, items)
+            .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        if (onSync != null) {
+            sp.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(a: AdapterView<*>?, v: View?, p: Int, id: Long) {
+                    if (!isUpdatingFromSync) onSync()
+                }
+                override fun onNothingSelected(a: AdapterView<*>?) {}
+            }
+        }
+        row.addView(sp)
+        return row
+    }
 
     private fun radioButton(ctx: Context, text: String, checked: Boolean) =
         RadioButton(ctx).apply { this.text = text; isChecked = checked; setTextColor(0xFFE8E6E1.toInt()) }

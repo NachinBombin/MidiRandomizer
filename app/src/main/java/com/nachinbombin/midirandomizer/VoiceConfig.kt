@@ -55,6 +55,28 @@ data class ChordConfig(
     val rhythmicFigure:      RhythmicFigure   = RhythmicFigure.SUSTAINED
 ) : Parcelable
 
+// ── Melodic relation mode (V2/V3 MELODIC mode only) ────────────────────────
+
+/**
+ * How a MELODIC voice should relate to V1 when V1 is playing CHORDS.
+ * - COUNTER_MOTION       : move in opposite direction to V1 melodic motion
+ * - RHYTHMIC_COMPLEMENT  : fill rhythmic gaps left by V1
+ * - REGISTER_CONTRAST    : stay in a register well above or below V1
+ * - CHORD_AWARE          : select pitches from current V1 chord tones (requires V1 CHORDS)
+ */
+@Parcelize
+enum class MelodicRelationMode : Parcelable {
+    COUNTER_MOTION, RHYTHMIC_COMPLEMENT, REGISTER_CONTRAST, CHORD_AWARE
+}
+
+/** Parameters governing how a V2/V3 MELODIC voice relates to V1. */
+@Parcelize
+data class MelodicRelationConfig(
+    val enabled:       Boolean              = false,
+    val contrastDepth: Int                  = 50,   // 0-100, how strongly the constraint is applied
+    val mode:          MelodicRelationMode  = MelodicRelationMode.COUNTER_MOTION
+) : Parcelable
+
 // ── Harmony / V2-V3 configs ─────────────────────────────────────────────────
 
 @Parcelize
@@ -86,17 +108,17 @@ data class IndependentConfig(
     val droneMaxBeats:    Int              = 64,
     val droneOctaveMin:   Int              = 3,
     val droneOctaveMax:   Int              = 5,
-    // Chords-mode specific (V2/V3 stubs – V1 uses Voice1Params.chordConfig)
-    val chordsType:       Int              = 0,
-    val chordsRhythm:     Int              = 0
+    // Full chord config for V2/V3 CHORDS style
+    val chordConfig:      ChordConfig      = ChordConfig()
 ) : Parcelable
 
 @Parcelize
 data class VoiceConfig(
-    val enabled:           Boolean           = false,
-    val mode:              VoiceMode         = VoiceMode.HARMONY,
-    val harmonyConfig:     HarmonyConfig     = HarmonyConfig(),
-    val independentConfig: IndependentConfig = IndependentConfig()
+    val enabled:              Boolean              = false,
+    val mode:                 VoiceMode            = VoiceMode.HARMONY,
+    val harmonyConfig:        HarmonyConfig        = HarmonyConfig(),
+    val independentConfig:    IndependentConfig    = IndependentConfig(),
+    val melodicRelationConfig: MelodicRelationConfig = MelodicRelationConfig()
 ) : Parcelable
 
 // ── Diatonic helpers ────────────────────────────────────────────────────────
@@ -153,17 +175,15 @@ object DiatonicHarmony {
         val allowed  = allowedNotes(scaleIntervals, if (rootNote > 0) rootNote - 1 else 0)
         if (allowed.isEmpty()) return listOf(rootMidi)
 
-        // How many chord tones do we need?
         val targetTones = when (cfg.tensionLevel) {
             TensionLevel.TRIAD                -> 3
             TensionLevel.SEVENTH              -> 4
             TensionLevel.NINTH                -> 5
             TensionLevel.ELEVENTH_THIRTEENTH  -> 6
         }.let { t ->
-            // Further limit by chord type for simple types
             when (cfg.chordType) {
-                3, 4 -> t.coerceAtMost(3)  // Sus2/Sus4 → triad max
-                5    -> 2                   // Power chord → root + fifth only
+                3, 4 -> t.coerceAtMost(3)
+                5    -> 2
                 else -> t
             }
         }
@@ -172,21 +192,19 @@ object DiatonicHarmony {
         val notes   = mutableListOf<Int>()
 
         if (cfg.chordBuildStrategy == ChordBuildStrategy.DIATONIC_STACK) {
-            // Stack every other scale degree (thirds in diatonic terms)
             var stepIdx = rootIdx
             repeat(targetTones) {
                 notes.add(allowed.getOrElse(stepIdx.coerceIn(0, allowed.lastIndex)) { rootMidi })
-                stepIdx += 2  // +2 scale degrees = a third
+                stepIdx += 2
             }
         } else {
-            // MODAL_SNAP: build textbook intervals then snap
             val intervals = when (cfg.chordType) {
-                1 -> listOf(0, 4, 7, 10)          // 7th
-                2 -> listOf(0, 4, 7, 10, 14)       // 9th
-                3 -> listOf(0, 2, 7)               // Sus2
-                4 -> listOf(0, 5, 7)               // Sus4
-                5 -> listOf(0, 7)                  // Power
-                else -> listOf(0, 4, 7)            // Triad
+                1 -> listOf(0, 4, 7, 10)
+                2 -> listOf(0, 4, 7, 10, 14)
+                3 -> listOf(0, 2, 7)
+                4 -> listOf(0, 5, 7)
+                5 -> listOf(0, 7)
+                else -> listOf(0, 4, 7)
             }.take(targetTones)
             for (ivl in intervals) {
                 val raw     = rootMidi + ivl
@@ -195,32 +213,28 @@ object DiatonicHarmony {
             }
         }
 
-        // Apply voicing density
         val reduced = when (cfg.voicingDensity) {
-            VoicingDensity.DROP5     -> notes.filterIndexed { i, _ -> i != 2 }   // drop the fifth
+            VoicingDensity.DROP5     -> notes.filterIndexed { i, _ -> i != 2 }
             VoicingDensity.DROP_ROOT -> if (notes.size >= 2) notes.drop(1) else notes
             VoicingDensity.SHELL     -> {
-                // root + 3rd + 7th (indices 0,1,3) or fewer if not available
                 listOfNotNull(notes.getOrNull(0), notes.getOrNull(1), notes.getOrNull(3))
                     .ifEmpty { notes }
             }
             VoicingDensity.FULL -> notes
         }.ifEmpty { listOf(rootMidi) }
 
-        // Note drop chance: omit one random non-root note
         val withDrop = if (cfg.noteDropChance > 0f && reduced.size > 1 && Random.nextFloat() < cfg.noteDropChance) {
-            val dropIdx = Random.nextInt(1, reduced.size)  // never drop root
+            val dropIdx = Random.nextInt(1, reduced.size)
             reduced.filterIndexed { i, _ -> i != dropIdx }
         } else reduced
 
-        // Mutation: randomly shift one non-root note by ±1 scale degree
         val mutated = if (cfg.mutationChance > 0f && withDrop.size > 1 && Random.nextFloat() < cfg.mutationChance) {
             val mutIdx = Random.nextInt(1, withDrop.size)
             val noteToMutate = withDrop[mutIdx]
             val noteIdx = indexOf(noteToMutate, allowed)
             val shift = if (Random.nextBoolean()) 1 else -1
-            val mutated = allowed.getOrElse((noteIdx + shift).coerceIn(0, allowed.lastIndex)) { noteToMutate }
-            withDrop.toMutableList().also { it[mutIdx] = mutated }
+            val mut = allowed.getOrElse((noteIdx + shift).coerceIn(0, allowed.lastIndex)) { noteToMutate }
+            withDrop.toMutableList().also { it[mutIdx] = mut }
         } else withDrop
 
         return mutated.map { it.coerceIn(0, 127) }
@@ -250,5 +264,65 @@ object DiatonicHarmony {
                 } ?: root
             }
         }
+    }
+
+    /**
+     * Given the current V1 chord notes and a MELODIC voice's relation config,
+     * filter or re-weight the [candidateNotes] pool so the melodic voice
+     * respects the requested contrast mode.
+     *
+     * Returns a non-empty subset of [candidateNotes] (or the full pool if
+     * the config is disabled or the pool is too small to filter).
+     */
+    fun applyMelodicRelation(
+        candidateNotes:    IntArray,
+        v1ChordNotes:      List<Int>,
+        v1LastNote:        Int,
+        relationCfg:       MelodicRelationConfig
+    ): IntArray {
+        if (!relationCfg.enabled || candidateNotes.size < 3 || v1ChordNotes.isEmpty()) {
+            return candidateNotes
+        }
+        val depth = relationCfg.contrastDepth / 100f   // 0..1
+        val filtered: List<Int> = when (relationCfg.mode) {
+
+            MelodicRelationMode.COUNTER_MOTION -> {
+                // Prefer notes moving away from v1LastNote direction
+                // Simple heuristic: if last V1 note is in upper half, prefer lower candidates
+                val v1Mid = v1ChordNotes.average()
+                val prefer = if (v1Mid > 60) candidateNotes.filter { it < 60 }
+                             else            candidateNotes.filter { it >= 60 }
+                prefer.ifEmpty { candidateNotes.toList() }
+            }
+
+            MelodicRelationMode.RHYTHMIC_COMPLEMENT -> {
+                // No pitch filtering for rhythmic complement — timing handled by VoiceEngine;
+                // return full pool so the engine can pick freely
+                candidateNotes.toList()
+            }
+
+            MelodicRelationMode.REGISTER_CONTRAST -> {
+                val v1Max = v1ChordNotes.maxOrNull() ?: 60
+                val v1Min = v1ChordNotes.minOrNull() ?: 60
+                // Prefer notes at least a fifth away from v1 range
+                val above = candidateNotes.filter { it > v1Max + 5 }
+                val below = candidateNotes.filter { it < v1Min - 5 }
+                val pool  = (above + below).distinct()
+                pool.ifEmpty { candidateNotes.toList() }
+            }
+
+            MelodicRelationMode.CHORD_AWARE -> {
+                // Prefer chord tones when depth is high; mix in passing tones when low
+                val chordSet = v1ChordNotes.map { it % 12 }.toSet()
+                val chordTones = candidateNotes.filter { (it % 12) in chordSet }
+                val passing    = candidateNotes.filter { (it % 12) !in chordSet }
+                // Blend: at depth=1 use only chord tones; at depth=0 full pool
+                val blendSize  = (chordTones.size + (passing.size * (1f - depth)).toInt()).coerceAtLeast(1)
+                (chordTones + passing.take((passing.size * (1f - depth)).toInt()))
+                    .take(blendSize)
+                    .ifEmpty { candidateNotes.toList() }
+            }
+        }
+        return filtered.toIntArray()
     }
 }
