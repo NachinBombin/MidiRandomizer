@@ -630,6 +630,10 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         
         panel.addView(labeledSeekBarFollow(ctx, "MIDI Channel", 0, 16, 0, "melMidiCh", "Follow Main", onSync))
 
+        if (voiceId == 3) {
+            panel.addView(spinnerRow(ctx, "Reference Voice", listOf("Voice 1", "Voice 2"), "melRefVoice", onSync))
+        }
+
         val scaleNames = listOf("Follow Main", "Chromatic","Major","Minor Natural","Minor Harmonic",
             "Pentatonic Maj","Pentatonic Min","Blues","Dorian","Mixolydian","Whole Tone",
             "Kurd (Annaziska / Aeolian)","Celtic Minor (Amara)","Pygmy","SaBye / SaByeD",
@@ -644,19 +648,11 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
 
         // ── Melodic Relation / Contrast controls ──────────────────────────
         val contrastHeader = TextView(ctx).apply {
-            text = "Chord-Aware Contrast"; textSize = 14f
+            text = "Harmonic Contrast Settings"; textSize = 14f
             setPadding(0, 16, 0, 4)
             setTextColor(0xFFBDBBB6.toInt())
         }
         panel.addView(contrastHeader)
-
-        val contrastEnableRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 4, 0, 0) }
-        val contrastSwitch = Switch(ctx).apply {
-            text = "Enable Contrast Mode"; isChecked = false
-            setTextColor(0xFFE8E6E1.toInt()); tag = "melContrastEnabled"
-        }
-        contrastEnableRow.addView(contrastSwitch)
-        panel.addView(contrastEnableRow)
 
         val contrastDepthRow = LinearLayout(ctx)
         contrastDepthRow.orientation = LinearLayout.VERTICAL
@@ -667,8 +663,6 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         panel.addView(spinnerRow(ctx, "Contrast Mode",
             listOf("Counter-Motion","Rhythmic Complement","Register Contrast","Chord-Aware"),
             "melContrastMode", onSync))
-
-        contrastSwitch.setOnCheckedChangeListener { _, _ -> if (!isUpdatingFromSync) onSync() }
 
         // ── Pro Settings ──────────────────────────────────────────────────
         val proRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 16, 0, 0) }
@@ -799,12 +793,12 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
     }
 
     private fun readMelodicRelationConfig(panel: LinearLayout): MelodicRelationConfig {
-        val enabled = panel.findViewWithTag<Switch>("melContrastEnabled")?.isChecked ?: false
         val depth   = panel.findViewWithTag<SeekBar>("melContrastDepth")?.progress ?: 50
         val mode    = MelodicRelationMode.entries.getOrElse(
             panel.findViewWithTag<Spinner>("melContrastMode")?.selectedItemPosition ?: 0
         ) { MelodicRelationMode.COUNTER_MOTION }
-        return MelodicRelationConfig(enabled = enabled, contrastDepth = depth, mode = mode)
+        val ref = (panel.findViewWithTag<Spinner>("melRefVoice")?.selectedItemPosition ?: 0) + 1
+        return MelodicRelationConfig(enabled = true, contrastDepth = depth, mode = mode, referenceVoice = ref)
     }
 
     private fun readIndependentConfig(panel: LinearLayout, voiceId: Int): IndependentConfig {
@@ -949,6 +943,7 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
                 panel.findViewWithTag<Switch>("melContrastEnabled")?.isChecked = mrc.enabled
                 panel.findViewWithTag<SeekBar>("melContrastDepth")?.progress   = mrc.contrastDepth
                 panel.findViewWithTag<Spinner>("melContrastMode")?.setSelection(mrc.mode.ordinal)
+                panel.findViewWithTag<Spinner>("melRefVoice")?.setSelection(mrc.referenceVoice - 1)
                 val melShared = ic.useSharedPro
                 panel.findViewWithTag<RadioButton>("melSharedPro")?.isChecked = melShared
                 panel.findViewWithTag<RadioButton>("melCustomPro")?.isChecked = !melShared

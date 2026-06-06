@@ -1,0 +1,20 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.nachinbombin.midirandomizer.app-mergeDebugResources-36:/values-hdpi-v4/values-hdpi-v4.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\solid\\.gradle\\caches\\9.4.1\\transforms\\bf32e7bf882869d8752ccb28c26c1e08\\transformed\\appcompat-1.7.0\\res\\values-hdpi-v4\\values-hdpi-v4.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endLines": "6",
+                        "endColumns": "13",
+                        "endOffsets": "327"
+                    }
+                }
+            ]
+        }
+    ]
+}

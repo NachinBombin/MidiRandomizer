@@ -42,7 +42,7 @@ class MarkovMelody(
      * @param gesturePitchBias  signed bias from GestureEngine (negative = pull down,
      *                          positive = pull up). 0f = no gesture influence.
      */
-    fun nextDegree(gesturePitchBias: Float = 0f): Int {
+    fun nextDegree(gesturePitchBias: Float = 0f, context: List<MidiService.MelodicEvent> = emptyList()): Int {
         val weights = buildWeights(prev)
 
         // ── Tier-1 overlays ───────────────────────────────────────────────────

@@ -63,7 +63,7 @@ class LSystemMelody(
         currentDegree = Random.nextInt(scaleSize)
     }
 
-    fun nextDegree(): Int {
+    fun nextDegree(context: List<MidiService.MelodicEvent> = emptyList()): Int {
         if (buffer.isEmpty()) generateString()
         val delta = buffer.removeFirst()
         currentDegree = wrapDegree(currentDegree + delta)

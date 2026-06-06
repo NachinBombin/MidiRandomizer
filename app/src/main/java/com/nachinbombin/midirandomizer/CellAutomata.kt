@@ -36,7 +36,7 @@ class CellAutomata(
     }
 
     /** Returns the next scale-degree index. Evolves the CA when the queue is empty. */
-    fun nextDegree(): Int {
+    fun nextDegree(context: List<MidiService.MelodicEvent> = emptyList()): Int {
         if (noteQueue.isEmpty()) evolveAndEnqueue()
         if (noteQueue.isEmpty()) {
             // Fallback if evolution produces no in-scale notes

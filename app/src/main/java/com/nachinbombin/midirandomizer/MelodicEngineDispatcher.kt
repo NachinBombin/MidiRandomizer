@@ -16,7 +16,9 @@ import kotlin.random.Random
  */
 class MelodicEngineDispatcher(
     private val scaleIntervals: List<Int>,
-    private val settings: ProSettings
+    private val settings: ProSettings,
+    private val getContext: (Int) -> List<MidiService.MelodicEvent> = { emptyList() },
+    private val getFuture: (Int) -> List<MidiService.MelodicEvent> = { emptyList() }
 ) {
     private val scaleSize = scaleIntervals.size
 
@@ -66,6 +68,9 @@ class MelodicEngineDispatcher(
      */
     fun nextDegree(): Int {
         val gestureFrame = GestureEngine.frame(gestureCfg, beatInPhrase, phraseLen)
+        
+        // Context awareness
+        val context = getContext(1)
 
         // Density gate (Tier-1 only; Tier-2 engines own their own density)
         if (settings.melodicEngine == MelodicEngine.MARKOV &&
@@ -77,12 +82,12 @@ class MelodicEngineDispatcher(
 
         return when (settings.melodicEngine) {
             MelodicEngine.NAIVE         -> Random.nextInt(scaleSize)
-            MelodicEngine.MARKOV        -> markov?.nextDegree(gestureFrame.pitchBias)
+            MelodicEngine.MARKOV        -> markov?.nextDegree(gestureFrame.pitchBias, context)
                                                   ?: Random.nextInt(scaleSize)
-            MelodicEngine.PWG           -> pwg?.nextDegree()           ?: Random.nextInt(scaleSize)
-            MelodicEngine.L_SYSTEM      -> lSystem?.nextDegree()       ?: Random.nextInt(scaleSize)
-            MelodicEngine.CELL_AUTOMATA -> cellAuto?.nextDegree()      ?: Random.nextInt(scaleSize)
-            MelodicEngine.NRT_MELODIC   -> nrtMelodic?.nextDegree()    ?: Random.nextInt(scaleSize)
+            MelodicEngine.PWG           -> pwg?.nextDegree(context)    ?: Random.nextInt(scaleSize)
+            MelodicEngine.L_SYSTEM      -> lSystem?.nextDegree(context) ?: Random.nextInt(scaleSize)
+            MelodicEngine.CELL_AUTOMATA -> cellAuto?.nextDegree(context) ?: Random.nextInt(scaleSize)
+            MelodicEngine.NRT_MELODIC   -> nrtMelodic?.nextDegree(context) ?: Random.nextInt(scaleSize)
         }
     }
 

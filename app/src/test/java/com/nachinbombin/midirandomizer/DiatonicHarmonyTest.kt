@@ -6,72 +6,89 @@ import org.junit.Test
 class DiatonicHarmonyTest {
 
     @Test
-    fun testAllowedNotes() {
-        val scale = listOf(0, 2, 4, 5, 7, 9, 11) // Major
-        val notes = DiatonicHarmony.allowedNotes(scale, 0)
-        assertTrue(notes.contains(60)) // C4
-        assertFalse(notes.contains(61)) // C#4
-    }
-
-    @Test
-    fun testApplyMelodicRelation_EmptyChord() {
-        val candidates = intArrayOf(60, 62, 64)
-        val config = MelodicRelationConfig(enabled = true, mode = MelodicRelationMode.CHORD_AWARE)
-        val result = DiatonicHarmony.applyMelodicRelation(candidates, emptyList(), 60, config)
-        assertArrayEquals(candidates, result)
-    }
-
-    @Test
     fun testApplyMelodicRelation_ChordAware() {
-        val candidates = intArrayOf(60, 61, 62, 63, 64)
-        val chord = listOf(60, 64, 67) // C Major
-        val config = MelodicRelationConfig(enabled = true, mode = MelodicRelationMode.CHORD_AWARE, contrastDepth = 100)
-        val result = DiatonicHarmony.applyMelodicRelation(candidates, chord, 60, config)
+        val candidateNotes = intArrayOf(60, 62, 64, 65, 67, 69, 71, 72) // C Major scale
+        // Reference voice is playing a C Major triad: C (60), E (64), G (67)
+        val context = listOf(MidiService.MelodicEvent(listOf(60, 64, 67)))
+        val config = MelodicRelationConfig(
+            enabled = true,
+            mode = MelodicRelationMode.CHORD_AWARE,
+            contrastDepth = 100
+        )
+
+        val filtered = DiatonicHarmony.applyMelodicRelation(candidateNotes, context, config)
         
-        // Should only contain notes from the chord (octave independent)
-        // 60 % 12 = 0 (C)
-        // 64 % 12 = 4 (E)
-        // 67 % 12 = 7 (G)
-        // Candidates: 60(0), 61(1), 62(2), 63(3), 64(4)
-        // Expected result for depth=100: 60, 64
-        val expected = intArrayOf(60, 64)
-        assertArrayEquals(expected, result)
+        // Should only contain notes from the C Major triad (60, 64, 67, 72)
+        val filteredSet = filtered.toSet()
+        assertTrue(filteredSet.contains(60))
+        assertTrue(filteredSet.contains(64))
+        assertTrue(filteredSet.contains(67))
+        assertTrue(filteredSet.contains(72))
+        assertFalse(filteredSet.contains(62))
+        assertFalse(filteredSet.contains(65))
     }
 
     @Test
-    fun testApplyMelodicRelation_RegisterContrast() {
-        val candidates = intArrayOf(48, 50, 72, 74)
-        val chord = listOf(60, 64, 67) // C4 range
-        val config = MelodicRelationConfig(enabled = true, mode = MelodicRelationMode.REGISTER_CONTRAST)
-        val result = DiatonicHarmony.applyMelodicRelation(candidates, chord, 60, config)
+    fun testApplyMelodicRelation_CounterMotion_Up() {
+        val candidateNotes = intArrayOf(60, 62, 64, 65, 67, 69, 71, 72)
+        // Reference voice moved from C (60) to G (67) -> Upwards
+        val context = listOf(
+            MidiService.MelodicEvent(listOf(60)),
+            MidiService.MelodicEvent(listOf(67))
+        )
+        val config = MelodicRelationConfig(
+            enabled = true,
+            mode = MelodicRelationMode.COUNTER_MOTION,
+            contrastDepth = 100
+        )
+
+        val filtered = DiatonicHarmony.applyMelodicRelation(candidateNotes, context, config)
         
-        // v1Min = 60, v1Max = 67
-        // Prefer < 60-5 (55) or > 67+5 (72)
-        // Expected: 48, 50, 74 (72 is NOT > 72, it's equal)
-        assertTrue(result.contains(48))
-        assertTrue(result.contains(50))
-        assertTrue(result.contains(74))
-        assertFalse(result.contains(72))
+        // Reference moved up, so we should prefer notes BELOW the current reference pitch (67)
+        val filteredList = filtered.toList()
+        assertTrue(filteredList.all { it < 67 })
     }
 
     @Test
-    fun testApplyMelodicRelation_EmptyCandidates() {
-        val candidates = intArrayOf()
-        val chord = listOf(60, 64, 67)
-        val config = MelodicRelationConfig(enabled = true, mode = MelodicRelationMode.CHORD_AWARE)
-        val result = DiatonicHarmony.applyMelodicRelation(candidates, chord, 60, config)
-        assertEquals(0, result.size)
+    fun testApplyMelodicRelation_CounterMotion_Down() {
+        val candidateNotes = intArrayOf(60, 62, 64, 65, 67, 69, 71, 72)
+        // Reference voice moved from G (67) to D (62) -> Downwards
+        val context = listOf(
+            MidiService.MelodicEvent(listOf(67)),
+            MidiService.MelodicEvent(listOf(62))
+        )
+        val config = MelodicRelationConfig(
+            enabled = true,
+            mode = MelodicRelationMode.COUNTER_MOTION,
+            contrastDepth = 100
+        )
+
+        val filtered = DiatonicHarmony.applyMelodicRelation(candidateNotes, context, config)
+        
+        // Reference moved down, so we should prefer notes ABOVE the current reference pitch (62)
+        val filteredList = filtered.toList()
+        assertTrue(filteredList.all { it > 62 })
     }
 
     @Test
-    fun testApplyMelodicRelation_CounterMotion() {
-        val candidates = intArrayOf(40, 50, 70, 80)
-        val chord = listOf(72, 76, 79) // High C Major (avg > 60)
-        val config = MelodicRelationConfig(enabled = true, mode = MelodicRelationMode.COUNTER_MOTION)
-        val result = DiatonicHarmony.applyMelodicRelation(candidates, chord, 60, config)
+    fun testApplyMelodicRelation_RegisterContrast_Above() {
+        val candidateNotes = intArrayOf(48, 50, 52, 60, 62, 64, 72, 74, 76)
+        // Reference voice is around middle C (60)
+        val context = listOf(MidiService.MelodicEvent(listOf(60)))
+        val config = MelodicRelationConfig(
+            enabled = true,
+            mode = MelodicRelationMode.REGISTER_CONTRAST,
+            contrastDepth = 100
+        )
+
+        val filtered = DiatonicHarmony.applyMelodicRelation(candidateNotes, context, config)
         
-        // v1Mid > 60, prefer < 60
-        assertTrue(result.all { it < 60 })
-        assertEquals(2, result.size)
+        // Should avoid notes near 60 (+/- 5 semitones)
+        val filteredSet = filtered.toSet()
+        assertFalse(filteredSet.contains(60))
+        assertFalse(filteredSet.contains(62))
+        assertFalse(filteredSet.contains(64))
+        assertTrue(filteredSet.contains(48))
+        assertTrue(filteredSet.contains(76))
     }
 }

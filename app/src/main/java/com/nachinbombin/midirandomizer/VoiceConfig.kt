@@ -69,12 +69,13 @@ enum class MelodicRelationMode : Parcelable {
     COUNTER_MOTION, RHYTHMIC_COMPLEMENT, REGISTER_CONTRAST, CHORD_AWARE
 }
 
-/** Parameters governing how a V2/V3 MELODIC voice relates to V1. */
+/** Parameters governing how a V2/V3 MELODIC voice relates to its reference voice. */
 @Parcelize
 data class MelodicRelationConfig(
     val enabled:       Boolean              = false,
     val contrastDepth: Int                  = 50,   // 0-100, how strongly the constraint is applied
-    val mode:          MelodicRelationMode  = MelodicRelationMode.COUNTER_MOTION
+    val mode:          MelodicRelationMode  = MelodicRelationMode.COUNTER_MOTION,
+    val referenceVoice: Int                 = 1     // 1=V1, 2=V2 (for V3 only)
 ) : Parcelable
 
 // ── Harmony / V2-V3 configs ─────────────────────────────────────────────────
@@ -272,58 +273,59 @@ object DiatonicHarmony {
     }
 
     /**
-     * Given the current V1 chord notes and a MELODIC voice's relation config,
+     * Given the current context of the reference voice and a MELODIC voice's relation config,
      * filter or re-weight the [candidateNotes] pool so the melodic voice
      * respects the requested contrast mode.
-     *
-     * Returns a non-empty subset of [candidateNotes] (or the full pool if
-     * the config is disabled or the pool is too small to filter).
      */
     fun applyMelodicRelation(
         candidateNotes:    IntArray,
-        v1ChordNotes:      List<Int>,
-        v1LastNote:        Int,
+        context:           List<MidiService.MelodicEvent>,
         relationCfg:       MelodicRelationConfig
     ): IntArray {
-        if (!relationCfg.enabled || candidateNotes.size < 3 || v1ChordNotes.isEmpty()) {
+        if (!relationCfg.enabled || candidateNotes.size < 3 || context.isEmpty()) {
             return candidateNotes
         }
         val depth = relationCfg.contrastDepth / 100f   // 0..1
+        val lastEvent = context.last()
+        val refNotes = lastEvent.notes
+
         val filtered: List<Int> = when (relationCfg.mode) {
 
             MelodicRelationMode.COUNTER_MOTION -> {
-                // Prefer notes moving away from v1LastNote direction
-                // Simple heuristic: if last V1 note is in upper half, prefer lower candidates
-                val v1Mid = try { v1ChordNotes.average() } catch (e: Exception) { 60.0 }
-                val prefer = if (v1Mid > 60) candidateNotes.filter { it < 60 }
-                             else            candidateNotes.filter { it >= 60 }
-                prefer.ifEmpty { candidateNotes.toList() }
+                // Prefer notes moving away from ref voice motion
+                val mid = refNotes.average()
+                val prevMid = if (context.size >= 2) context[context.size - 2].notes.average() else 60.0
+                val direction = mid - prevMid
+                
+                val preferred = if (direction >= 0) candidateNotes.filter { it < mid }
+                                else               candidateNotes.filter { it > mid }
+                val others    = if (direction >= 0) candidateNotes.filter { it >= mid }
+                                else               candidateNotes.filter { it <= mid }
+                
+                // Mix based on depth
+                (preferred + others.take((others.size * (1f - depth)).toInt())).distinct()
             }
 
             MelodicRelationMode.RHYTHMIC_COMPLEMENT -> {
-                // No pitch filtering for rhythmic complement — timing handled by VoiceEngine;
-                // return full pool so the engine can pick freely
                 candidateNotes.toList()
             }
 
             MelodicRelationMode.REGISTER_CONTRAST -> {
-                val v1Max = v1ChordNotes.maxOrNull() ?: 60
-                val v1Min = v1ChordNotes.minOrNull() ?: 60
-                // Prefer notes at least a fifth away from v1 range
-                val above = candidateNotes.filter { it > v1Max + 5 }
-                val below = candidateNotes.filter { it < v1Min - 5 }
+                val refMax = refNotes.maxOrNull() ?: 60
+                val refMin = refNotes.minOrNull() ?: 60
+                val buffer = (12 * depth).toInt()
+                val above = candidateNotes.filter { it >= refMax + buffer }
+                val below = candidateNotes.filter { it <= refMin - buffer }
                 val pool  = (above + below).distinct()
                 pool.ifEmpty { candidateNotes.toList() }
             }
 
             MelodicRelationMode.CHORD_AWARE -> {
-                // Prefer chord tones when depth is high; mix in passing tones when low
-                val chordSet = v1ChordNotes.map { it % 12 }.toSet()
-                val chordTones = candidateNotes.filter { (it % 12) in chordSet }
-                val passing    = candidateNotes.filter { (it % 12) !in chordSet }
-                // Blend: at depth=1 use only chord tones; at depth=0 full pool
-                val blendSize  = (chordTones.size + (passing.size * (1f - depth)).toInt()).coerceAtLeast(1)
-                (chordTones + passing.take((passing.size * (1f - depth)).toInt()))
+                val refSet = refNotes.map { it % 12 }.toSet()
+                val matchTones = candidateNotes.filter { (it % 12) in refSet }
+                val others     = candidateNotes.filter { (it % 12) !in refSet }
+                val blendSize  = (matchTones.size + (others.size * (1f - depth)).toInt()).coerceAtLeast(1)
+                (matchTones + others.take((others.size * (1f - depth)).toInt()))
                     .take(blendSize)
                     .ifEmpty { candidateNotes.toList() }
             }

@@ -30,7 +30,7 @@ class NRTMelodicEngine(
         enqueueKlangNotes()
     }
 
-    fun nextDegree(): Int {
+    fun nextDegree(context: List<MidiService.MelodicEvent> = emptyList()): Int {
         if (noteQueue.isEmpty()) {
             if (notesServed % stepsPerKlang == 0) {
                 nrtEngine.step(cfg)

@@ -1,0 +1,5 @@
+<devices>
+    <device manufacturer="NachinBombin" product="MidiRandomizer" name="MIDI Randomizer Output">
+        <output-port name="output" />
+    </device>
+</devices>

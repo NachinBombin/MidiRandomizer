@@ -33,10 +33,10 @@ class VoiceEngine(
     private val onNotePlayed:   (Int) -> Unit,
     private val onNoteOnRaw:    (Int, Int, Int) -> Unit,
     private val onNoteOffRaw:   (Int, Int) -> Unit,
-    // Chord-aware melodic relation callbacks (default to no-op stubs so call
-    // sites that pre-date this change don't need updating)
     private val getV1ChordNotes: () -> List<Int> = { emptyList() },
-    private val getV1LastNote:   () -> Int        = { 60 }
+    private val getV1LastNote:   () -> Int        = { 60 },
+    private val getContext:      (Int) -> List<MidiService.MelodicEvent> = { emptyList() },
+    private val getFuture:       (Int) -> List<MidiService.MelodicEvent> = { emptyList() }
 ) {
     companion object { private const val TAG = "VoiceEngine" }
 
@@ -143,35 +143,22 @@ class VoiceEngine(
         try {
             while (running) {
                 try {
-                    val ic = config.independentConfig
+                    val cfg = config
+                    val ic = cfg.independentConfig
+                    val isMelodic = cfg.mode == VoiceMode.MELODIC
 
                     if (ic.style == VoiceStyle.SINGLE_NOTE_DRONE) {
                         fireIndependentNote(ic)
-                        try {
-                            Thread.sleep(Long.MAX_VALUE)
-                        } catch (_: InterruptedException) {
-                        }
+                        try { Thread.sleep(Long.MAX_VALUE) } catch (_: InterruptedException) { }
                         break
                     }
 
-                    val ps = ic.proSettings
-                    val euclidOn = ps.euclideanEnabled && ic.timingMode == MidiService.TIMING_METRONOME
-                    val isOnset = if (euclidOn) {
-                        val pattern = euclideanPattern
-                        val hit = pattern.getOrElse(euclideanStep) { false }
-                        if (pattern.isNotEmpty()) {
-                            euclideanStep = (euclideanStep + 1) % pattern.size
-                        }
-                        hit
-                    } else true
-
-                    if (isOnset) {
-                        dispatcher?.advanceBeat()
-                        fireIndependentNote(ic)
+                    if (isMelodic) {
+                        playMelodicPhrase(cfg)
+                    } else {
+                        playIndependentBeat(ic)
                     }
-
-                    Thread.sleep(calcInterval(ic).coerceAtLeast(10L))
-                } catch (_: InterruptedException) {
+                } catch (e: InterruptedException) {
                     break
                 } catch (e: Exception) {
                     Log.e(TAG, "Error in independentLoop iteration: ${e.message}")
@@ -181,6 +168,68 @@ class VoiceEngine(
         } finally {
             silenceCurrentNote()
             running = false
+        }
+    }
+
+    private fun playIndependentBeat(ic: IndependentConfig) {
+        val ps = ic.proSettings
+        val euclidOn = ps.euclideanEnabled && ic.timingMode == MidiService.TIMING_METRONOME
+        val isOnset = if (euclidOn) {
+            val pattern = euclideanPattern
+            val hit = pattern.getOrElse(euclideanStep) { false }
+            if (pattern.isNotEmpty()) {
+                euclideanStep = (euclideanStep + 1) % pattern.size
+            }
+            hit
+        } else true
+
+        if (isOnset) {
+            dispatcher?.advanceBeat()
+            fireIndependentNote(ic)
+        }
+
+        val interval = calcInterval(ic)
+        Thread.sleep(interval.coerceAtLeast(10L))
+    }
+
+    private fun playMelodicPhrase(cfg: VoiceConfig) {
+        val ic = cfg.independentConfig
+        val rc = cfg.melodicRelationConfig
+        val baseInterval = (60_000.0 / ic.bpm.coerceAtLeast(1)).toLong()
+        
+        // Generate a simple rhythmic motif: a list of multipliers for baseInterval
+        val motifs = listOf(
+            listOf(0.5f, 0.5f, 1.0f, 2.0f),
+            listOf(1.0f, 1.0f, 0.5f, 0.5f),
+            listOf(0.75f, 0.25f, 1.0f, 1.0f),
+            listOf(1.5f, 0.5f, 1.0f, 1.0f)
+        )
+        val motif = motifs.random()
+        
+        for (multiplier in motif) {
+            if (!running) break
+            
+            val interval = (baseInterval * multiplier).toLong()
+            
+            // Awareness: RHYTHMIC_COMPLEMENT
+            if (rc.enabled && rc.mode == MelodicRelationMode.RHYTHMIC_COMPLEMENT) {
+                val future = getFuture(rc.referenceVoice)
+                if (future.isNotEmpty()) {
+                    val nextV1Dur = future[0].durationMs
+                    if (nextV1Dur < baseInterval / 2) {
+                        // V1 is playing fast, let's delay or skip to create space
+                        if (Random.nextFloat() < 0.5f) {
+                            Thread.sleep(interval)
+                            continue 
+                        }
+                    }
+                }
+            }
+
+            dispatcher?.advanceBeat()
+            fireIndependentNote(ic)
+            
+            Thread.sleep(interval.coerceAtLeast(10L))
         }
     }
 
@@ -260,9 +309,8 @@ class VoiceEngine(
                     }
                     val filteredPool = DiatonicHarmony.applyMelodicRelation(
                         candidateNotes = poolList.toIntArray(),
-                        v1ChordNotes = getV1ChordNotes().toList(), // Send a snapshot
-                        v1LastNote = getV1LastNote(),
-                        relationCfg = mrc
+                        context        = getContext(mrc.referenceVoice),
+                        relationCfg    = mrc
                     )
                     if (filteredPool.isNotEmpty()) {
                         candidate = filteredPool[Random.nextInt(filteredPool.size)]
@@ -409,7 +457,7 @@ class VoiceEngine(
             val intervals = getScales().getOrNull(ic.selectedScale) ?: listOf(0, 2, 4, 5, 7, 9, 11)
 
             velocityShaper = VelocityShaper(ps.velocityPattern, ic.velocity).also { it.reset() }
-            dispatcher = MelodicEngineDispatcher(intervals, ps)
+            dispatcher = MelodicEngineDispatcher(intervals, ps, getContext, getFuture)
 
             if (ps.euclideanEnabled) {
                 euclideanPattern = EuclideanRhythm.generate(

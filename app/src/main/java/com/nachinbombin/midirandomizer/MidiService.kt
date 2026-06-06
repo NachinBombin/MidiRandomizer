@@ -74,6 +74,28 @@ class MidiService : Service() {
     private val activeNotes = ConcurrentHashMap<Int, MutableSet<Int>>()
     private val lastV2Note  = AtomicInteger(60)
 
+    // ── Melodic context buffer ───────────────────────────────────────────
+    /** Circular buffer of recent note/chord events for melodic awareness. */
+    data class MelodicEvent(val notes: List<Int>, val timestamp: Long = 0, val durationMs: Long = 0)
+    private val v1ContextBuffer = java.util.concurrent.CopyOnWriteArrayList<MelodicEvent>()
+    private val v2ContextBuffer = java.util.concurrent.CopyOnWriteArrayList<MelodicEvent>()
+    private val contextBufferLimit = 8
+
+    // ── Look-ahead buffers ──
+    private val v1FutureBuffer = java.util.concurrent.CopyOnWriteArrayList<MelodicEvent>()
+    private val v2FutureBuffer = java.util.concurrent.CopyOnWriteArrayList<MelodicEvent>()
+    private val futureBufferLimit = 4
+
+    private fun updateContextBuffer(voiceId: Int, notes: List<Int>) {
+        val buffer = if (voiceId == 1) v1ContextBuffer else v2ContextBuffer
+        buffer.add(MelodicEvent(notes, System.currentTimeMillis()))
+        while (buffer.size > contextBufferLimit) buffer.removeAt(0)
+    }
+
+    private fun getFutureBuffer(voiceId: Int): List<MelodicEvent> {
+        return if (voiceId == 1) v1FutureBuffer else v2FutureBuffer
+    }
+
     // ── V1 state exposed to V2/V3 MELODIC contrast filter ───────────────────
     /** Most recently sounded V1 chord (empty when V1 is not in CHORDS style). */
     @Volatile private var lastChordNotes: List<Int> = emptyList()
@@ -462,8 +484,19 @@ class MidiService : Service() {
         while (isPlaying) {
             try {
                 val p = v1Params
+                
+                // ── Look-ahead ──
+                while (v1FutureBuffer.size < futureBufferLimit) {
+                    val lastNotes = if (v1FutureBuffer.isNotEmpty()) v1FutureBuffer.last().notes else lastChordNotes
+                    val nextNoteOrChord = generateNextV1Notes(lastNotes)
+                    val nextInterval = calculateV1Interval()
+                    v1FutureBuffer.add(MelodicEvent(nextNoteOrChord, 0, nextInterval))
+                }
+                
+                val currentEvent = v1FutureBuffer.removeAt(0)
+                
                 if (p.style == VoiceStyle.SINGLE_NOTE_DRONE) {
-                    sendRandomV1Note()
+                    sendV1NotesRaw(currentEvent.notes)
                     try { Thread.sleep(Long.MAX_VALUE) } catch (_: InterruptedException) { break }
                     break
                 }
@@ -481,11 +514,10 @@ class MidiService : Service() {
 
                 if (isOnset) {
                     v1MelodicDispatcher?.advanceBeat()
-                    sendRandomV1Note()
+                    sendV1NotesRaw(currentEvent.notes)
                 }
 
-                val interval = calculateV1Interval()
-                Thread.sleep(interval.coerceAtLeast(10L))
+                Thread.sleep(currentEvent.durationMs.coerceAtLeast(10L))
             } catch (e: InterruptedException) {
                 break
             } catch (e: Exception) {
@@ -493,6 +525,120 @@ class MidiService : Service() {
                 try { Thread.sleep(100) } catch (_: InterruptedException) { break }
             }
         }
+    }
+
+    private fun generateNextV1Notes(lastNotes: List<Int>): List<Int> {
+        val p = v1Params
+        if (p.style == VoiceStyle.CHORDS) {
+            val intervals = scales.getOrNull(p.scale) ?: return listOf(60)
+            val rawDegree = v1MelodicDispatcher?.nextDegree() ?: Random.nextInt(intervals.size)
+            if (rawDegree < 0) return emptyList()
+            val degreeIdx      = rawDegree.coerceIn(0, intervals.size - 1)
+            val interval       = intervals[degreeIdx]
+            val octRange       = (p.maxOctave - p.minOctave + 1).coerceAtLeast(1)
+            val regShift       = v1MelodicDispatcher?.gestureRegisterShift() ?: 0
+            val rootMidi       = (((p.minOctave + Random.nextInt(octRange) + regShift).coerceIn(p.minOctave, p.maxOctave) + 1) * 12 + interval + (if (p.rootNote > 0) p.rootNote - 1 else 0)).coerceIn(0, 127)
+            
+            val rawNotes   = DiatonicHarmony.buildChordNotes(rootMidi, intervals, p.rootNote, p.chordConfig)
+            val chordNotes = DiatonicHarmony.applyInversion(rawNotes, p.chordConfig.inversionMode, lastNotes)
+            
+            // Handle Rhythmic Figure (Broken, Ostinato, etc.)
+            return when (p.chordConfig.rhythmicFigure) {
+                RhythmicFigure.BROKEN -> {
+                    val bs = if (chordNotes.size >= 3) {
+                        listOf(chordNotes[0], chordNotes[chordNotes.lastIndex], chordNotes[1], chordNotes[chordNotes.lastIndex])
+                    } else chordNotes
+                    val note = bs[ostinatoStep % bs.size]
+                    ostinatoStep++
+                    listOf(note)
+                }
+                RhythmicFigure.OSTINATO -> {
+                    val pattern = booleanArrayOf(true, false, true, true)
+                    val hit = pattern[ostinatoStep % pattern.size]
+                    ostinatoStep++
+                    if (hit) chordNotes else emptyList()
+                }
+                else -> chordNotes
+            }
+        } else if (p.style == VoiceStyle.SINGLE_NOTE_DRONE) {
+            val rootOffset = if (p.rootNote > 0) p.rootNote - 1 else 0
+            return listOf(((p.minOctave + 1) * 12 + rootOffset).coerceIn(0, 127))
+        } else {
+            val intervals = scales.getOrNull(p.scale) ?: return listOf(60)
+            val rawDegree = v1MelodicDispatcher?.nextDegree() ?: Random.nextInt(intervals.size)
+            if (rawDegree < 0) return emptyList()
+            val degreeIdx      = rawDegree.coerceIn(0, intervals.size - 1)
+            val interval       = intervals[degreeIdx]
+            val regShift       = v1MelodicDispatcher?.gestureRegisterShift() ?: 0
+            val octRange       = (p.maxOctave - p.minOctave + 1).coerceAtLeast(1)
+            val rootOffset     = if (p.rootNote > 0) p.rootNote - 1 else 0
+            return listOf((((p.minOctave + Random.nextInt(octRange) + regShift).coerceIn(p.minOctave, p.maxOctave) + 1) * 12 + interval + rootOffset).coerceIn(0, 127))
+        }
+    }
+
+    private fun sendV1NotesRaw(notes: List<Int>) {
+        if (notes.isEmpty()) return
+        val p = v1Params
+        
+        if (p.style == VoiceStyle.CHORDS) {
+            val cc = p.chordConfig
+            lastChordNotes.forEach { sendNoteOffRaw(1, it, p.channel) }
+            
+            val baseVel = v1VelocityShaper.next()
+            val gestureScale = v1MelodicDispatcher?.gestureVelocityScale() ?: 1f
+            val vel = (baseVel * gestureScale).toInt().coerceIn(1, 127)
+
+            // Broken-figure single-note selection logic was already in generateNextV1Notes
+            // but we might still have a list of notes to "pluck"
+            
+            val strum = cc.strumLength.coerceIn(1, notes.size)
+            val orderedNotes: List<Int> = when (cc.pluckingStyle) {
+                1    -> notes.take(strum).sorted()
+                2    -> notes.take(strum).sortedDescending()
+                3    -> notes.take(strum).shuffled()
+                4    -> notes.take(strum).sorted()
+                else -> notes.take(strum)
+            }
+
+            val delayMs = cc.pluckingDelayMs.coerceIn(0L, 500L)
+            
+            orderedNotes.forEachIndexed { i, note ->
+                val velForNote = if (cc.pluckingStyle == 4)
+                    (vel * (1.0 - i * 0.15)).toInt().coerceIn(1, 127)
+                else vel
+                val fireDelay = if (cc.pluckingStyle == 0) 0L else delayMs * i
+                
+                if (fireDelay == 0L) {
+                    sendNoteOnRaw(1, note, velForNote, p.channel)
+                } else {
+                    chordHandler.postDelayed({
+                        if (isPlaying) sendNoteOnRaw(1, note, velForNote, p.channel)
+                    }, fireDelay)
+                }
+            }
+
+            lastChordNotes = orderedNotes
+            lastV1Note = orderedNotes.firstOrNull() ?: 60
+            v1CurrentNote = lastV1Note
+            updateContextBuffer(1, orderedNotes)
+        } else {
+            if (v1CurrentNote >= 0) sendNoteOffRaw(1, v1CurrentNote, p.channel)
+            val note = notes.first()
+            lastV1Note = note
+            lastChordNotes = emptyList()
+            v1CurrentNote = note
+            updateContextBuffer(1, notes)
+            
+            val baseVel = v1VelocityShaper.next()
+            val gestureScale = v1MelodicDispatcher?.gestureVelocityScale() ?: 1f
+            val vel = (baseVel * gestureScale).toInt().coerceIn(1, 127)
+            
+            sendNoteOnRaw(1, note, vel, p.channel)
+        }
+        
+        voice2Engine?.onV1NoteOn(v1CurrentNote, v1Params.velocity)
+        voice3Engine?.onV1NoteOn(v1CurrentNote, v1Params.velocity)
+        mainHandler.post { listener?.onNotePlayed(noteNumberToName(v1CurrentNote), v1CurrentNote, 100) }
     }
 
     private fun calculateV1Interval(): Long {
@@ -518,158 +664,15 @@ class MidiService : Service() {
         return JitterEngine.applyJitter(modeInterval, ps.jitterAmount, ps.jitterType)
     }
 
-    // ── V1 note dispatch ────────────────────────────────────────────────
-
-    private fun sendRandomV1Note() {
-        val p = v1Params
-        if (p.style == VoiceStyle.CHORDS) { sendChordV1(); return }
-
-        val isDrone  = p.style == VoiceStyle.SINGLE_NOTE_DRONE || p.style == VoiceStyle.EVOLVING_DRONE
-        val prevNote = v1CurrentNote
-
-        if (!isDrone && prevNote >= 0) sendNoteOffRaw(1, prevNote, p.channel)
-
-        val baseVel      = v1VelocityShaper.next()
-        val gestureScale = v1MelodicDispatcher?.gestureVelocityScale() ?: 1f
-        val vel          = (baseVel * gestureScale).toInt().coerceIn(1, 127)
-
-        val noteNumber: Int
-        if (p.style == VoiceStyle.SINGLE_NOTE_DRONE) {
-            val octRange = (p.maxOctave - p.minOctave + 1).coerceAtLeast(1)
-            val selectedOctave = if (octRange == 1) p.minOctave else p.minOctave + Random.nextInt(octRange)
-            val rootOffset = if (p.rootNote > 0) p.rootNote - 1 else 0
-            noteNumber = ((selectedOctave + 1) * 12 + rootOffset).coerceIn(0, 127)
-        } else {
-            val intervals = scales.getOrNull(p.scale) ?: return
-            val rawDegree = v1MelodicDispatcher?.nextDegree() ?: Random.nextInt(intervals.size)
-            if (rawDegree < 0) return
-            val degreeIdx      = rawDegree.coerceIn(0, intervals.size - 1)
-            val interval       = intervals[degreeIdx]
-            val regShift       = v1MelodicDispatcher?.gestureRegisterShift() ?: 0
-            val octRange       = (p.maxOctave - p.minOctave + 1).coerceAtLeast(1)
-            val rawOctave      = p.minOctave + Random.nextInt(octRange) + regShift
-            val selectedOctave = rawOctave.coerceIn(p.minOctave, p.maxOctave)
-            val rootOffset     = if (p.rootNote > 0) p.rootNote - 1 else 0
-            noteNumber = ((selectedOctave + 1) * 12 + interval + rootOffset).coerceIn(0, 127)
-        }
-
-        // ── Update V1 state for MELODIC contrast filter ──────────────────────
-        lastV1Note    = noteNumber
-        lastChordNotes = emptyList()   // V1 is not in CHORDS mode
-
-        sendNoteOnRaw(1, noteNumber, vel, p.channel)
-        v1CurrentNote = noteNumber
-
-        if (isDrone && prevNote >= 0 && prevNote != noteNumber)
-            sendNoteOffRaw(1, prevNote, p.channel)
-
-        voice2Engine?.onV1NoteOn(noteNumber, vel)
-        voice3Engine?.onV1NoteOn(noteNumber, vel)
-        val noteName = noteNumberToName(noteNumber)
-        mainHandler.post { listener?.onNotePlayed(noteName, noteNumber, vel) }
-    }
-
-    /**
-     * Chord engine for VoiceStyle.CHORDS (V1).
-     */
-    private fun sendChordV1() {
-        val p  = v1Params
-        val cc = p.chordConfig
-
-        // Silence previous chord
-        lastChordNotes.forEach { sendNoteOffRaw(1, it, p.channel) }
-
-        // Pick root pitch
-        val intervals = scales.getOrNull(p.scale) ?: return
-        val rawDegree = v1MelodicDispatcher?.nextDegree() ?: Random.nextInt(intervals.size)
-        if (rawDegree < 0) return
-        val degreeIdx      = rawDegree.coerceIn(0, intervals.size - 1)
-        val interval       = intervals[degreeIdx]
-        val octRange       = (p.maxOctave - p.minOctave + 1).coerceAtLeast(1)
-        val regShift       = v1MelodicDispatcher?.gestureRegisterShift() ?: 0
-        val rawOctave      = p.minOctave + Random.nextInt(octRange) + regShift
-        val selectedOctave = rawOctave.coerceIn(p.minOctave, p.maxOctave)
-        val rootOffset     = if (p.rootNote > 0) p.rootNote - 1 else 0
-        val rootMidi       = ((selectedOctave + 1) * 12 + interval + rootOffset).coerceIn(0, 127)
-
-        // Build + invert chord
-        val rawNotes   = DiatonicHarmony.buildChordNotes(rootMidi, intervals, p.rootNote, cc)
-        val chordNotes = DiatonicHarmony.applyInversion(rawNotes, cc.inversionMode, lastChordNotes)
-
-        // ── Update V1 state for MELODIC contrast filter ──────────────────────
-        lastChordNotes = chordNotes
-        lastV1Note     = chordNotes.firstOrNull() ?: rootMidi
-        v1CurrentNote  = lastV1Note
-
-        // Rhythmic figure gate
-        val shouldFire = when (cc.rhythmicFigure) {
-            RhythmicFigure.SUSTAINED, RhythmicFigure.REATTACK, RhythmicFigure.BROKEN -> true
-            RhythmicFigure.OSTINATO -> {
-                val pattern = booleanArrayOf(true, false, true, true)
-                val hit = pattern[ostinatoStep % pattern.size]
-                ostinatoStep++
-                hit
-            }
-        }
-        if (!shouldFire) {
-            voice2Engine?.onV1NoteOn(v1CurrentNote, p.velocity)
-            voice3Engine?.onV1NoteOn(v1CurrentNote, p.velocity)
-            mainHandler.post { listener?.onNotePlayed(noteNumberToName(v1CurrentNote), v1CurrentNote, 0) }
-            return
-        }
-
-        // Velocity
-        val baseVel      = v1VelocityShaper.next()
-        val gestureScale = v1MelodicDispatcher?.gestureVelocityScale() ?: 1f
-        val vel          = (baseVel * gestureScale).toInt().coerceIn(1, 127)
-
-        // Broken-figure single-note selection
-        val notesToPlay: List<Int> = if (cc.rhythmicFigure == RhythmicFigure.BROKEN) {
-            val bs = if (chordNotes.size >= 3) {
-                listOf(chordNotes[0], chordNotes[chordNotes.lastIndex], chordNotes[1], chordNotes[chordNotes.lastIndex])
-            } else chordNotes
-            listOf(bs[ostinatoStep % bs.size])
-        } else chordNotes
-
-        val strum = cc.strumLength.coerceIn(1, notesToPlay.size)
-        val orderedNotes: List<Int> = when (cc.pluckingStyle) {
-            1    -> notesToPlay.take(strum).sorted()
-            2    -> notesToPlay.take(strum).sortedDescending()
-            3    -> notesToPlay.take(strum).shuffled()
-            4    -> notesToPlay.take(strum).sorted()
-            else -> notesToPlay.take(strum)
-        }
-
-        val delayMs = cc.pluckingDelayMs.coerceIn(0L, 500L)
-        val holdMs  = calculateV1Interval().coerceAtLeast(100L)
-
-        orderedNotes.forEachIndexed { i, note ->
-            val velForNote = if (cc.pluckingStyle == 4)
-                (vel * (1.0 - i * 0.15)).toInt().coerceIn(1, 127)
-            else vel
-            val fireDelay = if (cc.pluckingStyle == 0) 0L else delayMs * i
-            chordHandler.postDelayed({
-                if (isPlaying) sendNoteOnRaw(1, note, velForNote, p.channel)
-            }, fireDelay)
-        }
-        chordHandler.postDelayed({
-            if (isPlaying) orderedNotes.forEach { sendNoteOffRaw(1, it, p.channel) }
-        }, holdMs)
-
-        voice2Engine?.onV1NoteOn(v1CurrentNote, vel)
-        voice3Engine?.onV1NoteOn(v1CurrentNote, vel)
-        mainHandler.post { listener?.onNotePlayed(noteNumberToName(v1CurrentNote), v1CurrentNote, vel) }
-    }
-
     // ── MIDI raw I/O ───────────────────────────────────────────────────
 
-    fun sendNoteOnRaw(voiceId: Int, note: Int, vel: Int, ch: Int) {
+    private fun sendNoteOnRaw(voiceId: Int, note: Int, vel: Int, ch: Int) {
         val channels = if (ch == 0) (0..15).toList() else listOf(ch - 1)
         channels.forEach { c -> sendRawMidi(byteArrayOf((0x90 or c).toByte(), note.toByte(), vel.toByte())) }
         activeNotes[voiceId]?.add(note)
     }
 
-    fun sendNoteOffRaw(voiceId: Int, note: Int, ch: Int) {
+    private fun sendNoteOffRaw(voiceId: Int, note: Int, ch: Int) {
         val channels = if (ch == 0) (0..15).toList() else listOf(ch - 1)
         channels.forEach { c -> sendRawMidi(byteArrayOf((0x80 or c).toByte(), note.toByte(), 0)) }
         activeNotes[voiceId]?.remove(note)
@@ -700,11 +703,16 @@ class MidiService : Service() {
             getGlobalScale  = { v1Params.scale },
             getGlobalRoot   = { if (v1Params.rootNote > 0) v1Params.rootNote - 1 else 0 },
             getV2Note       = { lastV2Note.get() },
-            onNotePlayed    = { note -> lastV2Note.set(note) },
+            onNotePlayed    = { note -> 
+                lastV2Note.set(note)
+                updateContextBuffer(2, listOf(note))
+            },
             onNoteOnRaw     = { n, v, ch -> sendNoteOnRaw(2, n, v, ch) },
             onNoteOffRaw    = { n, ch -> sendNoteOffRaw(2, n, ch) },
             getV1ChordNotes = { lastChordNotes },
-            getV1LastNote   = { lastV1Note }
+            getV1LastNote   = { lastV1Note },
+            getContext      = { ref -> if (ref == 1) v1ContextBuffer else v2ContextBuffer },
+            getFuture       = { ref -> if (ref == 1) v1FutureBuffer else v2FutureBuffer }
         ).also { it.config = effectiveVoiceConfig(v2Config) }
 
         voice3Engine = VoiceEngine(
@@ -719,11 +727,14 @@ class MidiService : Service() {
             onNoteOnRaw     = { n, v, ch -> sendNoteOnRaw(3, n, v, ch) },
             onNoteOffRaw    = { n, ch -> sendNoteOffRaw(3, n, ch) },
             getV1ChordNotes = { lastChordNotes },
-            getV1LastNote   = { lastV1Note }
+            getV1LastNote   = { lastV1Note },
+            getContext      = { ref -> if (ref == 1) v1ContextBuffer else v2ContextBuffer },
+            getFuture       = { ref -> if (ref == 1) v1FutureBuffer else v2FutureBuffer }
         ).also { it.config = effectiveVoiceConfig(v3Config) }
     }
 
     private fun rebuildV1ProHelpers() {
+        v1FutureBuffer.clear() // Clear look-ahead when helpers (engines) are rebuilt
         val p  = v1Params
         val ps = p.proSettings
         val intervals = scales.getOrNull(p.scale) ?: listOf(0,2,4,5,7,9,11)
@@ -735,7 +746,9 @@ class MidiService : Service() {
 
         v1MelodicDispatcher = MelodicEngineDispatcher(
             scaleIntervals = intervals,
-            settings       = effectiveSettings
+            settings       = effectiveSettings,
+            getContext     = { ref -> if (ref == 1) v1ContextBuffer else v2ContextBuffer },
+            getFuture      = { ref -> if (ref == 1) v1FutureBuffer else v2FutureBuffer }
         )
 
         if (ps.euclideanEnabled) {

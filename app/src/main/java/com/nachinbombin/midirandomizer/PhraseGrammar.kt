@@ -75,7 +75,7 @@ class PhraseGrammar(
         currentDegree = Random.nextInt(scaleSize)
     }
 
-    fun nextDegree(): Int {
+    fun nextDegree(context: List<MidiService.MelodicEvent> = emptyList()): Int {
         if (buffer.isEmpty()) generatePhrase()
         val delta = buffer.removeFirst()
         currentDegree = wrapDegree(currentDegree + delta)

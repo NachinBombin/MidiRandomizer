@@ -1,0 +1,34 @@
+[
+    {
+        "merged": "com.nachinbombin.midirandomizer.app-debug-38:/layout_activity_main.xml.flat",
+        "source": "com.nachinbombin.midirandomizer.app-main-40:/layout/activity_main.xml"
+    },
+    {
+        "merged": "com.nachinbombin.midirandomizer.app-debug-38:/layout_fragment_pro_settings.xml.flat",
+        "source": "com.nachinbombin.midirandomizer.app-main-40:/layout/fragment_pro_settings.xml"
+    },
+    {
+        "merged": "com.nachinbombin.midirandomizer.app-debug-38:/color_root_chip_text.xml.flat",
+        "source": "com.nachinbombin.midirandomizer.app-main-40:/color/root_chip_text.xml"
+    },
+    {
+        "merged": "com.nachinbombin.midirandomizer.app-debug-38:/xml_midi_device_info.xml.flat",
+        "source": "com.nachinbombin.midirandomizer.app-main-40:/xml/midi_device_info.xml"
+    },
+    {
+        "merged": "com.nachinbombin.midirandomizer.app-debug-38:/layout_fragment_main.xml.flat",
+        "source": "com.nachinbombin.midirandomizer.app-main-40:/layout/fragment_main.xml"
+    },
+    {
+        "merged": "com.nachinbombin.midirandomizer.app-debug-38:/drawable_ic_lock.xml.flat",
+        "source": "com.nachinbombin.midirandomizer.app-main-40:/drawable/ic_lock.xml"
+    },
+    {
+        "merged": "com.nachinbombin.midirandomizer.app-debug-38:/drawable_root_chip_bg.xml.flat",
+        "source": "com.nachinbombin.midirandomizer.app-main-40:/drawable/root_chip_bg.xml"
+    },
+    {
+        "merged": "com.nachinbombin.midirandomizer.app-debug-38:/drawable_ic_pro_badge.xml.flat",
+        "source": "com.nachinbombin.midirandomizer.app-main-40:/drawable/ic_pro_badge.xml"
+    }
+]
