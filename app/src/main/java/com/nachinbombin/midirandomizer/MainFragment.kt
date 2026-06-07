@@ -236,7 +236,10 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
             host?.getMidiService()?.togglePlayback()
         }
         btnTheme.setOnClickListener {
-            ThemeManager.cycleTheme(requireContext(), requireView())
+            ThemePickerDialog.show(requireContext(), ThemeManager.loadTheme(requireContext())) { preset ->
+                ThemeManager.saveTheme(requireContext(), preset)
+                ThemeManager.applyToView(requireView(), preset)
+            }
         }
 
         seekBpm.setOnSeekBarChangeListener(simpleSeek { p ->
@@ -357,9 +360,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         spinnerChordType.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
                 if (isUpdatingFromSync) return
-                val cc = currentParams.chordConfig.copy(
-                    chordType = ChordType.entries.getOrElse(pos) { ChordType.TRIAD }
-                )
+                val cc = currentParams.chordConfig.copy(chordType = pos)
                 currentParams = currentParams.copy(chordConfig = cc); push()
             }
             override fun onNothingSelected(p: AdapterView<*>?) {}
@@ -399,19 +400,21 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         }
         seekTensionLevel.setOnSeekBarChangeListener(simpleSeek { p ->
             tvTensionLevel.text = "Tension: ${tensionLabels.getOrNull(p) ?: p}"
-            val cc = currentParams.chordConfig.copy(tensionLevel = p)
+            val cc = currentParams.chordConfig.copy(
+                tensionLevel = TensionLevel.entries.getOrElse(p) { TensionLevel.TRIAD }
+            )
             currentParams = currentParams.copy(chordConfig = cc); push()
         })
         seekMutationChance.setOnSeekBarChangeListener(simpleSeek { p ->
             tvMutationChance.text = "Mutation: $p%"
-            val cc = currentParams.chordConfig.copy(mutationChance = p)
+            val cc = currentParams.chordConfig.copy(mutationChance = p / 100f)
             currentParams = currentParams.copy(chordConfig = cc); push()
         })
         spinnerBuildStrategy.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
                 if (isUpdatingFromSync) return
                 val cc = currentParams.chordConfig.copy(
-                    buildStrategy = BuildStrategy.entries.getOrElse(pos) { BuildStrategy.DIATONIC_STACK }
+                    chordBuildStrategy = ChordBuildStrategy.entries.getOrElse(pos) { ChordBuildStrategy.DIATONIC_STACK }
                 )
                 currentParams = currentParams.copy(chordConfig = cc); push()
             }
@@ -429,7 +432,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         }
         seekNoteDropChance.setOnSeekBarChangeListener(simpleSeek { p ->
             tvNoteDropChance.text = "Note drop: $p%"
-            val cc = currentParams.chordConfig.copy(noteDropChance = p)
+            val cc = currentParams.chordConfig.copy(noteDropChance = p / 100f)
             currentParams = currentParams.copy(chordConfig = cc); push()
         })
 
@@ -524,20 +527,20 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
 
             if (isChord) {
                 val cc = v1.chordConfig
-                spinnerChordType.setSelection(cc.chordType.ordinal.coerceIn(0, chordTypeLabels.size - 1))
+                spinnerChordType.setSelection(cc.chordType.coerceIn(0, chordTypeLabels.size - 1))
                 spinnerPluckingStyle.setSelection(cc.pluckingStyle.coerceIn(0, pluckingStyleLabels.size - 1))
                 seekPluckDelay.progress = (cc.pluckingDelayMs - 1).toInt().coerceIn(0, seekPluckDelay.max)
                 tvPluckDelay.text       = "Pluck delay: ${cc.pluckingDelayMs} ms"
                 spinnerInversionMode.setSelection(cc.inversionMode.ordinal.coerceIn(0, inversionModeLabels.size - 1))
                 spinnerVoicingDensity.setSelection(cc.voicingDensity.ordinal.coerceIn(0, voicingDensityLabels.size - 1))
-                seekTensionLevel.progress = cc.tensionLevel.coerceIn(0, seekTensionLevel.max)
-                tvTensionLevel.text       = "Tension: ${tensionLabels.getOrNull(cc.tensionLevel) ?: cc.tensionLevel}"
-                seekMutationChance.progress = cc.mutationChance.coerceIn(0, seekMutationChance.max)
-                tvMutationChance.text       = "Mutation: ${cc.mutationChance}%"
-                spinnerBuildStrategy.setSelection(cc.buildStrategy.ordinal.coerceIn(0, buildStrategyLabels.size - 1))
+                seekTensionLevel.progress = cc.tensionLevel.ordinal.coerceIn(0, seekTensionLevel.max)
+                tvTensionLevel.text       = "Tension: ${tensionLabels.getOrNull(cc.tensionLevel.ordinal) ?: cc.tensionLevel.ordinal}"
+                seekMutationChance.progress = (cc.mutationChance * 100).toInt().coerceIn(0, seekMutationChance.max)
+                tvMutationChance.text       = "Mutation: ${(cc.mutationChance * 100).toInt()}%"
+                spinnerBuildStrategy.setSelection(cc.chordBuildStrategy.ordinal.coerceIn(0, buildStrategyLabels.size - 1))
                 spinnerRhythmicFigure.setSelection(cc.rhythmicFigure.ordinal.coerceIn(0, rhythmicFigureLabels.size - 1))
-                seekNoteDropChance.progress = cc.noteDropChance.coerceIn(0, seekNoteDropChance.max)
-                tvNoteDropChance.text       = "Note drop: ${cc.noteDropChance}%"
+                seekNoteDropChance.progress = (cc.noteDropChance * 100).toInt().coerceIn(0, seekNoteDropChance.max)
+                tvNoteDropChance.text       = "Note drop: ${(cc.noteDropChance * 100).toInt()}%"
             }
 
             currentParams      = v1
