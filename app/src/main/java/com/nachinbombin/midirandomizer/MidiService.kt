@@ -501,8 +501,7 @@ class MidiService : Service() {
                     break
                 }
 
-                val ps = p.proSettings
-                val euclidOn = ps.euclideanEnabled && p.timingMode == TIMING_EUCLIDEAN
+                val euclidOn = p.timingMode == TIMING_EUCLIDEAN
                 val isOnset = if (euclidOn) {
                     val pattern = v1Euclidean
                     val hit = pattern.getOrElse(v1EuclideanStep) { false }
@@ -751,7 +750,7 @@ class MidiService : Service() {
             getFuture      = { ref -> if (ref == 1) v1FutureBuffer else v2FutureBuffer }
         )
 
-        if (ps.euclideanEnabled) {
+        if (p.timingMode == TIMING_EUCLIDEAN) {
             v1Euclidean = EuclideanRhythm.generate(
                 ps.euclideanSteps.coerceIn(2, 32),
                 ps.euclideanDensity.coerceIn(1, ps.euclideanSteps),
