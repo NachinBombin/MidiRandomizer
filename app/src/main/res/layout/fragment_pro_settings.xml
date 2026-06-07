@@ -86,65 +86,6 @@
             android:background="#1C1B19"
             android:layout_marginBottom="24dp"/>
 
-        <!-- ═══ EUCLIDEAN RHYTHM ══════════════════════════════════════════ -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="EUCLIDEAN RHYTHM"
-            android:textSize="11sp"
-            android:textColor="#4F9AA5"
-            android:letterSpacing="0.12"
-            android:layout_marginBottom="8dp"/>
-
-        <Switch
-            android:id="@+id/switchEuclidean"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Enable Euclidean rhythm gate"
-            android:textColor="#E8E6E1"
-            android:textSize="14sp"
-            android:thumbTint="#4F9AA5"
-            android:trackTint="#262523"
-            android:layout_marginBottom="10dp"/>
-
-        <LinearLayout
-            android:id="@+id/layoutEuclidean"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:visibility="gone">
-
-            <TextView android:id="@+id/tvEucSteps"
-                android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="Steps: 16" android:textSize="14sp" android:textColor="#E8E6E1"
-                android:layout_marginBottom="4dp"/>
-            <SeekBar android:id="@+id/seekEucSteps"
-                android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:max="30" android:progress="14"
-                android:progressTint="#4F9AA5" android:thumbTint="#4F9AA5"
-                android:layout_marginBottom="12dp"/>
-
-            <TextView android:id="@+id/tvEucDensity"
-                android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="Density: 8" android:textSize="14sp" android:textColor="#E8E6E1"
-                android:layout_marginBottom="4dp"/>
-            <SeekBar android:id="@+id/seekEucDensity"
-                android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:max="15" android:progress="4"
-                android:progressTint="#4F9AA5" android:thumbTint="#4F9AA5"
-                android:layout_marginBottom="12dp"/>
-
-            <TextView android:id="@+id/tvEucRotation"
-                android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="Rotation: 0" android:textSize="14sp" android:textColor="#E8E6E1"
-                android:layout_marginBottom="4dp"/>
-            <SeekBar android:id="@+id/seekEucRotation"
-                android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:max="15" android:progress="0"
-                android:progressTint="#4F9AA5" android:thumbTint="#4F9AA5"
-                android:layout_marginBottom="4dp"/>
-        </LinearLayout>
-
         <!-- ═══ MELODIC ENGINE SELECTOR ═══════════════════════════════════ -->
         <TextView
             android:layout_width="wrap_content"
@@ -153,7 +94,7 @@
             android:textSize="11sp"
             android:textColor="#4F9AA5"
             android:letterSpacing="0.12"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="0dp"
             android:layout_marginBottom="6dp"/>
 
         <Spinner
