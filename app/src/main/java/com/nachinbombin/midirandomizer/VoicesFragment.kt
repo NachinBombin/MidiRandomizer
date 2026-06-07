@@ -1,1 +1,1 @@
-placeholder_voices_will_be_replaced
+__VOICES_CONTENT_PLACEHOLDER__
