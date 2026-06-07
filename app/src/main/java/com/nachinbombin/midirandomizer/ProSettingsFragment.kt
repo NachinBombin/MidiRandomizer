@@ -116,8 +116,6 @@ class ProSettingsFragment : Fragment() {
         populateSpinners()
         restoreState()
         setupListeners()
-        // Euclidean toggle is driven by the Timing spinner — disable direct user interaction
-        switchEuclidean.isEnabled = false
         ThemeManager.applyToView(view, ThemeManager.loadTheme(requireContext()), forVoices = false)
     }
 
@@ -127,21 +125,6 @@ class ProSettingsFragment : Fragment() {
     }
 
     fun setInitialSettings(s: ProSettings) { current = s }
-
-    /**
-     * Called by the host whenever the voice Timing selector changes.
-     * Forces euclideanEnabled to match the timing choice — the switch
-     * in this panel becomes a read-only indicator so the user does not
-     * need a second manual toggle.
-     */
-    fun notifyTimingMode(isEuclidean: Boolean) {
-        current = current.copy(euclideanEnabled = isEuclidean)
-        if (::switchEuclidean.isInitialized) {
-            switchEuclidean.isChecked  = isEuclidean
-            layoutEuclidean.visibility = vis(isEuclidean)
-        }
-        push()
-    }
 
     /** Allow non-Activity hosts (e.g. child fragment in VoicesFragment) to receive callbacks. */
     fun setListener(cb: (ProSettings) -> Unit) {
@@ -217,30 +200,31 @@ class ProSettingsFragment : Fragment() {
         seekLSystemVariance = v.findViewById(R.id.seekLSystemVariance)
         tvLSystemVariance   = v.findViewById(R.id.tvLSystemVariance)
 
-        layoutCellAuto  = v.findViewById(R.id.layoutCellAuto)
-        seekCaSurvMin   = v.findViewById(R.id.seekCaSurvMin)
-        tvCaSurvMin     = v.findViewById(R.id.tvCaSurvMin)
-        seekCaSurvMax   = v.findViewById(R.id.seekCaSurvMax)
-        tvCaSurvMax     = v.findViewById(R.id.tvCaSurvMax)
-        seekCaBirth     = v.findViewById(R.id.seekCaBirth)
-        tvCaBirth       = v.findViewById(R.id.tvCaBirth)
-        seekCaMutation  = v.findViewById(R.id.seekCaMutation)
-        tvCaMutation    = v.findViewById(R.id.tvCaMutation)
+        layoutCellAuto = v.findViewById(R.id.layoutCellAuto)
+        seekCaSurvMin  = v.findViewById(R.id.seekCaSurvMin)
+        tvCaSurvMin    = v.findViewById(R.id.tvCaSurvMin)
+        seekCaSurvMax  = v.findViewById(R.id.seekCaSurvMax)
+        tvCaSurvMax    = v.findViewById(R.id.tvCaSurvMax)
+        seekCaBirth    = v.findViewById(R.id.seekCaBirth)
+        tvCaBirth      = v.findViewById(R.id.tvCaBirth)
+        seekCaMutation = v.findViewById(R.id.seekCaMutation)
+        tvCaMutation   = v.findViewById(R.id.tvCaMutation)
     }
 
-    // ── Spinners ──────────────────────────────────────────────────────────
+    // ── Spinners ─────────────────────────────────────────────────────────
 
     private fun populateSpinners() {
-        fun arr(vararg items: String) = ArrayAdapter(requireContext(),
-            android.R.layout.simple_spinner_item, items).also {
-            it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        }
-        spinnerJitterType.adapter  = arr("None","Slight","Moderate","Heavy")
-        spinnerVelPattern.adapter  = arr("Random","Accent","Crescendo","Decrescendo","Flat")
-        spinnerMelodicEngine.adapter = arr("Naive","Markov","PWG","L-System","Cell Automata","NRT Melodic")
-        spinnerLogicStyle.adapter  = arr("Stepwise","Arpeggiated","Wide Leaps")
+        fun arr(vararg items: String) = ArrayAdapter(
+            requireContext(), android.R.layout.simple_spinner_item, items.toList()
+        ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
 
-        val curvePres = arrayOf("Flat","Rise","Fall","Arch","Valley","S-Curve","Reverse-S")
+        // Fixed: enums are plain (no displayName property) — use .name instead
+        spinnerJitterType.adapter    = arr(*JitterType.entries.map { it.name }.toTypedArray())
+        spinnerVelPattern.adapter    = arr(*VelocityPattern.entries.map { it.name }.toTypedArray())
+        spinnerMelodicEngine.adapter = arr(*MelodicEngine.entries.map { it.name }.toTypedArray())
+        spinnerLogicStyle.adapter    = arr(*MelodicLogicStyle.entries.map { it.name }.toTypedArray())
+
+        val curvePres = arrayOf("Flat","Rising arch","Falling arch","Sawtooth","Reverse sawtooth","S-curve")
         spinnerGesturePitch.adapter    = arr(*curvePres)
         spinnerGestureRegister.adapter = arr(*curvePres)
         spinnerGestureDensity.adapter  = arr(*curvePres)
@@ -353,10 +337,9 @@ class ProSettingsFragment : Fragment() {
             current = current.copy(velocityPattern = VelocityPattern.entries[pos]); push()
         }
 
-        // switchEuclidean is now read-only — driven by notifyTimingMode() from the host.
-        // Listener kept only to keep layout visibility in sync if called programmatically.
         switchEuclidean.setOnCheckedChangeListener { _, on ->
-            layoutEuclidean.visibility = vis(on)
+            current = current.copy(euclideanEnabled = on)
+            layoutEuclidean.visibility = vis(on); push()
         }
         seekEucSteps.setOnSeekBarChangeListener(simpleSeek { p ->
             current = current.copy(euclideanSteps = p + 1)
@@ -375,17 +358,18 @@ class ProSettingsFragment : Fragment() {
             val eng = MelodicEngine.entries[pos]
             current = current.copy(
                 melodicEngine  = eng,
-                markovEnabled  = eng == MelodicEngine.MARKOV
+                markovEnabled  = (eng == MelodicEngine.MARKOV)
             )
-            showEnginePanel(eng)
-            push()
+            showEnginePanel(eng); push()
         }
+
         spinnerLogicStyle.onItemSelectedListener = simpleSpinner { pos ->
             current = current.copy(melodicLogicStyle = MelodicLogicStyle.entries[pos]); push()
         }
         switchSecondOrder.setOnCheckedChangeListener { _, on ->
             current = current.copy(secondOrderMarkov = on); push()
         }
+
         switchNarmour.setOnCheckedChangeListener { _, on ->
             current = current.copy(narmourConfig = current.narmourConfig.copy(enabled = on))
             layoutNarmour.visibility = vis(on); push()
@@ -402,6 +386,7 @@ class ProSettingsFragment : Fragment() {
             current = current.copy(narmourConfig = current.narmourConfig.copy(maxLeapPenalty = p / 100f))
             tvNarmourLeap.text = "Leap penalty: $p%"; push()
         })
+
         switchGravity.setOnCheckedChangeListener { _, on ->
             current = current.copy(contourGravityConfig = current.contourGravityConfig.copy(enabled = on))
             layoutGravity.visibility = vis(on); push()
@@ -414,6 +399,7 @@ class ProSettingsFragment : Fragment() {
             current = current.copy(contourGravityConfig = current.contourGravityConfig.copy(strength = p.toFloat()))
             tvGravityStrength.text = "Strength: $p"; push()
         })
+
         switchGesture.setOnCheckedChangeListener { _, on ->
             val depth = if (on) (seekGestureDepth.progress / 100f).coerceAtLeast(0.01f) else 0f
             current = current.copy(gestureCurveConfig = current.gestureCurveConfig.copy(gestureDepth = depth))
@@ -435,24 +421,23 @@ class ProSettingsFragment : Fragment() {
         spinnerGestureVelocity.onItemSelectedListener = simpleSpinner { pos ->
             current = current.copy(gestureCurveConfig = current.gestureCurveConfig.copy(velocityCurvePreset = pos)); push()
         }
+
         spinnerNrtCycle.onItemSelectedListener = simpleSpinner { pos ->
             current = current.copy(nrtMelodicConfig = current.nrtMelodicConfig.copy(cyclePreset = pos)); push()
         }
         seekNrtP.setOnSeekBarChangeListener(simpleSeek { p ->
-            val w = p / 5f
-            current = current.copy(nrtMelodicConfig = current.nrtMelodicConfig.copy(pWeight = w))
-            tvNrtPWeight.text = "P weight: $w"; push()
+            current = current.copy(nrtMelodicConfig = current.nrtMelodicConfig.copy(pWeight = p / 5f))
+            tvNrtPWeight.text = "P weight: ${p / 5f}"; push()
         })
         seekNrtL.setOnSeekBarChangeListener(simpleSeek { p ->
-            val w = p / 5f
-            current = current.copy(nrtMelodicConfig = current.nrtMelodicConfig.copy(lWeight = w))
-            tvNrtLWeight.text = "L weight: $w"; push()
+            current = current.copy(nrtMelodicConfig = current.nrtMelodicConfig.copy(lWeight = p / 5f))
+            tvNrtLWeight.text = "L weight: ${p / 5f}"; push()
         })
         seekNrtR.setOnSeekBarChangeListener(simpleSeek { p ->
-            val w = p / 5f
-            current = current.copy(nrtMelodicConfig = current.nrtMelodicConfig.copy(rWeight = w))
-            tvNrtRWeight.text = "R weight: $w"; push()
+            current = current.copy(nrtMelodicConfig = current.nrtMelodicConfig.copy(rWeight = p / 5f))
+            tvNrtRWeight.text = "R weight: ${p / 5f}"; push()
         })
+
         spinnerPwgMotif.onItemSelectedListener = simpleSpinner { pos ->
             current = current.copy(pwgConfig = current.pwgConfig.copy(motifSetIndex = pos)); push()
         }
@@ -465,6 +450,7 @@ class ProSettingsFragment : Fragment() {
             current = current.copy(pwgConfig = current.pwgConfig.copy(directionBias = bias))
             tvPwgDirection.text = directionLabel(bias); push()
         })
+
         spinnerLSystemAxiom.onItemSelectedListener = simpleSpinner { pos ->
             current = current.copy(lSystemConfig = current.lSystemConfig.copy(axiomIndex = pos)); push()
         }
@@ -476,6 +462,7 @@ class ProSettingsFragment : Fragment() {
             current = current.copy(lSystemConfig = current.lSystemConfig.copy(ruleVariance = p / 100f))
             tvLSystemVariance.text = "Rule variance: $p%"; push()
         })
+
         seekCaSurvMin.setOnSeekBarChangeListener(simpleSeek { p ->
             current = current.copy(cellAutomataConfig = current.cellAutomataConfig.copy(survivalMin = p))
             tvCaSurvMin.text = "Survival min: $p"; push()
@@ -496,30 +483,30 @@ class ProSettingsFragment : Fragment() {
 
     // ── Engine panel visibility ───────────────────────────────────────────
 
-    private fun showEnginePanel(eng: MelodicEngine) {
-        layoutMarkov.visibility    = vis(eng == MelodicEngine.MARKOV)
-        layoutNrtMelodic.visibility= vis(eng == MelodicEngine.NRT_MELODIC)
-        layoutPwg.visibility       = vis(eng == MelodicEngine.PWG)
-        layoutLSystem.visibility   = vis(eng == MelodicEngine.L_SYSTEM)
-        layoutCellAuto.visibility  = vis(eng == MelodicEngine.CELL_AUTOMATA)
+    private fun showEnginePanel(engine: MelodicEngine) {
+        layoutMarkov.visibility    = vis(engine == MelodicEngine.MARKOV)
+        layoutNrtMelodic.visibility = vis(engine == MelodicEngine.NRT_MELODIC)
+        layoutPwg.visibility       = vis(engine == MelodicEngine.PWG)
+        layoutLSystem.visibility   = vis(engine == MelodicEngine.L_SYSTEM)
+        layoutCellAuto.visibility  = vis(engine == MelodicEngine.CELL_AUTOMATA)
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────
+    // ── Helpers ──────────────────────────────────────────────────────────
 
-    private fun vis(on: Boolean) = if (on) View.VISIBLE else View.GONE
+    private fun push() = listener?.onProSettingsChanged(current)
 
-    private fun push() { listener?.onProSettingsChanged(current) }
+    private fun vis(show: Boolean) = if (show) View.VISIBLE else View.GONE
 
-    private fun directionLabel(bias: Float): String = when {
+    private fun directionLabel(bias: Float) = when {
         bias < -0.5f -> "Direction: Descending"
         bias >  0.5f -> "Direction: Ascending"
         else         -> "Direction: Neutral"
     }
 
-    private fun simpleSeek(block: (Int) -> Unit) = object : SeekBar.OnSeekBarChangeListener {
-        override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) { if (fromUser) block(p) }
-        override fun onStartTrackingTouch(s: SeekBar?) {}
-        override fun onStopTrackingTouch(s: SeekBar?) {}
+    private fun simpleSeek(block: (Int) -> Unit) = object : android.widget.SeekBar.OnSeekBarChangeListener {
+        override fun onProgressChanged(sb: SeekBar?, p: Int, fromUser: Boolean) { if (fromUser) block(p) }
+        override fun onStartTrackingTouch(sb: SeekBar?) {}
+        override fun onStopTrackingTouch(sb: SeekBar?) {}
     }
 
     private fun simpleSpinner(block: (Int) -> Unit) = object : AdapterView.OnItemSelectedListener {

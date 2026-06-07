@@ -331,20 +331,13 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
 
         rgTiming.setOnCheckedChangeListener { _, id ->
             if (isUpdatingFromSync) return@setOnCheckedChangeListener
-            val newTimingMode = when (id) {
+            currentParams = currentParams.copy(timingMode = when (id) {
                 R.id.rbMetronome  -> MidiService.TIMING_METRONOME
                 R.id.rbMixed      -> MidiService.TIMING_MIXED
                 R.id.rbRandomized -> MidiService.TIMING_RANDOMIZED
                 R.id.rbEuclidean  -> MidiService.TIMING_EUCLIDEAN
                 else              -> MidiService.TIMING_METRONOME
-            }
-            // Selecting Euclidean auto-enables euclideanEnabled in ProSettings —
-            // no second toggle required in the Pro tab.
-            val isEuclidean = newTimingMode == MidiService.TIMING_EUCLIDEAN
-            currentParams = currentParams.copy(
-                timingMode  = newTimingMode,
-                proSettings = currentParams.proSettings.copy(euclideanEnabled = isEuclidean)
-            )
+            })
             push()
         }
 
@@ -442,7 +435,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         rgTiming.visibility   = if (isSingle || isEvolving) View.GONE else View.VISIBLE
         layoutDroneTiming.visibility = if (isEvolving) View.VISIBLE else View.GONE
         layoutDroneRange.visibility  = if (isRandDrone) View.VISIBLE else View.GONE
-
+        
         // Show chord settings panel only when CHORDS is selected
         layoutChordSettings.visibility = if (isChords) View.VISIBLE else View.GONE
         tvChordHint.visibility = if (isChords) View.VISIBLE else View.GONE
