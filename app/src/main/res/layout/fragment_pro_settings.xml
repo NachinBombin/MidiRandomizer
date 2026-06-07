@@ -1,1 +1,324 @@
-PLACEHOLDER
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#111318"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingBottom="64dp">
+
+        <!-- ═══ TIMING: JITTER ══════════════════════════════════════════════════════════════════════════════════════════ -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="TIMING"
+            android:textSize="11sp"
+            android:textColor="#4F9AA5"
+            android:letterSpacing="0.12"
+            android:layout_marginBottom="8dp"/>
+
+        <TextView
+            android:id="@+id/tvJitterAmount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Jitter Amount: 0"
+            android:textSize="14sp"
+            android:textColor="#E8E6E1"
+            android:layout_marginBottom="4dp"/>
+
+        <SeekBar
+            android:id="@+id/seekJitter"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="100"
+            android:progress="0"
+            android:progressTint="#4F9AA5"
+            android:thumbTint="#4F9AA5"
+            android:layout_marginBottom="12dp"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Jitter Type"
+            android:textSize="13sp"
+            android:textColor="#797876"
+            android:layout_marginBottom="4dp"/>
+
+        <Spinner
+            android:id="@+id/spinnerJitterType"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"/>
+
+        <!-- ═══ VELOCITY PATTERN ═════════════════════════════════════════════════════════════════════════════════════════ -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="VELOCITY PATTERN"
+            android:textSize="11sp"
+            android:textColor="#4F9AA5"
+            android:letterSpacing="0.12"
+            android:layout_marginBottom="8dp"/>
+
+        <Spinner
+            android:id="@+id/spinnerVelPattern"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="#1C1B19"
+            android:layout_marginBottom="24dp"/>
+
+        <!-- ═══ MELODIC ENGINE SELECTOR ══════════════════════════════════════════════════════════════════════════════════ -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="MELODIC ENGINE"
+            android:textSize="11sp"
+            android:textColor="#4F9AA5"
+            android:letterSpacing="0.12"
+            android:layout_marginBottom="8dp"/>
+
+        <Spinner
+            android:id="@+id/spinnerMelodicEngine"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"/>
+
+        <!-- ─── MARKOV panel (shown when engine = MARKOV) ──────────────── -->
+        <LinearLayout
+            android:id="@+id/layoutMarkov"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Logic Style"
+                android:textSize="13sp"
+                android:textColor="#797876"
+                android:layout_marginBottom="4dp"/>
+
+            <Spinner android:id="@+id/spinnerLogicStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"/>
+
+            <Switch android:id="@+id/switchSecondOrder"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Second-order Markov"
+                android:textColor="#E8E6E1"
+                android:textSize="14sp"
+                android:thumbTint="#4F9AA5"
+                android:trackTint="#262523"
+                android:layout_marginBottom="12dp"/>
+
+            <Switch android:id="@+id/switchNarmour"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Narmour Implication"
+                android:textColor="#E8E6E1"
+                android:textSize="14sp"
+                android:thumbTint="#4F9AA5"
+                android:trackTint="#262523"
+                android:layout_marginBottom="8dp"/>
+
+            <LinearLayout android:id="@+id/layoutNarmour"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView android:id="@+id/tvNarmourProcess"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Process Weight: 50" android:textSize="14sp" android:textColor="#E8E6E1"
+                    android:layout_marginBottom="4dp"/>
+                <SeekBar android:id="@+id/seekNarmourProcess"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:max="100" android:progress="50"
+                    android:progressTint="#4F9AA5" android:thumbTint="#4F9AA5"
+                    android:layout_marginBottom="12dp"/>
+
+                <TextView android:id="@+id/tvNarmourReturn"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Return Weight: 50" android:textSize="14sp" android:textColor="#E8E6E1"
+                    android:layout_marginBottom="4dp"/>
+                <SeekBar android:id="@+id/seekNarmourReturn"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:max="100" android:progress="50"
+                    android:progressTint="#4F9AA5" android:thumbTint="#4F9AA5"
+                    android:layout_marginBottom="12dp"/>
+
+                <TextView android:id="@+id/tvNarmourLeap"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Leap Threshold: 4" android:textSize="14sp" android:textColor="#E8E6E1"
+                    android:layout_marginBottom="4dp"/>
+                <SeekBar android:id="@+id/seekNarmourLeap"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:max="11" android:progress="3"
+                    android:progressTint="#4F9AA5" android:thumbTint="#4F9AA5"
+                    android:layout_marginBottom="4dp"/>
+            </LinearLayout>
+
+            <Switch android:id="@+id/switchGravity"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Tonal Gravity"
+                android:textColor="#E8E6E1"
+                android:textSize="14sp"
+                android:thumbTint="#4F9AA5"
+                android:trackTint="#262523"
+                android:layout_marginBottom="8dp"/>
+
+            <LinearLayout android:id="@+id/layoutGravity"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView android:id="@+id/tvGravityThreshold"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Threshold: 3" android:textSize="14sp" android:textColor="#E8E6E1"
+                    android:layout_marginBottom="4dp"/>
+                <SeekBar android:id="@+id/seekGravityThreshold"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:max="11" android:progress="2"
+                    android:progressTint="#4F9AA5" android:thumbTint="#4F9AA5"
+                    android:layout_marginBottom="12dp"/>
+
+                <TextView android:id="@+id/tvGravityStrength"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Strength: 50" android:textSize="14sp" android:textColor="#E8E6E1"
+                    android:layout_marginBottom="4dp"/>
+                <SeekBar android:id="@+id/seekGravityStrength"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:max="100" android:progress="50"
+                    android:progressTint="#4F9AA5" android:thumbTint="#4F9AA5"
+                    android:layout_marginBottom="4dp"/>
+            </LinearLayout>
+
+            <Switch android:id="@+id/switchGesture"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Melodic Gesture"
+                android:textColor="#E8E6E1"
+                android:textSize="14sp"
+                android:thumbTint="#4F9AA5"
+                android:trackTint="#262523"
+                android:layout_marginBottom="8dp"/>
+
+            <LinearLayout android:id="@+id/layoutGesture"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView android:id="@+id/tvGestureDepth"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Gesture Depth: 4" android:textSize="14sp" android:textColor="#E8E6E1"
+                    android:layout_marginBottom="4dp"/>
+                <SeekBar android:id="@+id/seekGestureDepth"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:max="7" android:progress="3"
+                    android:progressTint="#4F9AA5" android:thumbTint="#4F9AA5"
+                    android:layout_marginBottom="12dp"/>
+
+                <TextView
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Pitch Shape" android:textSize="13sp" android:textColor="#797876"
+                    android:layout_marginBottom="4dp"/>
+                <Spinner android:id="@+id/spinnerGesturePitch"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"/>
+
+                <TextView
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Register" android:textSize="13sp" android:textColor="#797876"
+                    android:layout_marginBottom="4dp"/>
+                <Spinner android:id="@+id/spinnerGestureRegister"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"/>
+
+                <TextView
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Density" android:textSize="13sp" android:textColor="#797876"
+                    android:layout_marginBottom="4dp"/>
+                <Spinner android:id="@+id/spinnerGestureDensity"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"/>
+
+                <TextView
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Velocity Shape" android:textSize="13sp" android:textColor="#797876"
+                    android:layout_marginBottom="4dp"/>
+                <Spinner android:id="@+id/spinnerGestureVelocity"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:layout_marginBottom="4dp"/>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ─── NRT MELODIC panel ─────────────────────────────────────── -->
+        <LinearLayout android:id="@+id/layoutNrtMelodic"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <Spinner android:id="@+id/spinnerNrtCycle"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"/>
+
+            <TextView android:id="@+id/tvNrtPWeight"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="P Weight: 33" android:textSize="14sp" android:textColor="#E8E6E1"
+                android:layout_marginBottom="4dp"/>
+            <SeekBar android:id="@+id/seekNrtP"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:max="100" android:progress="33"
+                android:progressTint="#4F9AA5" android:thumbTint="#4F9AA5"
+                android:layout_marginBottom="12dp"/>
+
+            <TextView android:id="@+id/tvNrtLWeight"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="L Weight: 33" android:textSize="14sp" android:textColor="#E8E6E1"
+                android:layout_marginBottom="4dp"/>
+            <SeekBar android:id="@+id/seekNrtL"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:max="100" android:progress="33"
+                android:progressTint="#4F9AA5" android:thumbTint="#4F9AA5"
+                android:layout_marginBottom="12dp"/>
+
+            <TextView android:id="@+id/tvNrtRWeight"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="R Weight: 34" android:textSize="14sp" android:textColor="#E8E6E1"
+                android:layout_marginBottom="4dp"/>
+            <SeekBar android:id="@+id/seekNrtR"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:max="100" android:progress="34"
+                android:progressTint="#4F9AA5" android:thumbTint="#4F9AA5"
+                android:layout_marginBottom="4dp"/>
+        </LinearLayout>
+
+        <!-- ─── PWG panel ─────────────────────────────────────────────── -->
+        <LinearLayout android:id="@+id/layoutPwg"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="PWG Motif" android:textSize="13sp" android:textColor="#797876"
+                android:layout_marginBottom="4dp"/>
+            <Spinner android:id="@+id/spinnerPwgMotif"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginBottom="4dp"/>
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>
