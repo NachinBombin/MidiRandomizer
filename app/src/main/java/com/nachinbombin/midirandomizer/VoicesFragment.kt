@@ -779,7 +779,7 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
                 panel.findViewWithTag<View>("${prefix}CustomBpmPanel")?.visibility  =
                     if (ic.bpmMode == ParamFollowMode.CUSTOM) View.VISIBLE else View.GONE
                 panel.findViewWithTag<View>("${prefix}FractionBpmPanel")?.visibility =
-                    if (ic.bpmMode == ParamFollowMode.FRACTION) View.VISIBLE else View.GONE
+                    if (ic.bpmMode == ParamFollowMode.FRACTION_MAIN) View.VISIBLE else View.GONE
                 panel.findViewWithTag<SeekBar>("${prefix}Vel")?.progress = ic.velocity
                 panel.findViewWithTag<com.google.android.material.slider.RangeSlider>("${prefix}Octave")?.values =
                     listOf(ic.minOctave.toFloat(), ic.maxOctave.toFloat())
@@ -823,7 +823,7 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
                 panel.findViewWithTag<View>("${melPrefix}CustomBpmPanel")?.visibility  =
                     if (ic.bpmMode == ParamFollowMode.CUSTOM) View.VISIBLE else View.GONE
                 panel.findViewWithTag<View>("${melPrefix}FractionBpmPanel")?.visibility =
-                    if (ic.bpmMode == ParamFollowMode.FRACTION) View.VISIBLE else View.GONE
+                    if (ic.bpmMode == ParamFollowMode.FRACTION_MAIN) View.VISIBLE else View.GONE
                 panel.findViewWithTag<SeekBar>("${melPrefix}Vel")?.progress = ic.velocity
                 panel.findViewWithTag<com.google.android.material.slider.RangeSlider>("${melPrefix}Octave")?.values =
                     listOf(ic.minOctave.toFloat(), ic.maxOctave.toFloat())
