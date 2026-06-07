@@ -12,7 +12,7 @@
         android:orientation="vertical"
         android:padding="20dp">
 
-        <!-- ── Title row ──────────────────────────────────────────────────── -->
+        <!-- ── Title row (label + theme button) ─────────────────────────── -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -97,9 +97,21 @@
             android:layout_width="match_parent"
             android:layout_height="48dp"
             android:background="#1C1B19"
+            android:layout_marginBottom="4dp"/>
+
+        <TextView
+            android:id="@+id/tvChordHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Chord Options at the bottom of the window"
+            android:textSize="12sp"
+            android:textColor="#FF4444"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:visibility="gone"
             android:layout_marginBottom="12dp"/>
 
-        <!-- ── Drone Timing ───────────────────────────────────────────────── -->
+        <!-- ── Drone Timing (Evolving Drone only) ────────────────────────── -->
         <LinearLayout
             android:id="@+id/layoutDroneTiming"
             android:layout_width="match_parent"
@@ -210,6 +222,7 @@
             android:orientation="vertical"
             android:layout_marginBottom="16dp">
 
+            <!-- Row 1: C  C#  D  D#  E  F -->
             <RadioGroup
                 android:id="@+id/rgRootRow1"
                 android:layout_width="match_parent"
@@ -226,6 +239,7 @@
 
             </RadioGroup>
 
+            <!-- Row 2: F#  G  G#  A  A#  B -->
             <RadioGroup
                 android:id="@+id/rgRootRow2"
                 android:layout_width="match_parent"
@@ -242,6 +256,7 @@
 
             </RadioGroup>
 
+            <!-- FREE row -->
             <RadioGroup
                 android:id="@+id/rgRootFree"
                 android:layout_width="match_parent"
@@ -251,18 +266,98 @@
                 <RadioButton
                     android:id="@+id/rbRootFree"
                     style="@style/RootChip"
-                    android:text="Free / Random"
+                    android:text="FREE  (no root)"
+                    android:layout_width="match_parent"
+                    android:checked="true"
                     android:tag="-1"/>
 
             </RadioGroup>
 
         </LinearLayout>
 
-        <!-- ── Timing ────────────────────────────────────────────────────── -->
+        <!-- ── BPM ───────────────────────────────────────────────────────── -->
+        <TextView
+            android:id="@+id/tvBpm"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="BPM: 120"
+            android:textSize="14sp"
+            android:textColor="#E8E6E1"
+            android:layout_marginBottom="4dp"/>
+
+        <SeekBar
+            android:id="@+id/seekBpm"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="280"
+            android:progressTint="#4F9AA5"
+            android:thumbTint="#4F9AA5"
+            android:layout_marginBottom="16dp"/>
+
+        <!-- ── Velocity ──────────────────────────────────────────────────── -->
+        <TextView
+            android:id="@+id/tvVelocity"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Velocity: 100"
+            android:textSize="14sp"
+            android:textColor="#E8E6E1"
+            android:layout_marginBottom="4dp"/>
+
+        <SeekBar
+            android:id="@+id/seekVelocity"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="126"
+            android:progressTint="#4F9AA5"
+            android:thumbTint="#4F9AA5"
+            android:layout_marginBottom="16dp"/>
+
+        <!-- ── Octave range ──────────────────────────────────────────────── -->
+        <TextView
+            android:id="@+id/tvOctave"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Octave range: 3 - 5"
+            android:textSize="14sp"
+            android:textColor="#E8E6E1"
+            android:layout_marginBottom="4dp"/>
+
+        <com.google.android.material.slider.RangeSlider
+            android:id="@+id/rangeOctave"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:valueFrom="0"
+            android:valueTo="8"
+            app:values="@array/default_octave_range"
+            android:stepSize="1.0"
+            app:thumbColor="#4F9AA5"
+            app:trackColorActive="#4F9AA5"
+            app:trackColorInactive="#393836"
+            android:layout_marginBottom="16dp"/>
+
+        <!-- ── MIDI Channel ───────────────────────────────────────────────── -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="TIMING"
+            android:text="MIDI CHANNEL"
+            android:textSize="11sp"
+            android:textColor="#797876"
+            android:letterSpacing="0.12"
+            android:layout_marginBottom="6dp"/>
+
+        <Spinner
+            android:id="@+id/spinnerChannel"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="#1C1B19"
+            android:layout_marginBottom="16dp"/>
+
+        <!-- ── Timing mode ────────────────────────────────────────────────── -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="TIMING MODE"
             android:textSize="11sp"
             android:textColor="#797876"
             android:letterSpacing="0.12"
@@ -314,79 +409,7 @@
 
         </RadioGroup>
 
-        <!-- ── Euclidean compact panel (visible only when rbEuclidean selected) ── -->
-        <LinearLayout
-            android:id="@+id/layoutEuclideanCompact"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:visibility="gone"
-            android:background="#1A2A2A"
-            android:padding="10dp"
-            android:layout_marginBottom="12dp">
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Euclidean Settings"
-                android:textColor="#4F9AA5"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="6dp"/>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="4dp">
-                <TextView android:layout_width="60dp" android:layout_height="wrap_content"
-                    android:text="Steps" android:textColor="#E8E6E1" android:textSize="12sp"/>
-                <SeekBar android:id="@+id/seekEucStepsCompact"
-                    android:layout_width="0dp" android:layout_height="wrap_content"
-                    android:layout_weight="1" android:max="15" android:progress="7"
-                    android:progressTint="#4F9AA5" android:thumbTint="#4F9AA5"/>
-                <TextView android:id="@+id/tvEucStepsCompact"
-                    android:layout_width="28dp" android:layout_height="wrap_content"
-                    android:text="8" android:textColor="#E8E6E1" android:textSize="12sp" android:gravity="end"/>
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="4dp">
-                <TextView android:layout_width="60dp" android:layout_height="wrap_content"
-                    android:text="Density" android:textColor="#E8E6E1" android:textSize="12sp"/>
-                <SeekBar android:id="@+id/seekEucDensityCompact"
-                    android:layout_width="0dp" android:layout_height="wrap_content"
-                    android:layout_weight="1" android:max="15" android:progress="3"
-                    android:progressTint="#4F9AA5" android:thumbTint="#4F9AA5"/>
-                <TextView android:id="@+id/tvEucDensityCompact"
-                    android:layout_width="28dp" android:layout_height="wrap_content"
-                    android:text="4" android:textColor="#E8E6E1" android:textSize="12sp" android:gravity="end"/>
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
-                <TextView android:layout_width="60dp" android:layout_height="wrap_content"
-                    android:text="Rotation" android:textColor="#E8E6E1" android:textSize="12sp"/>
-                <SeekBar android:id="@+id/seekEucRotationCompact"
-                    android:layout_width="0dp" android:layout_height="wrap_content"
-                    android:layout_weight="1" android:max="15" android:progress="0"
-                    android:progressTint="#4F9AA5" android:thumbTint="#4F9AA5"/>
-                <TextView android:id="@+id/tvEucRotationCompact"
-                    android:layout_width="28dp" android:layout_height="wrap_content"
-                    android:text="0" android:textColor="#E8E6E1" android:textSize="12sp" android:gravity="end"/>
-            </LinearLayout>
-
-        </LinearLayout>
-
-        <!-- ── Last note ──────────────────────────────────────────────────── -->
+        <!-- ── Last note display ─────────────────────────────────────────── -->
         <TextView
             android:id="@+id/tvLastNote"
             android:layout_width="match_parent"
@@ -400,185 +423,25 @@
         <Button
             android:id="@+id/btnStartStop"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="▶ Start"
-            android:textColor="#E8E6E1"
-            android:backgroundTint="#437A22"
-            android:layout_marginBottom="20dp"/>
+            android:layout_height="56dp"
+            android:text="START"
+            android:textSize="16sp"
+            android:textColor="#F7F6F2"
+            android:backgroundTint="#01696F"
+            android:layout_marginBottom="8dp"/>
 
-        <!-- ── BPM ───────────────────────────────────────────────────────── -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="BPM"
-            android:textSize="11sp"
-            android:textColor="#797876"
-            android:letterSpacing="0.12"
-            android:layout_marginBottom="6dp"/>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="20dp">
-
-            <SeekBar
-                android:id="@+id/seekBpm"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:max="240"
-                android:progress="120"
-                android:progressTint="#4F9AA5"
-                android:thumbTint="#4F9AA5"/>
-
-            <TextView
-                android:id="@+id/tvBpm"
-                android:layout_width="48dp"
-                android:layout_height="wrap_content"
-                android:text="120"
-                android:textSize="14sp"
-                android:textColor="#E8E6E1"
-                android:gravity="end"/>
-
-        </LinearLayout>
-
-        <!-- ── MIDI Channel ──────────────────────────────────────────────── -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="MIDI CHANNEL"
-            android:textSize="11sp"
-            android:textColor="#797876"
-            android:letterSpacing="0.12"
-            android:layout_marginBottom="6dp"/>
-
-        <Spinner
-            android:id="@+id/spinnerChannel"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:background="#1C1B19"
-            android:layout_marginBottom="20dp"/>
-
-        <!-- ── Velocity ──────────────────────────────────────────────────── -->
-        <TextView
-            android:id="@+id/tvVelocity"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Velocity: 80"
-            android:textSize="14sp"
-            android:textColor="#E8E6E1"
-            android:layout_marginBottom="4dp"/>
-
-        <SeekBar
-            android:id="@+id/seekVelocity"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="127"
-            android:progress="80"
-            android:progressTint="#4F9AA5"
-            android:thumbTint="#4F9AA5"
-            android:layout_marginBottom="20dp"/>
-
-        <!-- ── Note Duration ─────────────────────────────────────────────── -->
-        <TextView
-            android:id="@+id/tvNoteDuration"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Note duration: 200ms"
-            android:textSize="14sp"
-            android:textColor="#E8E6E1"
-            android:layout_marginBottom="4dp"/>
-
-        <SeekBar
-            android:id="@+id/seekNoteDuration"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="2000"
-            android:progress="200"
-            android:progressTint="#4F9AA5"
-            android:thumbTint="#4F9AA5"
-            android:layout_marginBottom="20dp"/>
-
-        <!-- ── Octave ────────────────────────────────────────────────────── -->
-        <TextView
-            android:id="@+id/tvOctave"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Octave range: 3 - 5"
-            android:textSize="14sp"
-            android:textColor="#E8E6E1"
-            android:layout_marginBottom="4dp"/>
-
-        <com.google.android.material.slider.RangeSlider
-            android:id="@+id/rangeOctave"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:valueFrom="0"
-            android:valueTo="8"
-            app:values="@array/default_octave_range"
-            android:stepSize="1.0"
-            app:thumbColor="#4F9AA5"
-            app:trackColorActive="#4F9AA5"
-            app:trackColorInactive="#393836"
-            android:layout_marginBottom="20dp"/>
-
-        <!-- ── Voices ────────────────────────────────────────────────────── -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="VOICES"
-            android:textSize="11sp"
-            android:textColor="#797876"
-            android:letterSpacing="0.12"
-            android:layout_marginBottom="6dp"/>
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/rvVoices"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:nestedScrollingEnabled="false"
-            android:layout_marginBottom="12dp"/>
-
-        <Button
-            android:id="@+id/btnAddVoice"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="+ Add Voice"
-            android:textColor="#E8E6E1"
-            android:backgroundTint="#1C1B19"
-            android:layout_marginBottom="20dp"/>
-
-        <!-- ── Pro Settings ──────────────────────────────────────────────── -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="PRO SETTINGS"
-            android:textSize="11sp"
-            android:textColor="#797876"
-            android:letterSpacing="0.12"
-            android:layout_marginBottom="6dp"/>
-
-        <Button
-            android:id="@+id/btnProSettings"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="⚙ Pro Settings"
-            android:textColor="#E8E6E1"
-            android:backgroundTint="#1C1B19"
-            android:layout_marginBottom="20dp"/>
-
-        <!-- ── Chord Settings ────────────────────────────────────────────── -->
+        <!-- ════════════════════════════════════════════════════════════════
+             CHORD SETTINGS PANEL  (visible only when Style = Chords)
+             ════════════════════════════════════════════════════════════════ -->
         <LinearLayout
             android:id="@+id/layoutChordSettings"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:visibility="gone"
+            android:layout_marginTop="20dp"
             android:background="#1C1B19"
-            android:padding="12dp"
-            android:layout_marginBottom="16dp">
+            android:padding="16dp">
 
             <TextView
                 android:layout_width="wrap_content"
@@ -587,14 +450,15 @@
                 android:textSize="11sp"
                 android:textColor="#797876"
                 android:letterSpacing="0.12"
-                android:layout_marginBottom="8dp"/>
+                android:layout_marginBottom="12dp"/>
 
+            <!-- Chord Type -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Chord Type"
-                android:textSize="13sp"
-                android:textColor="#E8E6E1"
+                android:text="Chord type"
+                android:textSize="12sp"
+                android:textColor="#CDCCCA"
                 android:layout_marginBottom="4dp"/>
             <Spinner
                 android:id="@+id/spinnerChordType"
@@ -603,44 +467,28 @@
                 android:background="#262523"
                 android:layout_marginBottom="12dp"/>
 
+            <!-- Build Strategy -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Plucking Style"
-                android:textSize="13sp"
-                android:textColor="#E8E6E1"
+                android:text="Build strategy"
+                android:textSize="12sp"
+                android:textColor="#CDCCCA"
                 android:layout_marginBottom="4dp"/>
             <Spinner
-                android:id="@+id/spinnerPluckingStyle"
+                android:id="@+id/spinnerBuildStrategy"
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
                 android:background="#262523"
-                android:layout_marginBottom="8dp"/>
-
-            <TextView
-                android:id="@+id/tvPluckDelay"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Pluck delay: 1 ms"
-                android:textSize="13sp"
-                android:textColor="#E8E6E1"
-                android:layout_marginBottom="4dp"/>
-            <SeekBar
-                android:id="@+id/seekPluckDelay"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:max="499"
-                android:progress="0"
-                android:progressTint="#4F9AA5"
-                android:thumbTint="#4F9AA5"
                 android:layout_marginBottom="12dp"/>
 
+            <!-- Inversion Mode -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Inversion Mode"
-                android:textSize="13sp"
-                android:textColor="#E8E6E1"
+                android:text="Inversion"
+                android:textSize="12sp"
+                android:textColor="#CDCCCA"
                 android:layout_marginBottom="4dp"/>
             <Spinner
                 android:id="@+id/spinnerInversionMode"
@@ -649,12 +497,13 @@
                 android:background="#262523"
                 android:layout_marginBottom="12dp"/>
 
+            <!-- Voicing Density -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Voicing Density"
-                android:textSize="13sp"
-                android:textColor="#E8E6E1"
+                android:text="Voicing density"
+                android:textSize="12sp"
+                android:textColor="#CDCCCA"
                 android:layout_marginBottom="4dp"/>
             <Spinner
                 android:id="@+id/spinnerVoicingDensity"
@@ -663,6 +512,55 @@
                 android:background="#262523"
                 android:layout_marginBottom="12dp"/>
 
+            <!-- Plucking Style -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Plucking style"
+                android:textSize="12sp"
+                android:textColor="#CDCCCA"
+                android:layout_marginBottom="4dp"/>
+            <Spinner
+                android:id="@+id/spinnerPluckingStyle"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:background="#262523"
+                android:layout_marginBottom="12dp"/>
+
+            <!-- Rhythmic Figure -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Rhythmic figure"
+                android:textSize="12sp"
+                android:textColor="#CDCCCA"
+                android:layout_marginBottom="4dp"/>
+            <Spinner
+                android:id="@+id/spinnerRhythmicFigure"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:background="#262523"
+                android:layout_marginBottom="12dp"/>
+
+            <!-- Pluck Delay -->
+            <TextView
+                android:id="@+id/tvPluckDelay"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Pluck delay: 20 ms"
+                android:textSize="13sp"
+                android:textColor="#E8E6E1"
+                android:layout_marginBottom="4dp"/>
+            <SeekBar
+                android:id="@+id/seekPluckDelay"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="99"
+                android:progressTint="#4F9AA5"
+                android:thumbTint="#4F9AA5"
+                android:layout_marginBottom="12dp"/>
+
+            <!-- Tension Level -->
             <TextView
                 android:id="@+id/tvTensionLevel"
                 android:layout_width="wrap_content"
@@ -676,11 +574,11 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:max="3"
-                android:progress="0"
                 android:progressTint="#4F9AA5"
                 android:thumbTint="#4F9AA5"
                 android:layout_marginBottom="12dp"/>
 
+            <!-- Mutation Chance -->
             <TextView
                 android:id="@+id/tvMutationChance"
                 android:layout_width="wrap_content"
@@ -694,39 +592,11 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:max="30"
-                android:progress="0"
                 android:progressTint="#4F9AA5"
                 android:thumbTint="#4F9AA5"
                 android:layout_marginBottom="12dp"/>
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Build Strategy"
-                android:textSize="13sp"
-                android:textColor="#E8E6E1"
-                android:layout_marginBottom="4dp"/>
-            <Spinner
-                android:id="@+id/spinnerBuildStrategy"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:background="#262523"
-                android:layout_marginBottom="12dp"/>
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Rhythmic Figure"
-                android:textSize="13sp"
-                android:textColor="#E8E6E1"
-                android:layout_marginBottom="4dp"/>
-            <Spinner
-                android:id="@+id/spinnerRhythmicFigure"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:background="#262523"
-                android:layout_marginBottom="12dp"/>
-
+            <!-- Note Drop Chance -->
             <TextView
                 android:id="@+id/tvNoteDropChance"
                 android:layout_width="wrap_content"
@@ -740,7 +610,6 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:max="50"
-                android:progress="0"
                 android:progressTint="#4F9AA5"
                 android:thumbTint="#4F9AA5"
                 android:layout_marginBottom="4dp"/>

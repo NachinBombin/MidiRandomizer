@@ -21,6 +21,14 @@ class ProSettingsFragment : Fragment() {
     private lateinit var tvJitter:          TextView
     private lateinit var spinnerJitterType: Spinner
     private lateinit var spinnerVelPattern: Spinner
+    private lateinit var switchEuclidean:   Switch
+    private lateinit var layoutEuclidean:   View
+    private lateinit var seekEucSteps:      SeekBar
+    private lateinit var tvEucSteps:        TextView
+    private lateinit var seekEucDensity:    SeekBar
+    private lateinit var tvEucDensity:      TextView
+    private lateinit var seekEucRotation:   SeekBar
+    private lateinit var tvEucRotation:     TextView
 
     // ── Melodic Engine ────────────────────────────────────────────────────
     private lateinit var spinnerMelodicEngine: Spinner
@@ -132,6 +140,14 @@ class ProSettingsFragment : Fragment() {
         tvJitter          = v.findViewById(R.id.tvJitterAmount)
         spinnerJitterType = v.findViewById(R.id.spinnerJitterType)
         spinnerVelPattern = v.findViewById(R.id.spinnerVelPattern)
+        switchEuclidean   = v.findViewById(R.id.switchEuclidean)
+        layoutEuclidean   = v.findViewById(R.id.layoutEuclidean)
+        seekEucSteps      = v.findViewById(R.id.seekEucSteps)
+        tvEucSteps        = v.findViewById(R.id.tvEucSteps)
+        seekEucDensity    = v.findViewById(R.id.seekEucDensity)
+        tvEucDensity      = v.findViewById(R.id.tvEucDensity)
+        seekEucRotation   = v.findViewById(R.id.seekEucRotation)
+        tvEucRotation     = v.findViewById(R.id.tvEucRotation)
 
         spinnerMelodicEngine = v.findViewById(R.id.spinnerMelodicEngine)
 
@@ -202,234 +218,299 @@ class ProSettingsFragment : Fragment() {
             requireContext(), android.R.layout.simple_spinner_item, items.toList()
         ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
 
+        // Fixed: enums are plain (no displayName property) — use .name instead
         spinnerJitterType.adapter    = arr(*JitterType.entries.map { it.name }.toTypedArray())
         spinnerVelPattern.adapter    = arr(*VelocityPattern.entries.map { it.name }.toTypedArray())
         spinnerMelodicEngine.adapter = arr(*MelodicEngine.entries.map { it.name }.toTypedArray())
-        spinnerLogicStyle.adapter    = arr(*MarkovLogicStyle.entries.map { it.name }.toTypedArray())
-        spinnerNrtCycle.adapter      = arr(*NrtCycle.entries.map { it.name }.toTypedArray())
-        spinnerPwgMotif.adapter      = arr(*PwgMotif.entries.map { it.name }.toTypedArray())
-        spinnerLSystemAxiom.adapter  = arr(*LSystemAxiom.entries.map { it.name }.toTypedArray())
-        spinnerGesturePitch.adapter    = arr(*GesturePitchShape.entries.map { it.name }.toTypedArray())
-        spinnerGestureRegister.adapter = arr(*GestureRegisterTendency.entries.map { it.name }.toTypedArray())
-        spinnerGestureDensity.adapter  = arr(*GestureDensityProfile.entries.map { it.name }.toTypedArray())
-        spinnerGestureVelocity.adapter = arr(*GestureVelocityProfile.entries.map { it.name }.toTypedArray())
+        spinnerLogicStyle.adapter    = arr(*MelodicLogicStyle.entries.map { it.name }.toTypedArray())
+
+        val curvePres = arrayOf("Flat","Rising arch","Falling arch","Sawtooth","Reverse sawtooth","S-curve")
+        spinnerGesturePitch.adapter    = arr(*curvePres)
+        spinnerGestureRegister.adapter = arr(*curvePres)
+        spinnerGestureDensity.adapter  = arr(*curvePres)
+        spinnerGestureVelocity.adapter = arr(*curvePres)
+
+        spinnerNrtCycle.adapter = arr("Random PLR","Hexatonic (LPPL)","Octatonic (PRRP)","Wagner (LRRL)","Flat (no cycle)")
+        spinnerPwgMotif.adapter = arr("Step","Arch","Wave","Zigzag","Custom")
+        spinnerLSystemAxiom.adapter = arr("U","D","UDU","DUD","UUDD")
     }
 
-    // ── Restore ───────────────────────────────────────────────────────────
+    // ── State ─────────────────────────────────────────────────────────────
 
     private fun restoreState() {
         val ps = current
-        fun vis(b: Boolean) = if (b) View.VISIBLE else View.GONE
-
-        seekJitter.progress        = ps.jitterAmount
-        tvJitter.text              = "Jitter: ${ps.jitterAmount} ms"
+        seekJitter.progress       = ps.jitterAmount
+        tvJitter.text             = getString(R.string.label_jitter_amount, ps.jitterAmount)
         spinnerJitterType.setSelection(ps.jitterType.ordinal)
         spinnerVelPattern.setSelection(ps.velocityPattern.ordinal)
 
+        switchEuclidean.isChecked  = ps.euclideanEnabled
+        layoutEuclidean.visibility = vis(ps.euclideanEnabled)
+        seekEucSteps.progress   = ps.euclideanSteps - 1
+        tvEucSteps.text         = "Steps: ${ps.euclideanSteps}"
+        seekEucDensity.progress = ps.euclideanDensity - 1
+        tvEucDensity.text       = "Density: ${ps.euclideanDensity}"
+        seekEucRotation.progress = ps.euclideanRotation
+        tvEucRotation.text      = "Rotation: ${ps.euclideanRotation}"
+
         spinnerMelodicEngine.setSelection(ps.melodicEngine.ordinal)
+        showEnginePanel(ps.melodicEngine)
 
-        layoutMarkov.visibility    = vis(ps.melodicEngine == MelodicEngine.MARKOV)
-        spinnerLogicStyle.setSelection(ps.markovLogicStyle.ordinal)
-        switchSecondOrder.isChecked = ps.markovSecondOrder
+        spinnerLogicStyle.setSelection(ps.melodicLogicStyle.ordinal)
+        switchSecondOrder.isChecked = ps.secondOrderMarkov
 
-        switchNarmour.isChecked    = ps.narmourEnabled
-        layoutNarmour.visibility   = vis(ps.narmourEnabled)
-        seekNarmourProcess.progress = ps.narmourProcessWeight
-        tvNarmourProcess.text      = "Process: ${ps.narmourProcessWeight}"
-        seekNarmourReturn.progress  = ps.narmourReturnWeight
-        tvNarmourReturn.text       = "Return: ${ps.narmourReturnWeight}"
-        seekNarmourLeap.progress    = ps.narmourLeapThreshold
-        tvNarmourLeap.text         = "Leap ≥: ${ps.narmourLeapThreshold} st"
+        val nc = ps.narmourConfig
+        switchNarmour.isChecked   = nc.enabled
+        layoutNarmour.visibility  = vis(nc.enabled)
+        seekNarmourProcess.progress = (nc.processVsReversal * 100).toInt()
+        tvNarmourProcess.text = "Process vs Reversal: ${seekNarmourProcess.progress}%"
+        seekNarmourReturn.progress  = (nc.returnBias * 100).toInt()
+        tvNarmourReturn.text = "Post-leap return bias: ${seekNarmourReturn.progress}%"
+        seekNarmourLeap.progress    = (nc.maxLeapPenalty * 100).toInt()
+        tvNarmourLeap.text = "Leap penalty: ${seekNarmourLeap.progress}%"
 
-        switchGravity.isChecked    = ps.gravityEnabled
-        layoutGravity.visibility   = vis(ps.gravityEnabled)
-        seekGravityThreshold.progress = ps.gravityThreshold
-        tvGravityThreshold.text    = "Threshold: ${ps.gravityThreshold}"
-        seekGravityStrength.progress  = ps.gravityStrength
-        tvGravityStrength.text     = "Strength: ${ps.gravityStrength}"
+        val gc = ps.contourGravityConfig
+        switchGravity.isChecked     = gc.enabled
+        layoutGravity.visibility    = vis(gc.enabled)
+        seekGravityThreshold.progress = gc.threshold
+        tvGravityThreshold.text = "Threshold: ${gc.threshold} steps"
+        seekGravityStrength.progress  = gc.strength.toInt()
+        tvGravityStrength.text = "Strength: ${gc.strength.toInt()}"
 
-        switchGesture.isChecked    = ps.gestureEnabled
-        layoutGesture.visibility   = vis(ps.gestureEnabled)
-        seekGestureDepth.progress  = ps.gestureDepth
-        tvGestureDepth.text        = "Depth: ${ps.gestureDepth}"
-        spinnerGesturePitch.setSelection(ps.gesturePitchShape.ordinal)
-        spinnerGestureRegister.setSelection(ps.gestureRegister.ordinal)
-        spinnerGestureDensity.setSelection(ps.gestureDensity.ordinal)
-        spinnerGestureVelocity.setSelection(ps.gestureVelocity.ordinal)
+        val gec = ps.gestureCurveConfig
+        val gestureOn = gec.gestureDepth > 0f
+        switchGesture.isChecked    = gestureOn
+        layoutGesture.visibility   = vis(gestureOn)
+        seekGestureDepth.progress  = (gec.gestureDepth * 100).toInt()
+        tvGestureDepth.text = "Gesture depth: ${seekGestureDepth.progress}%"
+        spinnerGesturePitch.setSelection(gec.pitchCurvePreset)
+        spinnerGestureRegister.setSelection(gec.registerCurvePreset)
+        spinnerGestureDensity.setSelection(gec.densityCurvePreset)
+        spinnerGestureVelocity.setSelection(gec.velocityCurvePreset)
 
-        layoutNrtMelodic.visibility = vis(ps.melodicEngine == MelodicEngine.NRT)
-        spinnerNrtCycle.setSelection(ps.nrtCycle.ordinal)
-        seekNrtP.progress           = ps.nrtPWeight
-        tvNrtPWeight.text           = "P: ${ps.nrtPWeight}"
-        seekNrtL.progress           = ps.nrtLWeight
-        tvNrtLWeight.text           = "L: ${ps.nrtLWeight}"
-        seekNrtR.progress           = ps.nrtRWeight
-        tvNrtRWeight.text           = "R: ${ps.nrtRWeight}"
+        val nrt = ps.nrtMelodicConfig
+        spinnerNrtCycle.setSelection(nrt.cyclePreset)
+        seekNrtP.progress = (nrt.pWeight * 5f).toInt().coerceIn(0, 10)
+        tvNrtPWeight.text = "P weight: ${nrt.pWeight}"
+        seekNrtL.progress = (nrt.lWeight * 5f).toInt().coerceIn(0, 10)
+        tvNrtLWeight.text = "L weight: ${nrt.lWeight}"
+        seekNrtR.progress = (nrt.rWeight * 5f).toInt().coerceIn(0, 10)
+        tvNrtRWeight.text = "R weight: ${nrt.rWeight}"
 
-        layoutPwg.visibility       = vis(ps.melodicEngine == MelodicEngine.PWG)
-        spinnerPwgMotif.setSelection(ps.pwgMotif.ordinal)
-        seekPwgPhrase.progress     = ps.pwgPhraseLen - 2
-        tvPwgPhrase.text           = "Phrase: ${ps.pwgPhraseLen} bars"
-        seekPwgDir.progress        = ps.pwgDirectionBias + 4
-        tvPwgDirection.text        = "Dir bias: ${ps.pwgDirectionBias}"
+        val pwg = ps.pwgConfig
+        spinnerPwgMotif.setSelection(pwg.motifSetIndex)
+        seekPwgPhrase.progress = (pwg.phraseLengthMotifs - 1).coerceIn(0, 7)
+        tvPwgPhrase.text = "Motifs per phrase: ${pwg.phraseLengthMotifs}"
+        seekPwgDir.progress = ((pwg.directionBias + 1f) * 10f).toInt().coerceIn(0, 20)
+        tvPwgDirection.text = directionLabel(pwg.directionBias)
 
-        layoutLSystem.visibility   = vis(ps.melodicEngine == MelodicEngine.LSYSTEM)
-        spinnerLSystemAxiom.setSelection(ps.lSystemAxiom.ordinal)
-        seekLSystemIter.progress   = ps.lSystemIterations - 1
-        tvLSystemIter.text         = "Iterations: ${ps.lSystemIterations}"
-        seekLSystemVariance.progress = ps.lSystemVariance
-        tvLSystemVariance.text     = "Variance: ${ps.lSystemVariance}"
+        val ls = ps.lSystemConfig
+        spinnerLSystemAxiom.setSelection(ls.axiomIndex)
+        seekLSystemIter.progress = (ls.iterations - 1).coerceIn(0, 3)
+        tvLSystemIter.text = "Iterations: ${ls.iterations}"
+        seekLSystemVariance.progress = (ls.ruleVariance * 100f).toInt()
+        tvLSystemVariance.text = "Rule variance: ${seekLSystemVariance.progress}%"
 
-        layoutCellAuto.visibility  = vis(ps.melodicEngine == MelodicEngine.CELLULAR)
-        seekCaSurvMin.progress     = ps.caSurvMin
-        tvCaSurvMin.text           = "Surv min: ${ps.caSurvMin}"
-        seekCaSurvMax.progress     = ps.caSurvMax
-        tvCaSurvMax.text           = "Surv max: ${ps.caSurvMax}"
-        seekCaBirth.progress       = ps.caBirth
-        tvCaBirth.text             = "Birth: ${ps.caBirth}"
-        seekCaMutation.progress    = ps.caMutation
-        tvCaMutation.text          = "Mutation: ${ps.caMutation}"
+        val ca = ps.cellAutomataConfig
+        seekCaSurvMin.progress = ca.survivalMin
+        tvCaSurvMin.text = "Survival min: ${ca.survivalMin}"
+        seekCaSurvMax.progress = ca.survivalMax
+        tvCaSurvMax.text = "Survival max: ${ca.survivalMax}"
+        seekCaBirth.progress = ca.birthCount
+        tvCaBirth.text = "Birth count: ${ca.birthCount}"
+        seekCaMutation.progress = (ca.mutationRate * 100f).toInt()
+        tvCaMutation.text = "Mutation rate: ${seekCaMutation.progress}%"
     }
 
-    // ── Listeners ─────────────────────────────────────────────────────────
+    // ── Listeners ────────────────────────────────────────────────────────
 
     private fun setupListeners() {
-        fun simpleSeek(block: (Int) -> Unit) = object : android.widget.SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb: android.widget.SeekBar?, p: Int, fromUser: Boolean) { if (fromUser) block(p) }
-            override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {}
-            override fun onStopTrackingTouch(sb: android.widget.SeekBar?) {}
-        }
-
         seekJitter.setOnSeekBarChangeListener(simpleSeek { p ->
             current = current.copy(jitterAmount = p)
-            tvJitter.text = "Jitter: $p ms"; push()
+            tvJitter.text = getString(R.string.label_jitter_amount, p)
+            push()
         })
-        spinnerJitterType.onItemSelectedListener = spinnerListener { pos ->
+        spinnerJitterType.onItemSelectedListener = simpleSpinner { pos ->
             current = current.copy(jitterType = JitterType.entries[pos]); push()
         }
-        spinnerVelPattern.onItemSelectedListener = spinnerListener { pos ->
+        spinnerVelPattern.onItemSelectedListener = simpleSpinner { pos ->
             current = current.copy(velocityPattern = VelocityPattern.entries[pos]); push()
         }
 
-        spinnerMelodicEngine.onItemSelectedListener = spinnerListener { pos ->
+        switchEuclidean.setOnCheckedChangeListener { _, on ->
+            current = current.copy(euclideanEnabled = on)
+            layoutEuclidean.visibility = vis(on); push()
+        }
+        seekEucSteps.setOnSeekBarChangeListener(simpleSeek { p ->
+            current = current.copy(euclideanSteps = p + 1)
+            tvEucSteps.text = "Steps: ${p + 1}"; push()
+        })
+        seekEucDensity.setOnSeekBarChangeListener(simpleSeek { p ->
+            current = current.copy(euclideanDensity = p + 1)
+            tvEucDensity.text = "Density: ${p + 1}"; push()
+        })
+        seekEucRotation.setOnSeekBarChangeListener(simpleSeek { p ->
+            current = current.copy(euclideanRotation = p)
+            tvEucRotation.text = "Rotation: $p"; push()
+        })
+
+        spinnerMelodicEngine.onItemSelectedListener = simpleSpinner { pos ->
             val eng = MelodicEngine.entries[pos]
-            current = current.copy(melodicEngine = eng)
-            layoutMarkov.visibility    = if (eng == MelodicEngine.MARKOV)   View.VISIBLE else View.GONE
-            layoutNrtMelodic.visibility = if (eng == MelodicEngine.NRT)     View.VISIBLE else View.GONE
-            layoutPwg.visibility       = if (eng == MelodicEngine.PWG)      View.VISIBLE else View.GONE
-            layoutLSystem.visibility   = if (eng == MelodicEngine.LSYSTEM)  View.VISIBLE else View.GONE
-            layoutCellAuto.visibility  = if (eng == MelodicEngine.CELLULAR) View.VISIBLE else View.GONE
-            push()
+            current = current.copy(
+                melodicEngine  = eng,
+                markovEnabled  = (eng == MelodicEngine.MARKOV)
+            )
+            showEnginePanel(eng); push()
         }
 
-        switchSecondOrder.setOnCheckedChangeListener { _, on ->
-            current = current.copy(markovSecondOrder = on); push()
+        spinnerLogicStyle.onItemSelectedListener = simpleSpinner { pos ->
+            current = current.copy(melodicLogicStyle = MelodicLogicStyle.entries[pos]); push()
         }
-        spinnerLogicStyle.onItemSelectedListener = spinnerListener { pos ->
-            current = current.copy(markovLogicStyle = MarkovLogicStyle.entries[pos]); push()
+        switchSecondOrder.setOnCheckedChangeListener { _, on ->
+            current = current.copy(secondOrderMarkov = on); push()
         }
 
         switchNarmour.setOnCheckedChangeListener { _, on ->
-            current = current.copy(narmourEnabled = on)
-            layoutNarmour.visibility = if (on) View.VISIBLE else View.GONE; push()
+            current = current.copy(narmourConfig = current.narmourConfig.copy(enabled = on))
+            layoutNarmour.visibility = vis(on); push()
         }
         seekNarmourProcess.setOnSeekBarChangeListener(simpleSeek { p ->
-            current = current.copy(narmourProcessWeight = p)
-            tvNarmourProcess.text = "Process: $p"; push()
+            current = current.copy(narmourConfig = current.narmourConfig.copy(processVsReversal = p / 100f))
+            tvNarmourProcess.text = "Process vs Reversal: $p%"; push()
         })
         seekNarmourReturn.setOnSeekBarChangeListener(simpleSeek { p ->
-            current = current.copy(narmourReturnWeight = p)
-            tvNarmourReturn.text = "Return: $p"; push()
+            current = current.copy(narmourConfig = current.narmourConfig.copy(returnBias = p / 100f))
+            tvNarmourReturn.text = "Post-leap return bias: $p%"; push()
         })
         seekNarmourLeap.setOnSeekBarChangeListener(simpleSeek { p ->
-            current = current.copy(narmourLeapThreshold = p)
-            tvNarmourLeap.text = "Leap ≥: $p st"; push()
+            current = current.copy(narmourConfig = current.narmourConfig.copy(maxLeapPenalty = p / 100f))
+            tvNarmourLeap.text = "Leap penalty: $p%"; push()
         })
 
         switchGravity.setOnCheckedChangeListener { _, on ->
-            current = current.copy(gravityEnabled = on)
-            layoutGravity.visibility = if (on) View.VISIBLE else View.GONE; push()
+            current = current.copy(contourGravityConfig = current.contourGravityConfig.copy(enabled = on))
+            layoutGravity.visibility = vis(on); push()
         }
         seekGravityThreshold.setOnSeekBarChangeListener(simpleSeek { p ->
-            current = current.copy(gravityThreshold = p)
-            tvGravityThreshold.text = "Threshold: $p"; push()
+            current = current.copy(contourGravityConfig = current.contourGravityConfig.copy(threshold = p))
+            tvGravityThreshold.text = "Threshold: $p steps"; push()
         })
         seekGravityStrength.setOnSeekBarChangeListener(simpleSeek { p ->
-            current = current.copy(gravityStrength = p)
+            current = current.copy(contourGravityConfig = current.contourGravityConfig.copy(strength = p.toFloat()))
             tvGravityStrength.text = "Strength: $p"; push()
         })
 
         switchGesture.setOnCheckedChangeListener { _, on ->
-            current = current.copy(gestureEnabled = on)
-            layoutGesture.visibility = if (on) View.VISIBLE else View.GONE; push()
+            val depth = if (on) (seekGestureDepth.progress / 100f).coerceAtLeast(0.01f) else 0f
+            current = current.copy(gestureCurveConfig = current.gestureCurveConfig.copy(gestureDepth = depth))
+            layoutGesture.visibility = vis(on); push()
         }
         seekGestureDepth.setOnSeekBarChangeListener(simpleSeek { p ->
-            current = current.copy(gestureDepth = p)
-            tvGestureDepth.text = "Depth: $p"; push()
+            current = current.copy(gestureCurveConfig = current.gestureCurveConfig.copy(gestureDepth = p / 100f))
+            tvGestureDepth.text = "Gesture depth: $p%"; push()
         })
-        spinnerGesturePitch.onItemSelectedListener    = spinnerListener { pos -> current = current.copy(gesturePitchShape = GesturePitchShape.entries[pos]); push() }
-        spinnerGestureRegister.onItemSelectedListener = spinnerListener { pos -> current = current.copy(gestureRegister = GestureRegisterTendency.entries[pos]); push() }
-        spinnerGestureDensity.onItemSelectedListener  = spinnerListener { pos -> current = current.copy(gestureDensity = GestureDensityProfile.entries[pos]); push() }
-        spinnerGestureVelocity.onItemSelectedListener = spinnerListener { pos -> current = current.copy(gestureVelocity = GestureVelocityProfile.entries[pos]); push() }
-
-        spinnerNrtCycle.onItemSelectedListener = spinnerListener { pos ->
-            current = current.copy(nrtCycle = NrtCycle.entries[pos]); push()
+        spinnerGesturePitch.onItemSelectedListener = simpleSpinner { pos ->
+            current = current.copy(gestureCurveConfig = current.gestureCurveConfig.copy(pitchCurvePreset = pos)); push()
         }
-        seekNrtP.setOnSeekBarChangeListener(simpleSeek { p -> current = current.copy(nrtPWeight = p); tvNrtPWeight.text = "P: $p"; push() })
-        seekNrtL.setOnSeekBarChangeListener(simpleSeek { p -> current = current.copy(nrtLWeight = p); tvNrtLWeight.text = "L: $p"; push() })
-        seekNrtR.setOnSeekBarChangeListener(simpleSeek { p -> current = current.copy(nrtRWeight = p); tvNrtRWeight.text = "R: $p"; push() })
+        spinnerGestureRegister.onItemSelectedListener = simpleSpinner { pos ->
+            current = current.copy(gestureCurveConfig = current.gestureCurveConfig.copy(registerCurvePreset = pos)); push()
+        }
+        spinnerGestureDensity.onItemSelectedListener = simpleSpinner { pos ->
+            current = current.copy(gestureCurveConfig = current.gestureCurveConfig.copy(densityCurvePreset = pos)); push()
+        }
+        spinnerGestureVelocity.onItemSelectedListener = simpleSpinner { pos ->
+            current = current.copy(gestureCurveConfig = current.gestureCurveConfig.copy(velocityCurvePreset = pos)); push()
+        }
 
-        spinnerPwgMotif.onItemSelectedListener = spinnerListener { pos ->
-            current = current.copy(pwgMotif = PwgMotif.entries[pos]); push()
+        spinnerNrtCycle.onItemSelectedListener = simpleSpinner { pos ->
+            current = current.copy(nrtMelodicConfig = current.nrtMelodicConfig.copy(cyclePreset = pos)); push()
+        }
+        seekNrtP.setOnSeekBarChangeListener(simpleSeek { p ->
+            current = current.copy(nrtMelodicConfig = current.nrtMelodicConfig.copy(pWeight = p / 5f))
+            tvNrtPWeight.text = "P weight: ${p / 5f}"; push()
+        })
+        seekNrtL.setOnSeekBarChangeListener(simpleSeek { p ->
+            current = current.copy(nrtMelodicConfig = current.nrtMelodicConfig.copy(lWeight = p / 5f))
+            tvNrtLWeight.text = "L weight: ${p / 5f}"; push()
+        })
+        seekNrtR.setOnSeekBarChangeListener(simpleSeek { p ->
+            current = current.copy(nrtMelodicConfig = current.nrtMelodicConfig.copy(rWeight = p / 5f))
+            tvNrtRWeight.text = "R weight: ${p / 5f}"; push()
+        })
+
+        spinnerPwgMotif.onItemSelectedListener = simpleSpinner { pos ->
+            current = current.copy(pwgConfig = current.pwgConfig.copy(motifSetIndex = pos)); push()
         }
         seekPwgPhrase.setOnSeekBarChangeListener(simpleSeek { p ->
-            current = current.copy(pwgPhraseLen = p + 2)
-            tvPwgPhrase.text = "Phrase: ${p + 2} bars"; push()
+            current = current.copy(pwgConfig = current.pwgConfig.copy(phraseLengthMotifs = p + 1))
+            tvPwgPhrase.text = "Motifs per phrase: ${p + 1}"; push()
         })
         seekPwgDir.setOnSeekBarChangeListener(simpleSeek { p ->
-            current = current.copy(pwgDirectionBias = p - 4)
-            tvPwgDirection.text = "Dir bias: ${p - 4}"; push()
+            val bias = (p / 10f) - 1f
+            current = current.copy(pwgConfig = current.pwgConfig.copy(directionBias = bias))
+            tvPwgDirection.text = directionLabel(bias); push()
         })
 
-        spinnerLSystemAxiom.onItemSelectedListener = spinnerListener { pos ->
-            current = current.copy(lSystemAxiom = LSystemAxiom.entries[pos]); push()
+        spinnerLSystemAxiom.onItemSelectedListener = simpleSpinner { pos ->
+            current = current.copy(lSystemConfig = current.lSystemConfig.copy(axiomIndex = pos)); push()
         }
         seekLSystemIter.setOnSeekBarChangeListener(simpleSeek { p ->
-            current = current.copy(lSystemIterations = p + 1)
+            current = current.copy(lSystemConfig = current.lSystemConfig.copy(iterations = p + 1))
             tvLSystemIter.text = "Iterations: ${p + 1}"; push()
         })
         seekLSystemVariance.setOnSeekBarChangeListener(simpleSeek { p ->
-            current = current.copy(lSystemVariance = p)
-            tvLSystemVariance.text = "Variance: $p"; push()
+            current = current.copy(lSystemConfig = current.lSystemConfig.copy(ruleVariance = p / 100f))
+            tvLSystemVariance.text = "Rule variance: $p%"; push()
         })
 
-        seekCaSurvMin.setOnSeekBarChangeListener(simpleSeek { p -> current = current.copy(caSurvMin = p); tvCaSurvMin.text = "Surv min: $p"; push() })
-        seekCaSurvMax.setOnSeekBarChangeListener(simpleSeek { p -> current = current.copy(caSurvMax = p); tvCaSurvMax.text = "Surv max: $p"; push() })
-        seekCaBirth.setOnSeekBarChangeListener(simpleSeek   { p -> current = current.copy(caBirth = p);   tvCaBirth.text   = "Birth: $p";    push() })
-        seekCaMutation.setOnSeekBarChangeListener(simpleSeek { p -> current = current.copy(caMutation = p); tvCaMutation.text = "Mutation: $p"; push() })
+        seekCaSurvMin.setOnSeekBarChangeListener(simpleSeek { p ->
+            current = current.copy(cellAutomataConfig = current.cellAutomataConfig.copy(survivalMin = p))
+            tvCaSurvMin.text = "Survival min: $p"; push()
+        })
+        seekCaSurvMax.setOnSeekBarChangeListener(simpleSeek { p ->
+            current = current.copy(cellAutomataConfig = current.cellAutomataConfig.copy(survivalMax = p))
+            tvCaSurvMax.text = "Survival max: $p"; push()
+        })
+        seekCaBirth.setOnSeekBarChangeListener(simpleSeek { p ->
+            current = current.copy(cellAutomataConfig = current.cellAutomataConfig.copy(birthCount = p))
+            tvCaBirth.text = "Birth count: $p"; push()
+        })
+        seekCaMutation.setOnSeekBarChangeListener(simpleSeek { p ->
+            current = current.copy(cellAutomataConfig = current.cellAutomataConfig.copy(mutationRate = p / 100f))
+            tvCaMutation.text = "Mutation rate: $p%"; push()
+        })
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────
+    // ── Engine panel visibility ───────────────────────────────────────────
 
-    private fun spinnerListener(block: (Int) -> Unit) =
-        object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, v: View?, pos: Int, id: Long) = block(pos)
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
-        }
+    private fun showEnginePanel(engine: MelodicEngine) {
+        layoutMarkov.visibility    = vis(engine == MelodicEngine.MARKOV)
+        layoutNrtMelodic.visibility = vis(engine == MelodicEngine.NRT_MELODIC)
+        layoutPwg.visibility       = vis(engine == MelodicEngine.PWG)
+        layoutLSystem.visibility   = vis(engine == MelodicEngine.L_SYSTEM)
+        layoutCellAuto.visibility  = vis(engine == MelodicEngine.CELL_AUTOMATA)
+    }
 
-    private fun push() { listener?.onProSettingsChanged(current) }
+    // ── Helpers ──────────────────────────────────────────────────────────
 
-    // ── Public API ────────────────────────────────────────────────────────
+    private fun push() = listener?.onProSettingsChanged(current)
 
-    /** Called from MainFragment when Euclidean timing is selected/deselected or seekbar params change.
-     *  Updates euclidean fields in ProSettings and pushes without needing UI controls here. */
-    fun setEuclideanParams(enabled: Boolean, steps: Int, density: Int, rotation: Int) {
-        current = current.copy(
-            euclideanEnabled  = enabled,
-            euclideanSteps    = steps,
-            euclideanDensity  = density,
-            euclideanRotation = rotation
-        )
-        push()
+    private fun vis(show: Boolean) = if (show) View.VISIBLE else View.GONE
+
+    private fun directionLabel(bias: Float) = when {
+        bias < -0.5f -> "Direction: Descending"
+        bias >  0.5f -> "Direction: Ascending"
+        else         -> "Direction: Neutral"
+    }
+
+    private fun simpleSeek(block: (Int) -> Unit) = object : android.widget.SeekBar.OnSeekBarChangeListener {
+        override fun onProgressChanged(sb: SeekBar?, p: Int, fromUser: Boolean) { if (fromUser) block(p) }
+        override fun onStartTrackingTouch(sb: SeekBar?) {}
+        override fun onStopTrackingTouch(sb: SeekBar?) {}
+    }
+
+    private fun simpleSpinner(block: (Int) -> Unit) = object : AdapterView.OnItemSelectedListener {
+        override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) = block(pos)
+        override fun onNothingSelected(p: AdapterView<*>?) {}
     }
 }
