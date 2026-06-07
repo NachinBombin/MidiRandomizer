@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/scrollRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true"
     android:background="#111318">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:padding="20dp">
 
         <!-- ── Title row (label + theme button) ─────────────────────────── -->
         <LinearLayout
@@ -45,7 +45,6 @@
 
         </LinearLayout>
 
-        <!-- ── Status ────────────────────────────────────────────────────── -->
         <TextView
             android:id="@+id/tvStatus"
             android:layout_width="match_parent"
@@ -55,159 +54,33 @@
             android:textColor="#4F9AA5"
             android:layout_marginBottom="20dp"/>
 
-        <!-- ── BPM ──────────────────────────────────────────────────────── -->
-        <TextView
-            android:id="@+id/tvBpm"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="BPM: 120"
-            android:textSize="15sp"
-            android:textColor="#E8E6E1"
-            android:layout_marginBottom="4dp"/>
-
-        <SeekBar
-            android:id="@+id/seekBpm"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="280"
-            android:progressTint="#4F9AA5"
-            android:thumbTint="#4F9AA5"
-            android:layout_marginBottom="16dp"/>
-
-        <!-- ── Velocity ──────────────────────────────────────────────────── -->
-        <TextView
-            android:id="@+id/tvVelocity"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Velocity: 90"
-            android:textSize="15sp"
-            android:textColor="#E8E6E1"
-            android:layout_marginBottom="4dp"/>
-
-        <SeekBar
-            android:id="@+id/seekVelocity"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="126"
-            android:progressTint="#4F9AA5"
-            android:thumbTint="#4F9AA5"
-            android:layout_marginBottom="16dp"/>
-
-        <!-- ── Octave Range ──────────────────────────────────────────────── -->
-        <TextView
-            android:id="@+id/tvOctave"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Octave range: 3 – 5"
-            android:textSize="15sp"
-            android:textColor="#E8E6E1"
-            android:layout_marginBottom="4dp"/>
-
-        <com.google.android.material.slider.RangeSlider
-            android:id="@+id/rangeOctave"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:valueFrom="0"
-            android:valueTo="8"
-            app:values="@array/default_octave_range"
-            app:thumbColor="#4F9AA5"
-            app:trackColorActive="#4F9AA5"
-            app:trackColorInactive="#393836"
-            android:layout_marginBottom="16dp"/>
-
-        <!-- ── Channel ───────────────────────────────────────────────────── -->
+        <!-- ── MIDI Devices ───────────────────────────────────────────────── -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="CHANNEL"
-            android:textSize="11sp"
-            android:textColor="#797876"
-            android:letterSpacing="0.12"
-            android:layout_marginBottom="4dp"/>
-
-        <Spinner
-            android:id="@+id/spinnerChannel"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
-            style="@style/SpinnerStyle"/>
-
-        <!-- ── Scale ─────────────────────────────────────────────────────── -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="SCALE"
-            android:textSize="11sp"
-            android:textColor="#797876"
-            android:letterSpacing="0.12"
-            android:layout_marginBottom="4dp"/>
-
-        <Spinner
-            android:id="@+id/spinnerScale"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
-            style="@style/SpinnerStyle"/>
-
-        <!-- ── Root note selector ─────────────────────────────────────────── -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="ROOT NOTE"
+            android:text="MIDI DEVICES"
             android:textSize="11sp"
             android:textColor="#797876"
             android:letterSpacing="0.12"
             android:layout_marginBottom="6dp"/>
 
-        <RadioGroup
-            android:id="@+id/rgRootRow1"
+        <ListView
+            android:id="@+id/listViewDevices"
+            android:layout_width="match_parent"
+            android:layout_height="120dp"
+            android:background="#1C1B19"
+            android:divider="#262523"
+            android:dividerHeight="1dp"/>
+
+        <TextView
+            android:id="@+id/tvDeviceInfo"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="4dp">
-
-            <RadioButton android:id="@+id/rbRootC"  android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="C"  android:textColor="#E8E6E1" android:buttonTint="#4F9AA5" android:tag="0"/>
-            <RadioButton android:id="@+id/rbRootCs" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="C#" android:textColor="#E8E6E1" android:buttonTint="#4F9AA5" android:tag="1"/>
-            <RadioButton android:id="@+id/rbRootD"  android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="D"  android:textColor="#E8E6E1" android:buttonTint="#4F9AA5" android:tag="2"/>
-            <RadioButton android:id="@+id/rbRootDs" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="D#" android:textColor="#E8E6E1" android:buttonTint="#4F9AA5" android:tag="3"/>
-            <RadioButton android:id="@+id/rbRootE"  android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="E"  android:textColor="#E8E6E1" android:buttonTint="#4F9AA5" android:tag="4"/>
-            <RadioButton android:id="@+id/rbRootF"  android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="F"  android:textColor="#E8E6E1" android:buttonTint="#4F9AA5" android:tag="5"/>
-
-        </RadioGroup>
-
-        <RadioGroup
-            android:id="@+id/rgRootRow2"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="4dp">
-
-            <RadioButton android:id="@+id/rbRootFs" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="F#" android:textColor="#E8E6E1" android:buttonTint="#4F9AA5" android:tag="6"/>
-            <RadioButton android:id="@+id/rbRootG"  android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="G"  android:textColor="#E8E6E1" android:buttonTint="#4F9AA5" android:tag="7"/>
-            <RadioButton android:id="@+id/rbRootGs" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="G#" android:textColor="#E8E6E1" android:buttonTint="#4F9AA5" android:tag="8"/>
-            <RadioButton android:id="@+id/rbRootA"  android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="A"  android:textColor="#E8E6E1" android:buttonTint="#4F9AA5" android:tag="9"/>
-            <RadioButton android:id="@+id/rbRootAs" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="A#" android:textColor="#E8E6E1" android:buttonTint="#4F9AA5" android:tag="10"/>
-            <RadioButton android:id="@+id/rbRootB"  android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="B"  android:textColor="#E8E6E1" android:buttonTint="#4F9AA5" android:tag="11"/>
-
-        </RadioGroup>
-
-        <RadioGroup
-            android:id="@+id/rgRootFree"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="16dp">
-
-            <RadioButton
-                android:id="@+id/rbRootFree"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Free (any root)"
-                android:textColor="#E8E6E1"
-                android:buttonTint="#4F9AA5"
-                android:checked="true"/>
-
-        </RadioGroup>
+            android:text=""
+            android:textSize="12sp"
+            android:textColor="#797876"
+            android:layout_marginTop="6dp"
+            android:layout_marginBottom="20dp"/>
 
         <!-- ── Style ─────────────────────────────────────────────────────── -->
         <TextView
@@ -217,14 +90,14 @@
             android:textSize="11sp"
             android:textColor="#797876"
             android:letterSpacing="0.12"
-            android:layout_marginBottom="4dp"/>
+            android:layout_marginBottom="6dp"/>
 
         <Spinner
             android:id="@+id/spinnerStyle"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
-            style="@style/SpinnerStyle"/>
+            android:layout_height="48dp"
+            android:background="#1C1B19"
+            android:layout_marginBottom="12dp"/>
 
         <!-- ── Drone Timing (Evolving Drone only) ────────────────────────── -->
         <LinearLayout
@@ -232,8 +105,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:visibility="gone"
-            android:layout_marginBottom="12dp">
+            android:visibility="gone">
 
             <TextView
                 android:layout_width="wrap_content"
@@ -249,7 +121,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
-                android:layout_marginBottom="8dp">
+                android:layout_marginBottom="12dp">
 
                 <RadioButton
                     android:id="@+id/rbDroneConstant"
@@ -272,7 +144,6 @@
 
             </RadioGroup>
 
-            <!-- Drone beat range (shown only when Random is selected) -->
             <LinearLayout
                 android:id="@+id/layoutDroneRange"
                 android:layout_width="match_parent"
@@ -284,8 +155,8 @@
                     android:id="@+id/tvDroneRange"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Drone beat range: 1 - 4"
-                    android:textSize="13sp"
+                    android:text="Drone beat range: 16 - 64"
+                    android:textSize="14sp"
                     android:textColor="#E8E6E1"
                     android:layout_marginBottom="4dp"/>
 
@@ -294,32 +165,107 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:valueFrom="1"
-                    android:valueTo="16"
+                    android:valueTo="128"
                     app:values="@array/default_drone_range"
+                    android:stepSize="1.0"
                     app:thumbColor="#4F9AA5"
                     app:trackColorActive="#4F9AA5"
-                    app:trackColorInactive="#393836"/>
+                    app:trackColorInactive="#393836"
+                    android:layout_marginBottom="12dp"/>
 
             </LinearLayout>
-
         </LinearLayout>
 
-        <!-- ── Chord Hint ─────────────────────────────────────────────────── -->
-        <TextView
-            android:id="@+id/tvChordHint"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="💡 Chord settings below"
-            android:textSize="12sp"
-            android:textColor="#797876"
-            android:visibility="gone"
-            android:layout_marginBottom="8dp"/>
-
-        <!-- ── Timing mode ────────────────────────────────────────────────── -->
+        <!-- ── Scale ─────────────────────────────────────────────────────── -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="TIMING MODE"
+            android:text="SCALE"
+            android:textSize="11sp"
+            android:textColor="#797876"
+            android:letterSpacing="0.12"
+            android:layout_marginBottom="6dp"/>
+
+        <Spinner
+            android:id="@+id/spinnerScale"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="#1C1B19"
+            android:layout_marginBottom="12dp"/>
+
+        <!-- ── Root Note ──────────────────────────────────────────────────── -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="ROOT NOTE"
+            android:textSize="11sp"
+            android:textColor="#797876"
+            android:letterSpacing="0.12"
+            android:layout_marginBottom="6dp"/>
+
+        <LinearLayout
+            android:id="@+id/rootNoteContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginBottom="16dp">
+
+            <!-- Row 1: C  C#  D  D#  E  F -->
+            <RadioGroup
+                android:id="@+id/rgRootRow1"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="4dp">
+
+                <RadioButton android:id="@+id/rbRootC"  style="@style/RootChip" android:text="C"  android:tag="0"/>
+                <RadioButton android:id="@+id/rbRootCs" style="@style/RootChip" android:text="C#" android:tag="1"/>
+                <RadioButton android:id="@+id/rbRootD"  style="@style/RootChip" android:text="D"  android:tag="2"/>
+                <RadioButton android:id="@+id/rbRootDs" style="@style/RootChip" android:text="D#" android:tag="3"/>
+                <RadioButton android:id="@+id/rbRootE"  style="@style/RootChip" android:text="E"  android:tag="4"/>
+                <RadioButton android:id="@+id/rbRootF"  style="@style/RootChip" android:text="F"  android:tag="5"/>
+
+            </RadioGroup>
+
+            <!-- Row 2: F#  G  G#  A  A#  B -->
+            <RadioGroup
+                android:id="@+id/rgRootRow2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="4dp">
+
+                <RadioButton android:id="@+id/rbRootFs" style="@style/RootChip" android:text="F#" android:tag="6"/>
+                <RadioButton android:id="@+id/rbRootG"  style="@style/RootChip" android:text="G"  android:tag="7"/>
+                <RadioButton android:id="@+id/rbRootGs" style="@style/RootChip" android:text="G#" android:tag="8"/>
+                <RadioButton android:id="@+id/rbRootA"  style="@style/RootChip" android:text="A"  android:tag="9"/>
+                <RadioButton android:id="@+id/rbRootAs" style="@style/RootChip" android:text="A#" android:tag="10"/>
+                <RadioButton android:id="@+id/rbRootB"  style="@style/RootChip" android:text="B"  android:tag="11"/>
+
+            </RadioGroup>
+
+            <!-- Row 3: Random -->
+            <RadioGroup
+                android:id="@+id/rgRootRow3"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <RadioButton
+                    android:id="@+id/rbRootRandom"
+                    style="@style/RootChip"
+                    android:text="Random"
+                    android:tag="12"/>
+
+            </RadioGroup>
+
+        </LinearLayout>
+
+        <!-- ── Timing ────────────────────────────────────────────────────── -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="TIMING"
             android:textSize="11sp"
             android:textColor="#797876"
             android:letterSpacing="0.12"
@@ -371,69 +317,117 @@
 
         </RadioGroup>
 
-        <!-- ── Compact Euclidean options (visible only when Eucl. is selected) ── -->
+        <!-- ── Euclidean compact panel (visible only when rbEuclidean selected) ── -->
         <LinearLayout
             android:id="@+id/layoutEuclideanCompact"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:visibility="gone"
-            android:background="#1A1F2A"
+            android:background="#1A2A2A"
             android:padding="10dp"
             android:layout_marginBottom="12dp">
 
             <TextView
-                android:id="@+id/tvEucStepsCompact"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Steps: 8"
-                android:textSize="13sp"
-                android:textColor="#B0B0B0"
-                android:layout_marginBottom="2dp"/>
-            <SeekBar
-                android:id="@+id/seekEucStepsCompact"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:max="14"
-                android:progress="6"
-                android:progressTint="#4F9AA5"
-                android:thumbTint="#4F9AA5"
-                android:layout_marginBottom="8dp"/>
+                android:text="Euclidean Settings"
+                android:textColor="#4F9AA5"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="6dp"/>
 
-            <TextView
-                android:id="@+id/tvEucDensityCompact"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Density: 3"
-                android:textSize="13sp"
-                android:textColor="#B0B0B0"
-                android:layout_marginBottom="2dp"/>
-            <SeekBar
-                android:id="@+id/seekEucDensityCompact"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:max="15"
-                android:progress="2"
-                android:progressTint="#4F9AA5"
-                android:thumbTint="#4F9AA5"
-                android:layout_marginBottom="8dp"/>
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="4dp">
+                <TextView
+                    android:layout_width="60dp"
+                    android:layout_height="wrap_content"
+                    android:text="Steps"
+                    android:textColor="#E8E6E1"
+                    android:textSize="12sp"/>
+                <SeekBar
+                    android:id="@+id/seekEucStepsCompact"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:max="15"
+                    android:progress="7"
+                    android:progressTint="#4F9AA5"
+                    android:thumbTint="#4F9AA5"/>
+                <TextView
+                    android:id="@+id/tvEucStepsCompact"
+                    android:layout_width="28dp"
+                    android:layout_height="wrap_content"
+                    android:text="8"
+                    android:textColor="#E8E6E1"
+                    android:textSize="12sp"
+                    android:gravity="end"/>
+            </LinearLayout>
 
-            <TextView
-                android:id="@+id/tvEucRotationCompact"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Rotation: 0"
-                android:textSize="13sp"
-                android:textColor="#B0B0B0"
-                android:layout_marginBottom="2dp"/>
-            <SeekBar
-                android:id="@+id/seekEucRotationCompact"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:max="15"
-                android:progress="0"
-                android:progressTint="#4F9AA5"
-                android:thumbTint="#4F9AA5"/>
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="4dp">
+                <TextView
+                    android:layout_width="60dp"
+                    android:layout_height="wrap_content"
+                    android:text="Density"
+                    android:textColor="#E8E6E1"
+                    android:textSize="12sp"/>
+                <SeekBar
+                    android:id="@+id/seekEucDensityCompact"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:max="15"
+                    android:progress="3"
+                    android:progressTint="#4F9AA5"
+                    android:thumbTint="#4F9AA5"/>
+                <TextView
+                    android:id="@+id/tvEucDensityCompact"
+                    android:layout_width="28dp"
+                    android:layout_height="wrap_content"
+                    android:text="4"
+                    android:textColor="#E8E6E1"
+                    android:textSize="12sp"
+                    android:gravity="end"/>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <TextView
+                    android:layout_width="60dp"
+                    android:layout_height="wrap_content"
+                    android:text="Rotation"
+                    android:textColor="#E8E6E1"
+                    android:textSize="12sp"/>
+                <SeekBar
+                    android:id="@+id/seekEucRotationCompact"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:max="15"
+                    android:progress="0"
+                    android:progressTint="#4F9AA5"
+                    android:thumbTint="#4F9AA5"/>
+                <TextView
+                    android:id="@+id/tvEucRotationCompact"
+                    android:layout_width="28dp"
+                    android:layout_height="wrap_content"
+                    android:text="0"
+                    android:textColor="#E8E6E1"
+                    android:textSize="12sp"
+                    android:gravity="end"/>
+            </LinearLayout>
 
         </LinearLayout>
 
@@ -448,107 +442,223 @@
             android:layout_marginBottom="20dp"/>
 
         <!-- ── Start / Stop ──────────────────────────────────────────────── -->
-        <Button
-            android:id="@+id/btnStartStop"
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:text="START"
-            android:textSize="16sp"
-            android:textColor="#F7F6F2"
-            android:backgroundTint="#01696F"
-            android:layout_marginBottom="8dp"/>
-
-        <!-- ════════════════════════════════════════════════════════════════
-             CHORD SETTINGS PANEL  (visible only when Style = Chords)
-             ════════════════════════════════════════════════════════════════ -->
         <LinearLayout
-            android:id="@+id/layoutChordSettings"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:visibility="gone"
-            android:layout_marginTop="20dp"
-            android:background="#161B24"
-            android:padding="12dp">
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:layout_marginBottom="20dp">
 
-            <TextView
-                android:layout_width="wrap_content"
+            <Button
+                android:id="@+id/btnStart"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="CHORD SETTINGS"
-                android:textSize="11sp"
-                android:textColor="#797876"
-                android:letterSpacing="0.12"
-                android:layout_marginBottom="12dp"/>
+                android:layout_weight="1"
+                android:text="▶ Start"
+                android:textColor="#E8E6E1"
+                android:backgroundTint="#437A22"
+                android:layout_marginEnd="8dp"/>
 
-            <!-- Chord Type -->
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Chord type" android:textSize="13sp" android:textColor="#B0B0B0" android:layout_marginBottom="2dp"/>
-            <Spinner android:id="@+id/spinnerChordType" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="12dp" style="@style/SpinnerStyle"/>
-
-            <!-- Plucking Style -->
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Plucking style" android:textSize="13sp" android:textColor="#B0B0B0" android:layout_marginBottom="2dp"/>
-            <Spinner android:id="@+id/spinnerPluckingStyle" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="8dp" style="@style/SpinnerStyle"/>
-
-            <TextView android:id="@+id/tvPluckDelay" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Pluck delay: 1 ms" android:textSize="13sp" android:textColor="#B0B0B0" android:layout_marginBottom="2dp"/>
-            <SeekBar android:id="@+id/seekPluckDelay" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="199" android:progressTint="#4F9AA5" android:thumbTint="#4F9AA5" android:layout_marginBottom="12dp"/>
-
-            <!-- Inversion Mode -->
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Inversion mode" android:textSize="13sp" android:textColor="#B0B0B0" android:layout_marginBottom="2dp"/>
-            <Spinner android:id="@+id/spinnerInversionMode" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="12dp" style="@style/SpinnerStyle"/>
-
-            <!-- Voicing Density -->
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Voicing density" android:textSize="13sp" android:textColor="#B0B0B0" android:layout_marginBottom="2dp"/>
-            <Spinner android:id="@+id/spinnerVoicingDensity" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="12dp" style="@style/SpinnerStyle"/>
-
-            <!-- Tension Level -->
-            <TextView android:id="@+id/tvTensionLevel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Tension: Triad" android:textSize="13sp" android:textColor="#B0B0B0" android:layout_marginBottom="2dp"/>
-            <SeekBar android:id="@+id/seekTensionLevel" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="3" android:progressTint="#4F9AA5" android:thumbTint="#4F9AA5" android:layout_marginBottom="12dp"/>
-
-            <!-- Mutation Chance -->
-            <TextView android:id="@+id/tvMutationChance" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Mutation: 0%" android:textSize="13sp" android:textColor="#B0B0B0" android:layout_marginBottom="2dp"/>
-            <SeekBar android:id="@+id/seekMutationChance" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="30" android:progressTint="#4F9AA5" android:thumbTint="#4F9AA5" android:layout_marginBottom="12dp"/>
-
-            <!-- Build Strategy -->
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Build strategy" android:textSize="13sp" android:textColor="#B0B0B0" android:layout_marginBottom="2dp"/>
-            <Spinner android:id="@+id/spinnerBuildStrategy" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="12dp" style="@style/SpinnerStyle"/>
-
-            <!-- Rhythmic Figure -->
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Rhythmic figure" android:textSize="13sp" android:textColor="#B0B0B0" android:layout_marginBottom="2dp"/>
-            <Spinner android:id="@+id/spinnerRhythmicFigure" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="12dp" style="@style/SpinnerStyle"/>
-
-            <!-- Note Drop Chance -->
-            <TextView android:id="@+id/tvNoteDropChance" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Note drop: 0%" android:textSize="13sp" android:textColor="#B0B0B0" android:layout_marginBottom="2dp"/>
-            <SeekBar android:id="@+id/seekNoteDropChance" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="50" android:progressTint="#4F9AA5" android:thumbTint="#4F9AA5" android:layout_marginBottom="4dp"/>
+            <Button
+                android:id="@+id/btnStop"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="■ Stop"
+                android:textColor="#E8E6E1"
+                android:backgroundTint="#A12C7B"/>
 
         </LinearLayout>
 
-        <!-- ── MIDI Device list ───────────────────────────────────────────── -->
+        <!-- ── BPM ───────────────────────────────────────────────────────── -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="MIDI OUTPUT"
+            android:text="BPM"
             android:textSize="11sp"
             android:textColor="#797876"
             android:letterSpacing="0.12"
-            android:layout_marginTop="20dp"
             android:layout_marginBottom="6dp"/>
 
-        <TextView
-            android:id="@+id/tvDeviceInfo"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="No MIDI devices found"
-            android:textSize="13sp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="20dp">
+
+            <SeekBar
+                android:id="@+id/seekBpm"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:max="240"
+                android:progress="120"
+                android:progressTint="#4F9AA5"
+                android:thumbTint="#4F9AA5"/>
+
+            <TextView
+                android:id="@+id/tvBpm"
+                android:layout_width="48dp"
+                android:layout_height="wrap_content"
+                android:text="120"
+                android:textSize="14sp"
+                android:textColor="#E8E6E1"
+                android:gravity="end"/>
+
+        </LinearLayout>
+
+        <!-- ── MIDI Channel ──────────────────────────────────────────────── -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="MIDI CHANNEL"
+            android:textSize="11sp"
             android:textColor="#797876"
+            android:letterSpacing="0.12"
+            android:layout_marginBottom="6dp"/>
+
+        <Spinner
+            android:id="@+id/spinnerChannel"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="#1C1B19"
+            android:layout_marginBottom="20dp"/>
+
+        <!-- ── Voices ────────────────────────────────────────────────────── -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="VOICES"
+            android:textSize="11sp"
+            android:textColor="#797876"
+            android:letterSpacing="0.12"
+            android:layout_marginBottom="6dp"/>
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvVoices"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:nestedScrollingEnabled="false"
+            android:layout_marginBottom="12dp"/>
+
+        <Button
+            android:id="@+id/btnAddVoice"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="+ Add Voice"
+            android:textColor="#E8E6E1"
+            android:backgroundTint="#1C1B19"
+            android:layout_marginBottom="20dp"/>
+
+        <!-- ── Pro Settings ──────────────────────────────────────────────── -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="PRO SETTINGS"
+            android:textSize="11sp"
+            android:textColor="#797876"
+            android:letterSpacing="0.12"
+            android:layout_marginBottom="6dp"/>
+
+        <Button
+            android:id="@+id/btnProSettings"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="⚙ Pro Settings"
+            android:textColor="#E8E6E1"
+            android:backgroundTint="#1C1B19"
+            android:layout_marginBottom="20dp"/>
+
+        <!-- ── Velocity ──────────────────────────────────────────────────── -->
+        <TextView
+            android:id="@+id/tvVelocity"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Velocity: 80"
+            android:textSize="14sp"
+            android:textColor="#E8E6E1"
             android:layout_marginBottom="4dp"/>
 
-        <ListView
-            android:id="@+id/listViewDevices"
+        <SeekBar
+            android:id="@+id/seekVelocity"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:divider="#393836"
-            android:dividerHeight="1dp"
-            android:layout_marginBottom="8dp"/>
+            android:max="127"
+            android:progress="80"
+            android:progressTint="#4F9AA5"
+            android:thumbTint="#4F9AA5"
+            android:layout_marginBottom="20dp"/>
+
+        <!-- ── Note Duration ─────────────────────────────────────────────── -->
+        <TextView
+            android:id="@+id/tvNoteDuration"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Note duration: 200ms"
+            android:textSize="14sp"
+            android:textColor="#E8E6E1"
+            android:layout_marginBottom="4dp"/>
+
+        <SeekBar
+            android:id="@+id/seekNoteDuration"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="2000"
+            android:progress="200"
+            android:progressTint="#4F9AA5"
+            android:thumbTint="#4F9AA5"
+            android:layout_marginBottom="20dp"/>
+
+        <!-- ── Octave ────────────────────────────────────────────────────── -->
+        <TextView
+            android:id="@+id/tvOctave"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Octave range: 3 - 5"
+            android:textSize="14sp"
+            android:textColor="#E8E6E1"
+            android:layout_marginBottom="4dp"/>
+
+        <com.google.android.material.slider.RangeSlider
+            android:id="@+id/rangeOctave"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:valueFrom="0"
+            android:valueTo="8"
+            app:values="@array/default_octave_range"
+            android:stepSize="1.0"
+            app:thumbColor="#4F9AA5"
+            app:trackColorActive="#4F9AA5"
+            app:trackColorInactive="#393836"
+            android:layout_marginBottom="20dp"/>
+
+        <!-- ── Note Drop Chance ──────────────────────────────────────────── -->
+        <LinearLayout
+            android:id="@+id/layoutNoteDropChance"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/tvNoteDropChance"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Note drop: 0%"
+                android:textSize="13sp"
+                android:textColor="#E8E6E1"
+                android:layout_marginBottom="4dp"/>
+            <SeekBar
+                android:id="@+id/seekNoteDropChance"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="50"
+                android:progressTint="#4F9AA5"
+                android:thumbTint="#4F9AA5"
+                android:layout_marginBottom="4dp"/>
+
+        </LinearLayout>
 
     </LinearLayout>
-
 </ScrollView>
