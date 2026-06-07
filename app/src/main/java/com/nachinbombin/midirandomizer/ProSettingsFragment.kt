@@ -21,6 +21,14 @@ class ProSettingsFragment : Fragment() {
     private lateinit var tvJitter:          TextView
     private lateinit var spinnerJitterType: Spinner
     private lateinit var spinnerVelPattern: Spinner
+    private lateinit var switchEuclidean:   Switch
+    private lateinit var layoutEuclidean:   View
+    private lateinit var seekEucSteps:      SeekBar
+    private lateinit var tvEucSteps:        TextView
+    private lateinit var seekEucDensity:    SeekBar
+    private lateinit var tvEucDensity:      TextView
+    private lateinit var seekEucRotation:   SeekBar
+    private lateinit var tvEucRotation:     TextView
 
     // ── Melodic Engine ────────────────────────────────────────────────────
     private lateinit var spinnerMelodicEngine: Spinner
@@ -132,6 +140,15 @@ class ProSettingsFragment : Fragment() {
         tvJitter          = v.findViewById(R.id.tvJitterAmount)
         spinnerJitterType = v.findViewById(R.id.spinnerJitterType)
         spinnerVelPattern = v.findViewById(R.id.spinnerVelPattern)
+        switchEuclidean   = v.findViewById(R.id.switchEuclidean)
+        layoutEuclidean   = v.findViewById(R.id.layoutEuclidean)
+        seekEucSteps      = v.findViewById(R.id.seekEucSteps)
+        tvEucSteps        = v.findViewById(R.id.tvEucSteps)
+        seekEucDensity    = v.findViewById(R.id.seekEucDensity)
+        tvEucDensity      = v.findViewById(R.id.tvEucDensity)
+        seekEucRotation   = v.findViewById(R.id.seekEucRotation)
+        tvEucRotation     = v.findViewById(R.id.tvEucRotation)
+
         spinnerMelodicEngine = v.findViewById(R.id.spinnerMelodicEngine)
 
         layoutMarkov      = v.findViewById(R.id.layoutMarkov)
@@ -227,6 +244,15 @@ class ProSettingsFragment : Fragment() {
         spinnerJitterType.setSelection(ps.jitterType.ordinal)
         spinnerVelPattern.setSelection(ps.velocityPattern.ordinal)
 
+        switchEuclidean.isChecked  = ps.euclideanEnabled
+        layoutEuclidean.visibility = vis(ps.euclideanEnabled)
+        seekEucSteps.progress   = ps.euclideanSteps - 1
+        tvEucSteps.text         = "Steps: ${ps.euclideanSteps}"
+        seekEucDensity.progress = ps.euclideanDensity - 1
+        tvEucDensity.text       = "Density: ${ps.euclideanDensity}"
+        seekEucRotation.progress = ps.euclideanRotation
+        tvEucRotation.text      = "Rotation: ${ps.euclideanRotation}"
+
         spinnerMelodicEngine.setSelection(ps.melodicEngine.ordinal)
         showEnginePanel(ps.melodicEngine)
 
@@ -310,6 +336,23 @@ class ProSettingsFragment : Fragment() {
         spinnerVelPattern.onItemSelectedListener = simpleSpinner { pos ->
             current = current.copy(velocityPattern = VelocityPattern.entries[pos]); push()
         }
+
+        switchEuclidean.setOnCheckedChangeListener { _, on ->
+            current = current.copy(euclideanEnabled = on)
+            layoutEuclidean.visibility = vis(on); push()
+        }
+        seekEucSteps.setOnSeekBarChangeListener(simpleSeek { p ->
+            current = current.copy(euclideanSteps = p + 1)
+            tvEucSteps.text = "Steps: ${p + 1}"; push()
+        })
+        seekEucDensity.setOnSeekBarChangeListener(simpleSeek { p ->
+            current = current.copy(euclideanDensity = p + 1)
+            tvEucDensity.text = "Density: ${p + 1}"; push()
+        })
+        seekEucRotation.setOnSeekBarChangeListener(simpleSeek { p ->
+            current = current.copy(euclideanRotation = p)
+            tvEucRotation.text = "Rotation: $p"; push()
+        })
 
         spinnerMelodicEngine.onItemSelectedListener = simpleSpinner { pos ->
             val eng = MelodicEngine.entries[pos]
