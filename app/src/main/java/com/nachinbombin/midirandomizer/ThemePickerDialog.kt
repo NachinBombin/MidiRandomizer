@@ -65,7 +65,7 @@ object ThemePickerDialog {
         private val onClick: (ThemePreset) -> Unit
     ) : RecyclerView.Adapter<Adapter.VH>() {
 
-        inner class VH(val card: View, val swatch: View, val label: TextView)
+        class VH(val card: View, val swatch: View, val label: TextView)
             : RecyclerView.ViewHolder(card)
 
         override fun getItemCount() = ThemePreset.ALL.size

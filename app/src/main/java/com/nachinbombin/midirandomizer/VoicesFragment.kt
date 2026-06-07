@@ -397,7 +397,7 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         val fractionLabels = mapOf(
             0 to "1/8x", 1 to "1/4x", 2 to "1/2x", 3 to "1x", 4 to "1.5x", 5 to "2x"
         )
-        val fractionValues = mapOf(
+        mapOf(
             0 to 0.125f, 1 to 0.25f, 2 to 0.5f, 3 to 1.0f, 4 to 1.5f, 5 to 2.0f
         )
         
@@ -556,6 +556,22 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         panel.addView(spinnerRow(ctx, "Root", rootNames, "indRootValue", onSync))
             
         panel.addView(spinnerRow(ctx, "Timing", listOf("Metronome","Mixed","Randomized","Euclidean"), "indTiming", onSync))
+
+        // ── Euclidean settings sub-panel ─────────────────────────────────
+        val euclideanPanel = buildEuclideanSettingsSubPanel(ctx, "ind", onSync)
+            .apply { tag = "indEuclideanPanel"; visibility = View.GONE }
+        panel.addView(euclideanPanel)
+
+        // Wire Timing spinner to show/hide euclideanPanel
+        panel.findViewWithTag<Spinner>("indTiming")?.onItemSelectedListener =
+            object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(a: AdapterView<*>?, v: View?, pos: Int, id: Long) {
+                    euclideanPanel.visibility = if (pos == 3) View.VISIBLE else View.GONE
+                    if (!isUpdatingFromSync) onSync()
+                }
+                override fun onNothingSelected(a: AdapterView<*>?) {}
+            }
+
         panel.addView(spinnerRow(ctx, "Style",  listOf("Generative","Single-Note Drone","Evolving Drone","Chords"), "indStyle", null))
 
         // ── Full Chords sub-panel ─────────────────────────────────────────
@@ -590,7 +606,7 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             setPadding(0, 8, 0, 4); setTextColor(0xFF797876.toInt())
         })
         // Independent panel gets its own unique container ID (proFragContainerV2/V3)
-        customProPanel.addView(android.widget.FrameLayout(ctx).apply {
+        customProPanel.addView(FrameLayout(ctx).apply {
             id = proFragContainerId(voiceId); tag = "proFragContainer$voiceId"
         })
         panel.addView(customProPanel)
@@ -646,6 +662,21 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             
         panel.addView(spinnerRow(ctx, "Timing", listOf("Metronome","Mixed","Randomized","Euclidean"), "melTiming", onSync))
 
+        // ── Euclidean settings sub-panel ─────────────────────────────────
+        val euclideanPanel = buildEuclideanSettingsSubPanel(ctx, "mel", onSync)
+            .apply { tag = "melEuclideanPanel"; visibility = View.GONE }
+        panel.addView(euclideanPanel)
+
+        // Wire Timing spinner to show/hide euclideanPanel
+        panel.findViewWithTag<Spinner>("melTiming")?.onItemSelectedListener =
+            object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(a: AdapterView<*>?, v: View?, pos: Int, id: Long) {
+                    euclideanPanel.visibility = if (pos == 3) View.VISIBLE else View.GONE
+                    if (!isUpdatingFromSync) onSync()
+                }
+                override fun onNothingSelected(a: AdapterView<*>?) {}
+            }
+
         // ── Melodic Relation / Contrast controls ──────────────────────────
         val contrastHeader = TextView(ctx).apply {
             text = "Harmonic Contrast Settings"; textSize = 14f
@@ -684,7 +715,7 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         // instead of proFragContainerId(voiceId) which is already used by buildIndependentPanel.
         // Both panels coexist in the layout hierarchy (one hidden via View.GONE), so
         // using the same ID caused duplicate-ID crashes during fragment transactions.
-        customProPanel.addView(android.widget.FrameLayout(ctx).apply {
+        customProPanel.addView(FrameLayout(ctx).apply {
             id  = proFragContainerMelodicId(voiceId); tag = "melProFragContainer$voiceId"
         })
         panel.addView(customProPanel)
@@ -709,6 +740,18 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
      *   Chord Type | Build Strategy | Tension Level | Inversion | Voicing Density
      *   Plucking Style | Pluck Delay | Strum Length | Note Drop % | Mutation % | Rhythmic Figure
      */
+    private fun buildEuclideanSettingsSubPanel(ctx: Context, prefix: String, onSync: () -> Unit): LinearLayout {
+        val root = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(0x1AFFFFFF.toInt())
+            setPadding(12, 8, 12, 8)
+        }
+        root.addView(labeledSeekBar(ctx, "Steps", 2, 32, 16, "${prefix}EuclSteps", onSync))
+        root.addView(labeledSeekBar(ctx, "Density", 1, 32, 4, "${prefix}EuclDensity", onSync))
+        root.addView(labeledSeekBar(ctx, "Rotation", 0, 32, 0, "${prefix}EuclRotation", onSync))
+        return root
+    }
+
     private fun buildChordsSubPanel(ctx: Context, prefix: String, onSync: () -> Unit): LinearLayout {
         val panel = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
@@ -823,6 +866,14 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         val midiCh = seekVal("${prefix}MidiCh")
         val timing = sp("${prefix}Timing")
         
+        val baseCustomPro = if (voiceId == 2) customProSettingsV2 else customProSettingsV3
+        val updatedCustomPro = baseCustomPro.copy(
+            euclideanEnabled = timing == 3,
+            euclideanSteps = seekVal("${prefix}EuclSteps") + 2,
+            euclideanDensity = seekVal("${prefix}EuclDensity") + 1,
+            euclideanRotation = seekVal("${prefix}EuclRotation")
+        )
+        
         val sharedTag = if (isMelodic) "melSharedPro" else "sharedPro"
         val shared = panel.findViewWithTag<RadioButton>(sharedTag)?.isChecked ?: true
 
@@ -830,8 +881,12 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         val chordCfg = if (!isMelodic && style == VoiceStyle.CHORDS) readChordConfig(panel, "ind")
                        else ChordConfig()
 
-        val baseCustomPro = if (voiceId == 2) customProSettingsV2 else customProSettingsV3
-        val resolvedPro: ProSettings = if (shared) ProSettings() else baseCustomPro
+        val resolvedPro: ProSettings = if (shared) ProSettings().copy(
+            euclideanEnabled = timing == 3,
+            euclideanSteps = seekVal("${prefix}EuclSteps") + 2,
+            euclideanDensity = seekVal("${prefix}EuclDensity") + 1,
+            euclideanRotation = seekVal("${prefix}EuclRotation")
+        ) else updatedCustomPro
 
         return IndependentConfig(
             bpmMode       = bpmMode,
@@ -903,6 +958,12 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
                 panel.findViewWithTag<Spinner>("${prefix}Style")?.setSelection(ic.style.ordinal)
                 panel.findViewWithTag<Spinner>("${prefix}Timing")?.setSelection(ic.timingMode)
 
+                // Sync Euclidean settings
+                panel.findViewWithTag<View>("${prefix}EuclideanPanel")?.visibility = if (ic.timingMode == 3) View.VISIBLE else View.GONE
+                panel.findViewWithTag<SeekBar>("${prefix}EuclSteps")?.progress = ic.proSettings.euclideanSteps - 2
+                panel.findViewWithTag<SeekBar>("${prefix}EuclDensity")?.progress = ic.proSettings.euclideanDensity - 1
+                panel.findViewWithTag<SeekBar>("${prefix}EuclRotation")?.progress = ic.proSettings.euclideanRotation
+
                 panel.findViewWithTag<View>("chordsPanel")?.visibility =
                     if (ic.style == VoiceStyle.CHORDS) View.VISIBLE else View.GONE
                 applyChordConfigToPanel(panel, ic.chordConfig, "ind")
@@ -938,6 +999,12 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
                 panel.findViewWithTag<com.google.android.material.slider.RangeSlider>("${prefix}Octave")?.values = listOf(ic.minOctave.toFloat(), ic.maxOctave.toFloat())
                 panel.findViewWithTag<SeekBar>("${prefix}MidiCh")?.progress = ic.midiChannel
                 panel.findViewWithTag<Spinner>("${prefix}Timing")?.setSelection(ic.timingMode)
+
+                // Sync Euclidean settings
+                panel.findViewWithTag<View>("melEuclideanPanel")?.visibility = if (ic.timingMode == 3) View.VISIBLE else View.GONE
+                panel.findViewWithTag<SeekBar>("melEuclSteps")?.progress = ic.proSettings.euclideanSteps - 2
+                panel.findViewWithTag<SeekBar>("melEuclDensity")?.progress = ic.proSettings.euclideanDensity - 1
+                panel.findViewWithTag<SeekBar>("melEuclRotation")?.progress = ic.proSettings.euclideanRotation
 
                 val mrc = cfg.melodicRelationConfig
                 panel.findViewWithTag<Switch>("melContrastEnabled")?.isChecked = mrc.enabled

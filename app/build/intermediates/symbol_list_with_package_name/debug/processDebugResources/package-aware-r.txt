@@ -3338,7 +3338,7 @@ id layoutCellAuto
 id layoutChordSettings
 id layoutDroneRange
 id layoutDroneTiming
-id layoutEuclidean
+id layoutEuclideanSettings
 id layoutGesture
 id layoutGravity
 id layoutLSystem
@@ -3539,9 +3539,9 @@ id seekCaBirth
 id seekCaMutation
 id seekCaSurvMax
 id seekCaSurvMin
-id seekEucDensity
-id seekEucRotation
-id seekEucSteps
+id seekEuclideanDensity
+id seekEuclideanRotation
+id seekEuclideanSteps
 id seekGestureDepth
 id seekGravityStrength
 id seekGravityThreshold
@@ -3622,7 +3622,6 @@ id stretch
 id submenuarrow
 id submit_area
 id supportScrollUp
-id switchEuclidean
 id switchGesture
 id switchGravity
 id switchNarmour
@@ -3685,9 +3684,9 @@ id tvCaSurvMin
 id tvChordHint
 id tvDeviceInfo
 id tvDroneRange
-id tvEucDensity
-id tvEucRotation
-id tvEucSteps
+id tvEuclideanDensity
+id tvEuclideanRotation
+id tvEuclideanSteps
 id tvGestureDepth
 id tvGravityStrength
 id tvGravityThreshold

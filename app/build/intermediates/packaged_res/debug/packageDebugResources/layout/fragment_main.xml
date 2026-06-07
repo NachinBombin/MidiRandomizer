@@ -368,7 +368,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginBottom="20dp">
+            android:layout_marginBottom="8dp">
 
             <RadioButton
                 android:id="@+id/rbMetronome"
@@ -408,6 +408,68 @@
                 android:buttonTint="#4F9AA5"/>
 
         </RadioGroup>
+
+        <!-- ── Euclidean Settings (Compact) ── -->
+        <LinearLayout
+            android:id="@+id/layoutEuclideanSettings"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#1C1B19"
+            android:padding="8dp"
+            android:visibility="gone"
+            android:layout_marginBottom="20dp">
+
+            <TextView
+                android:id="@+id/tvEuclideanSteps"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Steps: 16"
+                android:textSize="12sp"
+                android:textColor="#CDCCCA"/>
+            <SeekBar
+                android:id="@+id/seekEuclideanSteps"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="30"
+                android:progress="14"
+                android:progressTint="#4F9AA5"
+                android:thumbTint="#4F9AA5"/>
+
+            <TextView
+                android:id="@+id/tvEuclideanDensity"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Density: 4"
+                android:textSize="12sp"
+                android:textColor="#CDCCCA"
+                android:layout_marginTop="4dp"/>
+            <SeekBar
+                android:id="@+id/seekEuclideanDensity"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="32"
+                android:progress="4"
+                android:progressTint="#4F9AA5"
+                android:thumbTint="#4F9AA5"/>
+
+            <TextView
+                android:id="@+id/tvEuclideanRotation"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Rotation: 0"
+                android:textSize="12sp"
+                android:textColor="#CDCCCA"
+                android:layout_marginTop="4dp"/>
+            <SeekBar
+                android:id="@+id/seekEuclideanRotation"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="32"
+                android:progress="0"
+                android:progressTint="#4F9AA5"
+                android:thumbTint="#4F9AA5"/>
+        </LinearLayout>
 
         <!-- ── Last note display ─────────────────────────────────────────── -->
         <TextView

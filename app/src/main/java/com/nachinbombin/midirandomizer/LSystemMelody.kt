@@ -42,12 +42,12 @@ class LSystemMelody(
 
     companion object {
         /** Named axioms (seed strings). Indexed by LSystemConfig.axiomIndex. */
-        val AXIOMS: List<List<LSystemMelody.Sym>> = listOf(
-            listOf(LSystemMelody.Sym.U),
-            listOf(LSystemMelody.Sym.D),
-            listOf(LSystemMelody.Sym.Lp),
-            listOf(LSystemMelody.Sym.U, LSystemMelody.Sym.D),
-            listOf(LSystemMelody.Sym.U, LSystemMelody.Sym.Lp, LSystemMelody.Sym.D)
+        val AXIOMS: List<List<Sym>> = listOf(
+            listOf(Sym.U),
+            listOf(Sym.D),
+            listOf(Sym.Lp),
+            listOf(Sym.U, Sym.D),
+            listOf(Sym.U, Sym.Lp, Sym.D)
         )
     }
 

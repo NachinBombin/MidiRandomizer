@@ -305,7 +305,7 @@ class PerformanceFragment : Fragment(), MidiService.MidiEventListener {
 
     // ── VerticalWheelView ─────────────────────────────────────────────────
 
-    inner class VerticalWheelView(context: Context) : View(context) {
+    class VerticalWheelView(context: Context) : View(context) {
         var originValue  = 8192
         var currentValue = 8192
         var lockProvider: (() -> Boolean)? = null

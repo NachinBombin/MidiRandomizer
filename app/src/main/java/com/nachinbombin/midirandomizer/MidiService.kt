@@ -77,13 +77,13 @@ class MidiService : Service() {
     // ── Melodic context buffer ───────────────────────────────────────────
     /** Circular buffer of recent note/chord events for melodic awareness. */
     data class MelodicEvent(val notes: List<Int>, val timestamp: Long = 0, val durationMs: Long = 0)
-    private val v1ContextBuffer = java.util.concurrent.CopyOnWriteArrayList<MelodicEvent>()
-    private val v2ContextBuffer = java.util.concurrent.CopyOnWriteArrayList<MelodicEvent>()
+    private val v1ContextBuffer = CopyOnWriteArrayList<MelodicEvent>()
+    private val v2ContextBuffer = CopyOnWriteArrayList<MelodicEvent>()
     private val contextBufferLimit = 8
 
     // ── Look-ahead buffers ──
-    private val v1FutureBuffer = java.util.concurrent.CopyOnWriteArrayList<MelodicEvent>()
-    private val v2FutureBuffer = java.util.concurrent.CopyOnWriteArrayList<MelodicEvent>()
+    private val v1FutureBuffer = CopyOnWriteArrayList<MelodicEvent>()
+    private val v2FutureBuffer = CopyOnWriteArrayList<MelodicEvent>()
     private val futureBufferLimit = 4
 
     private fun updateContextBuffer(voiceId: Int, notes: List<Int>) {

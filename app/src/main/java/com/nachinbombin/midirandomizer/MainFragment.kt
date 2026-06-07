@@ -33,6 +33,13 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
     private lateinit var tvOctave:       TextView
     private lateinit var rangeOctave:    RangeSlider
     private lateinit var rgTiming:       RadioGroup
+    private lateinit var layoutEuclideanSettings: View
+    private lateinit var tvEuclideanSteps:    TextView
+    private lateinit var seekEuclideanSteps:  SeekBar
+    private lateinit var tvEuclideanDensity:  TextView
+    private lateinit var seekEuclideanDensity: SeekBar
+    private lateinit var tvEuclideanRotation: TextView
+    private lateinit var seekEuclideanRotation: SeekBar
     private lateinit var spinnerChannel: Spinner
     private lateinit var spinnerScale:   Spinner
     private lateinit var spinnerStyle:   Spinner
@@ -165,6 +172,13 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         tvOctave          = v.findViewById(R.id.tvOctave)
         rangeOctave       = v.findViewById(R.id.rangeOctave)
         rgTiming          = v.findViewById(R.id.rgTiming)
+        layoutEuclideanSettings = v.findViewById(R.id.layoutEuclideanSettings)
+        tvEuclideanSteps  = v.findViewById(R.id.tvEuclideanSteps)
+        seekEuclideanSteps = v.findViewById(R.id.seekEuclideanSteps)
+        tvEuclideanDensity = v.findViewById(R.id.tvEuclideanDensity)
+        seekEuclideanDensity = v.findViewById(R.id.seekEuclideanDensity)
+        tvEuclideanRotation = v.findViewById(R.id.tvEuclideanRotation)
+        seekEuclideanRotation = v.findViewById(R.id.seekEuclideanRotation)
         spinnerChannel    = v.findViewById(R.id.spinnerChannel)
         spinnerScale      = v.findViewById(R.id.spinnerScale)
         spinnerStyle      = v.findViewById(R.id.spinnerStyle)
@@ -331,15 +345,38 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
 
         rgTiming.setOnCheckedChangeListener { _, id ->
             if (isUpdatingFromSync) return@setOnCheckedChangeListener
-            currentParams = currentParams.copy(timingMode = when (id) {
+            val newMode = when (id) {
                 R.id.rbMetronome  -> MidiService.TIMING_METRONOME
                 R.id.rbMixed      -> MidiService.TIMING_MIXED
                 R.id.rbRandomized -> MidiService.TIMING_RANDOMIZED
                 R.id.rbEuclidean  -> MidiService.TIMING_EUCLIDEAN
                 else              -> MidiService.TIMING_METRONOME
-            })
+            }
+            val euclOn = newMode == MidiService.TIMING_EUCLIDEAN
+            currentParams = currentParams.copy(
+                timingMode = newMode,
+                proSettings = currentParams.proSettings.copy(euclideanEnabled = euclOn)
+            )
+            updateUiVisibility()
             push()
         }
+
+        seekEuclideanSteps.setOnSeekBarChangeListener(simpleSeek { p ->
+            val steps = p + 2
+            tvEuclideanSteps.text = "Steps: $steps"
+            currentParams = currentParams.copy(proSettings = currentParams.proSettings.copy(euclideanSteps = steps))
+            push()
+        })
+        seekEuclideanDensity.setOnSeekBarChangeListener(simpleSeek { p ->
+            tvEuclideanDensity.text = "Density: $p"
+            currentParams = currentParams.copy(proSettings = currentParams.proSettings.copy(euclideanDensity = p))
+            push()
+        })
+        seekEuclideanRotation.setOnSeekBarChangeListener(simpleSeek { p ->
+            tvEuclideanRotation.text = "Rotation: $p"
+            currentParams = currentParams.copy(proSettings = currentParams.proSettings.copy(euclideanRotation = p))
+            push()
+        })
 
         spinnerChannel.onItemSelectedListener = simpleSpinner { pos ->
             currentParams = currentParams.copy(channel = pos); push()
@@ -428,6 +465,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         val isEvolving  = style == VoiceStyle.EVOLVING_DRONE
         val isChords    = style == VoiceStyle.CHORDS
         val isRandDrone = isEvolving && rgDroneTiming.checkedRadioButtonId == R.id.rbDroneRandom
+        val isEuclidean = rgTiming.checkedRadioButtonId == R.id.rbEuclidean && !isSingle && !isEvolving
 
         seekBpm.visibility    = if (isSingle) View.GONE else View.VISIBLE
         tvBpm.visibility      = if (isSingle) View.GONE else View.VISIBLE
@@ -435,6 +473,8 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         rgTiming.visibility   = if (isSingle || isEvolving) View.GONE else View.VISIBLE
         layoutDroneTiming.visibility = if (isEvolving) View.VISIBLE else View.GONE
         layoutDroneRange.visibility  = if (isRandDrone) View.VISIBLE else View.GONE
+        
+        layoutEuclideanSettings.visibility = if (isEuclidean) View.VISIBLE else View.GONE
         
         // Show chord settings panel only when CHORDS is selected
         layoutChordSettings.visibility = if (isChords) View.VISIBLE else View.GONE
@@ -486,6 +526,14 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         rangeDroneBeats.values = listOf(v1.droneMinBeats.toFloat(), v1.droneMaxBeats.toFloat())
         tvDroneRange.text = "Drone beat range: ${v1.droneMinBeats} - ${v1.droneMaxBeats}"
         if (v1.rootNote != 0) selectRoot(v1.rootNote - 1) else selectRoot(-1)
+        val v1ps = v1.proSettings
+        seekEuclideanSteps.progress = (v1ps.euclideanSteps - 2).coerceIn(0, 30)
+        tvEuclideanSteps.text = "Steps: ${v1ps.euclideanSteps}"
+        seekEuclideanDensity.progress = v1ps.euclideanDensity
+        tvEuclideanDensity.text = "Density: ${v1ps.euclideanDensity}"
+        seekEuclideanRotation.progress = v1ps.euclideanRotation
+        tvEuclideanRotation.text = "Rotation: ${v1ps.euclideanRotation}"
+
         syncChordPanelFromParams(v1.chordConfig)
         updateUiVisibility()
         isUpdatingFromSync = false
