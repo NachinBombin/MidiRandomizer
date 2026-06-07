@@ -233,10 +233,13 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
             host?.getMidiService()?.togglePlayback()
         }
         btnTheme.setOnClickListener {
-            ThemePickerDialog(requireContext()) { preset ->
+            ThemePickerDialog.show(
+                context  = requireContext(),
+                current  = ThemeManager.loadTheme(requireContext())
+            ) { preset ->
                 ThemeManager.saveTheme(requireContext(), preset)
                 ThemeManager.applyToView(requireView(), preset)
-            }.show()
+            }
         }
 
         seekBpm.setOnSeekBarChangeListener(simpleSeek { p ->

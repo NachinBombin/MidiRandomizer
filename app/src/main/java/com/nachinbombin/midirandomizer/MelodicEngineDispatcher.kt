@@ -26,36 +26,36 @@ class MelodicEngineDispatcher(
     private val markov: MarkovMelody? = if (
         settings.melodicEngine == MelodicEngine.MARKOV
     ) MarkovMelody(
-        scaleSize  = scaleSize,
-        style      = settings.melodicLogicStyle,
-        secondOrder = settings.secondOrderMarkov,
-        narmour    = settings.narmourConfig,
-        gravity    = settings.contourGravityConfig
+        scaleSize   = scaleSize,
+        style       = settings.melodicLogicStyle,
+        secondOrder = settings.markovSecondOrder,
+        narmour     = settings.toNarmourConfig(),
+        gravity     = settings.toGravityConfig()
     ).also { it.reset() } else null
 
     // Tier-2
     private val pwg: PhraseGrammar? = if (
         settings.melodicEngine == MelodicEngine.PWG
-    ) PhraseGrammar(scaleSize, settings.pwgConfig).also { it.reset() } else null
+    ) PhraseGrammar(scaleSize, settings.toPWGConfig()).also { it.reset() } else null
 
     private val lSystem: LSystemMelody? = if (
-        settings.melodicEngine == MelodicEngine.L_SYSTEM
-    ) LSystemMelody(scaleSize, settings.lSystemConfig).also { it.reset() } else null
+        settings.melodicEngine == MelodicEngine.LSYSTEM
+    ) LSystemMelody(scaleSize, settings.toLSystemConfig()).also { it.reset() } else null
 
     private val cellAuto: CellAutomata? = if (
-        settings.melodicEngine == MelodicEngine.CELL_AUTOMATA
-    ) CellAutomata(scaleIntervals, settings.cellAutomataConfig).also { it.reset() } else null
+        settings.melodicEngine == MelodicEngine.CELLULAR
+    ) CellAutomata(scaleIntervals, settings.toCellAutoConfig()).also { it.reset() } else null
 
     private val nrtMelodic: NRTMelodicEngine? = if (
-        settings.melodicEngine == MelodicEngine.NRT_MELODIC
-    ) NRTMelodicEngine(scaleIntervals, settings.nrtMelodicConfig).also { it.reset() } else null
+        settings.melodicEngine == MelodicEngine.NRT
+    ) NRTMelodicEngine(scaleIntervals, settings.toNRTConfig()).also { it.reset() } else null
 
     // Gesture state
-    private val gestureCfg = settings.gestureCurveConfig
+    private val gestureCfg = settings.toGestureConfig()
     private var beatInPhrase: Int = 0
-    private val phraseLen: Int = 16   // fixed 16-beat phrase for gesture arcs
+    private val phraseLen: Int = 16
 
-    // ── public API ────────────────────────────────────────────────────────────
+    // ── public API ──────────────────────────────────────────────────────────────────
 
     fun advanceBeat() {
         beatInPhrase = (beatInPhrase + 1) % phraseLen
@@ -63,41 +63,36 @@ class MelodicEngineDispatcher(
 
     /**
      * Returns the next scale-degree index.
-     * Applies gesture density gate internally; returns -1 if the note
-     * should be suppressed (caller must handle skip).
+     * Returns -1 if the note should be suppressed (gesture density gate).
      */
     fun nextDegree(): Int {
         val gestureFrame = GestureEngine.frame(gestureCfg, beatInPhrase, phraseLen)
-        
-        // Context awareness
+
         val context = getContext(1)
 
-        // Density gate (Tier-1 only; Tier-2 engines own their own density)
         if (settings.melodicEngine == MelodicEngine.MARKOV &&
             gestureCfg.gestureDepth > 0f &&
             Random.nextFloat() > gestureFrame.densityGate
         ) {
-            return -1  // caller should skip this onset
+            return -1
         }
 
         return when (settings.melodicEngine) {
-            MelodicEngine.NAIVE         -> Random.nextInt(scaleSize)
-            MelodicEngine.MARKOV        -> markov?.nextDegree(gestureFrame.pitchBias, context)
-                                                  ?: Random.nextInt(scaleSize)
-            MelodicEngine.PWG           -> pwg?.nextDegree(context)    ?: Random.nextInt(scaleSize)
-            MelodicEngine.L_SYSTEM      -> lSystem?.nextDegree(context) ?: Random.nextInt(scaleSize)
-            MelodicEngine.CELL_AUTOMATA -> cellAuto?.nextDegree(context) ?: Random.nextInt(scaleSize)
-            MelodicEngine.NRT_MELODIC   -> nrtMelodic?.nextDegree(context) ?: Random.nextInt(scaleSize)
+            MelodicEngine.NAIVE    -> Random.nextInt(scaleSize)
+            MelodicEngine.MARKOV   -> markov?.nextDegree(gestureFrame.pitchBias, context)
+                                             ?: Random.nextInt(scaleSize)
+            MelodicEngine.PWG      -> pwg?.nextDegree(context)      ?: Random.nextInt(scaleSize)
+            MelodicEngine.LSYSTEM  -> lSystem?.nextDegree(context)  ?: Random.nextInt(scaleSize)
+            MelodicEngine.CELLULAR -> cellAuto?.nextDegree(context) ?: Random.nextInt(scaleSize)
+            MelodicEngine.NRT      -> nrtMelodic?.nextDegree(context) ?: Random.nextInt(scaleSize)
         }
     }
 
-    /** Expose gesture velocity scale to the caller for velocity shaping. */
     fun gestureVelocityScale(): Float {
         if (gestureCfg.gestureDepth == 0f) return 1f
         return GestureEngine.frame(gestureCfg, beatInPhrase, phraseLen).velocityScale
     }
 
-    /** Expose gesture register shift for octave selection adjustment. */
     fun gestureRegisterShift(): Int {
         if (gestureCfg.gestureDepth == 0f) return 0
         return GestureEngine.frame(gestureCfg, beatInPhrase, phraseLen).registerShift
