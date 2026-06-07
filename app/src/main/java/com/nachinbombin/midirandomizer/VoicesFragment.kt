@@ -205,8 +205,8 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             independentPanel.visibility = if (mode == VoiceMode.INDEPENDENT)  View.VISIBLE else View.GONE
             melodicPanel.visibility     = if (mode == VoiceMode.MELODIC)      View.VISIBLE else View.GONE
             when (mode) {
-                VoiceMode.MELODIC     -> moveProFragToMelodicContainer(voiceId)
-                else                  -> moveProFragToIndependentContainer(voiceId)
+                VoiceMode.MELODIC -> moveProFragToMelodicContainer(voiceId)
+                else              -> moveProFragToIndependentContainer(voiceId)
             }
         }
 
@@ -284,22 +284,24 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             visibility = View.GONE
         }
         chordPanel.addView(spinnerRow(ctx, "Chord Type",
-            listOf("Triad","Seventh","Ninth","Sus2","Sus4","Power","Diminished","Augmented"),
+            listOf("Triad","Seventh","Ninth","Sus2","Sus4","Power"),
             "chordType", onSync))
         chordPanel.addView(spinnerRow(ctx, "Build Strategy",
-            listOf("Bottom-Up","Top-Down","Random","Spread"), "chordBuild", onSync))
-        chordPanel.addView(sliderRow(ctx, "Tension", "chordTension", 0, 100, onSync))
+            listOf("Diatonic Stack","Modal Snap"), "chordBuild", onSync))
+        chordPanel.addView(spinnerRow(ctx, "Tension",
+            listOf("Triad","Seventh","Ninth","Eleventh/Thirteenth"), "chordTension", onSync))
         chordPanel.addView(spinnerRow(ctx, "Inversion",
-            listOf("Root","1st","2nd","3rd","Random"), "chordInversion", onSync))
-        chordPanel.addView(sliderRow(ctx, "Voicing Density", "chordVoicingDensity", 0, 100, onSync))
+            listOf("Root","1st","2nd","Auto"), "chordInversion", onSync))
+        chordPanel.addView(spinnerRow(ctx, "Voicing Density",
+            listOf("Full","Drop 5th","Shell","Drop Root"), "chordVoicingDensity", onSync))
         chordPanel.addView(spinnerRow(ctx, "Plucking Style",
-            listOf("Simultaneous","Arpeggio Up","Arpeggio Down","Random"), "chordPlucking", onSync))
+            listOf("Simultaneous","Asc","Desc","Random","Percussive Up"), "chordPlucking", onSync))
         chordPanel.addView(sliderRow(ctx, "Pluck Delay ms", "chordPluckDelay", 0, 200, onSync))
-        chordPanel.addView(sliderRow(ctx, "Strum Length", "chordStrumLength", 0, 100, onSync))
+        chordPanel.addView(sliderRow(ctx, "Strum Length", "chordStrumLength", 1, 6, onSync))
         chordPanel.addView(sliderRow(ctx, "Note Drop %", "chordNoteDrop", 0, 100, onSync))
         chordPanel.addView(sliderRow(ctx, "Mutation %", "chordMutation", 0, 100, onSync))
         chordPanel.addView(spinnerRow(ctx, "Rhythmic Figure",
-            listOf("Whole","Half","Quarter","Eighth","Sixteenth","Dotted","Triplet"),
+            listOf("Sustained","Reattack","Broken","Ostinato"),
             "chordRhythm", onSync))
         panel.addView(chordPanel)
 
@@ -373,12 +375,12 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
     // ── Push config to service ────────────────────────────────────────────
 
     private fun pushConfigToService(voiceId: Int) {
-        val panel    = if (voiceId == 2) panelV2 else panelV3
-        val current  = if (voiceId == 2) currentV2 else currentV3
+        val panel   = if (voiceId == 2) panelV2 else panelV3
+        val current = if (voiceId == 2) currentV2 else currentV3
 
-        val enabled  = panel.findViewWithTag<Switch>("enable")?.isChecked ?: false
-        val harmony  = panel.findViewWithTag<RadioButton>("rbHarmony")?.isChecked ?: true
-        val melodic  = panel.findViewWithTag<RadioButton>("rbMelodic")?.isChecked ?: false
+        val enabled = panel.findViewWithTag<Switch>("enable")?.isChecked ?: false
+        val harmony = panel.findViewWithTag<RadioButton>("rbHarmony")?.isChecked ?: true
+        val melodic = panel.findViewWithTag<RadioButton>("rbMelodic")?.isChecked ?: false
 
         val mode = when {
             harmony -> VoiceMode.HARMONY
@@ -386,70 +388,104 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             else    -> VoiceMode.INDEPENDENT
         }
 
-        val prefix = if (mode == VoiceMode.MELODIC) "mel" else "ind"
-
-        val timingMode = when (mode) {
-            VoiceMode.MELODIC      -> panel.findViewWithTag<Spinner>("melTiming")?.selectedItemPosition ?: 0
-            VoiceMode.INDEPENDENT  -> panel.findViewWithTag<Spinner>("indTiming")?.selectedItemPosition ?: 0
-            else                   -> 0
-        }
-
-        val harmInterval = panel.findViewWithTag<Spinner>("harmInterval")?.selectedItemPosition ?: 0
-        val harmDrift    = panel.findViewWithTag<SeekBar>("harmDrift")?.progress ?: 0
-        val harmOffset   = panel.findViewWithTag<SeekBar>("harmOffset")?.progress ?: 0
+        // ── Harmony config ────────────────────────────────────────────────
+        val harmInterval  = panel.findViewWithTag<Spinner>("harmInterval")?.selectedItemPosition ?: 0
+        val harmDrift     = panel.findViewWithTag<SeekBar>("harmDrift")?.progress ?: 0
+        val harmOffset    = panel.findViewWithTag<SeekBar>("harmOffset")?.progress ?: 0
         val harmInversion = panel.findViewWithTag<Spinner>("harmInversion")?.selectedItemPosition ?: 0
 
-        val noteRange = panel.findViewWithTag<SeekBar>("${prefix}Range")?.progress?.plus(12) ?: 24
-        val density   = panel.findViewWithTag<SeekBar>("${prefix}Density")?.progress ?: 50
+        val newHarmonyConfig = current.harmonyConfig.copy(
+            toneStepOffset = harmInterval,
+            timeDriftMs    = harmDrift.toLong(),
+            masterVelocity = harmOffset,
+            velocityDrift  = harmInversion
+        )
+
+        // ── Independent / Melodic timing ──────────────────────────────────
+        val timingMode = when (mode) {
+            VoiceMode.MELODIC     -> panel.findViewWithTag<Spinner>("melTiming")?.selectedItemPosition ?: 0
+            VoiceMode.INDEPENDENT -> panel.findViewWithTag<Spinner>("indTiming")?.selectedItemPosition ?: 0
+            else                  -> current.independentConfig.timingMode
+        }
+
+        val prefix    = if (mode == VoiceMode.MELODIC) "mel" else "ind"
+        val noteRange = (panel.findViewWithTag<SeekBar>("${prefix}Range")?.progress ?: 12) + 12
         val velocity  = panel.findViewWithTag<SeekBar>("${prefix}Velocity")?.progress ?: 80
 
-        val indStyle = panel.findViewWithTag<Spinner>("indStyle")?.selectedItemPosition ?: 0
-        val chordConfig = if (indStyle == 2) buildChordConfig(panel) else current.chordConfig
+        val indStylePos = panel.findViewWithTag<Spinner>("indStyle")?.selectedItemPosition ?: 0
+        val style = when (indStylePos) {
+            1    -> VoiceStyle.EVOLVING_DRONE
+            2    -> VoiceStyle.CHORDS
+            else -> VoiceStyle.GENERATIVE
+        }
 
-        val contrastDepth = panel.findViewWithTag<SeekBar>("melContrastDepth")?.progress ?: 0
-        val contrastMode  = panel.findViewWithTag<Spinner>("melContrastMode")?.selectedItemPosition ?: 0
+        // ── Chord config ──────────────────────────────────────────────────
+        val chordConfig = if (style == VoiceStyle.CHORDS) {
+            current.independentConfig.chordConfig.copy(
+                chordType          = panel.findViewWithTag<Spinner>("chordType")?.selectedItemPosition ?: 0,
+                chordBuildStrategy = ChordBuildStrategy.entries.getOrElse(
+                    panel.findViewWithTag<Spinner>("chordBuild")?.selectedItemPosition ?: 0
+                ) { ChordBuildStrategy.DIATONIC_STACK },
+                tensionLevel       = TensionLevel.entries.getOrElse(
+                    panel.findViewWithTag<Spinner>("chordTension")?.selectedItemPosition ?: 0
+                ) { TensionLevel.TRIAD },
+                inversionMode      = InversionMode.entries.getOrElse(
+                    panel.findViewWithTag<Spinner>("chordInversion")?.selectedItemPosition ?: 0
+                ) { InversionMode.ROOT },
+                voicingDensity     = VoicingDensity.entries.getOrElse(
+                    panel.findViewWithTag<Spinner>("chordVoicingDensity")?.selectedItemPosition ?: 0
+                ) { VoicingDensity.FULL },
+                pluckingStyle      = panel.findViewWithTag<Spinner>("chordPlucking")?.selectedItemPosition ?: 0,
+                pluckingDelayMs    = (panel.findViewWithTag<SeekBar>("chordPluckDelay")?.progress ?: 0).toLong(),
+                strumLength        = (panel.findViewWithTag<SeekBar>("chordStrumLength")?.progress ?: 0) + 1,
+                noteDropChance     = (panel.findViewWithTag<SeekBar>("chordNoteDrop")?.progress ?: 0) / 100f,
+                mutationChance     = (panel.findViewWithTag<SeekBar>("chordMutation")?.progress ?: 0) / 100f,
+                rhythmicFigure     = RhythmicFigure.entries.getOrElse(
+                    panel.findViewWithTag<Spinner>("chordRhythm")?.selectedItemPosition ?: 0
+                ) { RhythmicFigure.SUSTAINED }
+            )
+        } else {
+            current.independentConfig.chordConfig
+        }
 
-        val proSettings = if (voiceId == 2) customProSettingsV2 else customProSettingsV3
+        // ── ProSettings — euclidean driven entirely by timing spinner ─────
+        val proSettings = (if (voiceId == 2) customProSettingsV2 else customProSettingsV3)
+            .copy(euclideanEnabled = timingMode == MidiService.TIMING_EUCLIDEAN)
+
+        val newIndependentConfig = current.independentConfig.copy(
+            timingMode  = timingMode,
+            proSettings = proSettings,
+            velocity    = velocity,
+            minOctave   = ((noteRange / 2) - 1).coerceIn(0, 8),
+            maxOctave   = ((noteRange / 2) + 1).coerceIn(1, 9),
+            style       = style,
+            chordConfig = chordConfig
+        )
+
+        // ── Melodic relation config ───────────────────────────────────────
+        val contrastDepth = panel.findViewWithTag<SeekBar>("melContrastDepth")?.progress ?: 50
+        val contrastMode  = MelodicRelationMode.entries.getOrElse(
+            panel.findViewWithTag<Spinner>("melContrastMode")?.selectedItemPosition ?: 0
+        ) { MelodicRelationMode.COUNTER_MOTION }
+
+        val newMelodicRelationConfig = current.melodicRelationConfig.copy(
+            contrastDepth = contrastDepth,
+            mode          = contrastMode
+        )
 
         val updated = current.copy(
-            enabled       = enabled,
-            mode          = mode,
-            timingMode    = timingMode,
-            proSettings   = proSettings,
-            harmInterval  = harmInterval,
-            harmDrift     = harmDrift,
-            harmOffset    = harmOffset,
-            harmInversion = harmInversion,
-            noteRange     = noteRange,
-            density       = density,
-            velocity      = velocity,
-            indStyle      = IndependentStyle.entries.getOrElse(indStyle) { IndependentStyle.GENERATIVE },
-            chordConfig   = chordConfig,
-            contrastDepth = contrastDepth,
-            contrastMode  = ContrastMode.entries.getOrElse(contrastMode) { ContrastMode.COUNTER_MOTION }
+            enabled               = enabled,
+            mode                  = mode,
+            harmonyConfig         = newHarmonyConfig,
+            independentConfig     = newIndependentConfig,
+            melodicRelationConfig = newMelodicRelationConfig
         )
 
         if (voiceId == 2) currentV2 = updated else currentV3 = updated
 
         serviceProvider?.getMidiService()?.let { svc ->
-            if (voiceId == 2) svc.setVoice2Config(updated) else svc.setVoice3Config(updated)
+            if (voiceId == 2) svc.updateVoice2Config(updated) else svc.updateVoice3Config(updated)
         }
-    }
-
-    private fun buildChordConfig(panel: ViewGroup): ChordConfig {
-        return ChordConfig(
-            chordType        = panel.findViewWithTag<Spinner>("chordType")?.selectedItemPosition ?: 0,
-            buildStrategy    = panel.findViewWithTag<Spinner>("chordBuild")?.selectedItemPosition ?: 0,
-            tension          = panel.findViewWithTag<SeekBar>("chordTension")?.progress ?: 50,
-            inversion        = panel.findViewWithTag<Spinner>("chordInversion")?.selectedItemPosition ?: 0,
-            voicingDensity   = panel.findViewWithTag<SeekBar>("chordVoicingDensity")?.progress ?: 100,
-            pluckingStyle    = panel.findViewWithTag<Spinner>("chordPlucking")?.selectedItemPosition ?: 0,
-            pluckDelayMs     = panel.findViewWithTag<SeekBar>("chordPluckDelay")?.progress ?: 0,
-            strumLength      = panel.findViewWithTag<SeekBar>("chordStrumLength")?.progress ?: 50,
-            noteDropPct      = panel.findViewWithTag<SeekBar>("chordNoteDrop")?.progress ?: 0,
-            mutationPct      = panel.findViewWithTag<SeekBar>("chordMutation")?.progress ?: 0,
-            rhythmicFigure   = panel.findViewWithTag<Spinner>("chordRhythm")?.selectedItemPosition ?: 2
-        )
     }
 
     // ── Sync from service ─────────────────────────────────────────────────
@@ -466,66 +502,76 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         }
     }
 
-    private fun applyToPanel(panel: LinearLayout, ic: VoiceConfig, voiceId: Int) {
-        panel.findViewWithTag<Switch>("enable")?.isChecked = ic.enabled
+    private fun applyToPanel(panel: LinearLayout, vc: VoiceConfig, voiceId: Int) {
+        panel.findViewWithTag<Switch>("enable")?.isChecked = vc.enabled
 
-        val rb = when (ic.mode) {
+        val rb = when (vc.mode) {
             VoiceMode.HARMONY     -> "rbHarmony"
             VoiceMode.INDEPENDENT -> "rbIndependent"
             VoiceMode.MELODIC     -> "rbMelodic"
         }
         panel.findViewWithTag<RadioButton>(rb)?.isChecked = true
 
-        // Harmony
-        panel.findViewWithTag<Spinner>("harmInterval")?.setSelection(ic.harmInterval)
-        panel.findViewWithTag<SeekBar>("harmDrift")?.progress = ic.harmDrift
-        panel.findViewWithTag<SeekBar>("harmOffset")?.progress = ic.harmOffset
-        panel.findViewWithTag<Spinner>("harmInversion")?.setSelection(ic.harmInversion)
+        val hc = vc.harmonyConfig
+        panel.findViewWithTag<Spinner>("harmInterval")?.setSelection(hc.toneStepOffset.coerceIn(0, 12))
+        panel.findViewWithTag<SeekBar>("harmDrift")?.progress    = hc.timeDriftMs.toInt().coerceIn(0, 12)
+        panel.findViewWithTag<SeekBar>("harmOffset")?.progress   = hc.masterVelocity.coerceIn(0, 24)
+        panel.findViewWithTag<Spinner>("harmInversion")?.setSelection(hc.velocityDrift.coerceIn(0, 3))
 
-        // Independent timing — sync to ProSettings
+        val ic = vc.independentConfig
+
+        // Independent timing — drive ProSettings
         panel.findViewWithTag<Spinner>("indTiming")?.setSelection(ic.timingMode)
-        if (ic.mode == VoiceMode.INDEPENDENT) {
+        if (vc.mode == VoiceMode.INDEPENDENT) {
             val frag = if (voiceId == 2) proFragV2 else proFragV3
             frag?.notifyTimingMode(ic.timingMode == MidiService.TIMING_EUCLIDEAN)
         }
 
-        // Melodic timing — sync to ProSettings
+        // Melodic timing — drive ProSettings
         panel.findViewWithTag<Spinner>("melTiming")?.setSelection(ic.timingMode)
-        if (ic.mode == VoiceMode.MELODIC) {
+        if (vc.mode == VoiceMode.MELODIC) {
             val frag = if (voiceId == 2) proFragV2 else proFragV3
             frag?.notifyTimingMode(ic.timingMode == MidiService.TIMING_EUCLIDEAN)
         }
 
-        panel.findViewWithTag<SeekBar>("indRange")?.progress = (ic.noteRange - 12).coerceAtLeast(0)
-        panel.findViewWithTag<SeekBar>("indDensity")?.progress = ic.density
-        panel.findViewWithTag<SeekBar>("indVelocity")?.progress = ic.velocity
-        panel.findViewWithTag<Spinner>("indStyle")?.setSelection(ic.indStyle.ordinal)
+        val noteRangeProgress = ((ic.maxOctave - ic.minOctave) * 12).coerceIn(0, 36)
+        panel.findViewWithTag<SeekBar>("indRange")?.progress    = noteRangeProgress
+        panel.findViewWithTag<SeekBar>("indDensity")?.progress  = 50
+        panel.findViewWithTag<SeekBar>("indVelocity")?.progress = ic.velocity.coerceIn(0, 127)
+
+        val stylePos = when (ic.style) {
+            VoiceStyle.EVOLVING_DRONE, VoiceStyle.SINGLE_NOTE_DRONE -> 1
+            VoiceStyle.CHORDS                                        -> 2
+            else                                                     -> 0
+        }
+        panel.findViewWithTag<Spinner>("indStyle")?.setSelection(stylePos)
 
         val cc = ic.chordConfig
         panel.findViewWithTag<Spinner>("chordType")?.setSelection(cc.chordType)
-        panel.findViewWithTag<Spinner>("chordBuild")?.setSelection(cc.buildStrategy)
-        panel.findViewWithTag<SeekBar>("chordTension")?.progress = cc.tension
-        panel.findViewWithTag<Spinner>("chordInversion")?.setSelection(cc.inversion)
-        panel.findViewWithTag<SeekBar>("chordVoicingDensity")?.progress = cc.voicingDensity
+        panel.findViewWithTag<Spinner>("chordBuild")?.setSelection(cc.chordBuildStrategy.ordinal)
+        panel.findViewWithTag<Spinner>("chordTension")?.setSelection(cc.tensionLevel.ordinal)
+        panel.findViewWithTag<Spinner>("chordInversion")?.setSelection(cc.inversionMode.ordinal)
+        panel.findViewWithTag<Spinner>("chordVoicingDensity")?.setSelection(cc.voicingDensity.ordinal)
         panel.findViewWithTag<Spinner>("chordPlucking")?.setSelection(cc.pluckingStyle)
-        panel.findViewWithTag<SeekBar>("chordPluckDelay")?.progress = cc.pluckDelayMs
-        panel.findViewWithTag<SeekBar>("chordStrumLength")?.progress = cc.strumLength
-        panel.findViewWithTag<SeekBar>("chordNoteDrop")?.progress = cc.noteDropPct
-        panel.findViewWithTag<SeekBar>("chordMutation")?.progress = cc.mutationPct
-        panel.findViewWithTag<Spinner>("chordRhythm")?.setSelection(cc.rhythmicFigure)
+        panel.findViewWithTag<SeekBar>("chordPluckDelay")?.progress    = cc.pluckingDelayMs.toInt().coerceIn(0, 200)
+        panel.findViewWithTag<SeekBar>("chordStrumLength")?.progress   = (cc.strumLength - 1).coerceIn(0, 5)
+        panel.findViewWithTag<SeekBar>("chordNoteDrop")?.progress      = (cc.noteDropChance * 100).toInt()
+        panel.findViewWithTag<SeekBar>("chordMutation")?.progress      = (cc.mutationChance * 100).toInt()
+        panel.findViewWithTag<Spinner>("chordRhythm")?.setSelection(cc.rhythmicFigure.ordinal)
 
-        panel.findViewWithTag<SeekBar>("melRange")?.progress = (ic.noteRange - 12).coerceAtLeast(0)
-        panel.findViewWithTag<SeekBar>("melDensity")?.progress = ic.density
-        panel.findViewWithTag<SeekBar>("melVelocity")?.progress = ic.velocity
-        panel.findViewWithTag<SeekBar>("melContrastDepth")?.progress = ic.contrastDepth
-        panel.findViewWithTag<Spinner>("melContrastMode")?.setSelection(ic.contrastMode.ordinal)
+        panel.findViewWithTag<SeekBar>("melRange")?.progress    = noteRangeProgress
+        panel.findViewWithTag<SeekBar>("melDensity")?.progress  = 50
+        panel.findViewWithTag<SeekBar>("melVelocity")?.progress = ic.velocity.coerceIn(0, 127)
 
-        // Sync pro settings
+        val mrc = vc.melodicRelationConfig
+        panel.findViewWithTag<SeekBar>("melContrastDepth")?.progress = mrc.contrastDepth
+        panel.findViewWithTag<Spinner>("melContrastMode")?.setSelection(mrc.mode.ordinal)
+
         val frag = if (voiceId == 2) proFragV2 else proFragV3
         frag?.setInitialSettings(ic.proSettings)
 
         if (voiceId == 2) customProSettingsV2 = ic.proSettings
-        else customProSettingsV3 = ic.proSettings
+        else              customProSettingsV3 = ic.proSettings
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────
