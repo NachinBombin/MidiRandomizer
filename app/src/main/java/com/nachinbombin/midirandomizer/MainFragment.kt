@@ -115,8 +115,6 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
     }
 
     private fun selectRoot(rootNote: Int) {
-        // rootNote in Voice1Params: 0 = free/any, 1–12 = C..B (1-indexed semitone+1)
-        // radio button tags are 0–11 (semitones); rootNote==0 means "Free"
         val semitone = if (rootNote <= 0) -1 else rootNote - 1
         isUpdatingFromSync = true
         when {
@@ -201,22 +199,20 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         spinnerPluckingStyle = v.findViewById(R.id.spinnerPluckingStyle)
         seekPluckDelay       = v.findViewById(R.id.seekPluckDelay)
         tvPluckDelay         = v.findViewById(R.id.tvPluckDelay)
-        spinnerInversionMode = v.findViewById(R.id.spinnerInversionMode)
-        spinnerVoicingDensity= v.findViewById(R.id.spinnerVoicingDensity)
-        seekTensionLevel     = v.findViewById(R.id.seekTensionLevel)
-        tvTensionLevel       = v.findViewById(R.id.tvTensionLevel)
-        seekMutationChance   = v.findViewById(R.id.seekMutationChance)
-        tvMutationChance     = v.findViewById(R.id.tvMutationChance)
-        spinnerBuildStrategy = v.findViewById(R.id.spinnerBuildStrategy)
-        spinnerRhythmicFigure= v.findViewById(R.id.spinnerRhythmicFigure)
-        seekNoteDropChance   = v.findViewById(R.id.seekNoteDropChance)
-        tvNoteDropChance     = v.findViewById(R.id.tvNoteDropChance)
+        spinnerInversionMode  = v.findViewById(R.id.spinnerInversionMode)
+        spinnerVoicingDensity = v.findViewById(R.id.spinnerVoicingDensity)
+        seekTensionLevel      = v.findViewById(R.id.seekTensionLevel)
+        tvTensionLevel        = v.findViewById(R.id.tvTensionLevel)
+        seekMutationChance    = v.findViewById(R.id.seekMutationChance)
+        tvMutationChance      = v.findViewById(R.id.tvMutationChance)
+        spinnerBuildStrategy  = v.findViewById(R.id.spinnerBuildStrategy)
+        spinnerRhythmicFigure = v.findViewById(R.id.spinnerRhythmicFigure)
+        seekNoteDropChance    = v.findViewById(R.id.seekNoteDropChance)
+        tvNoteDropChance      = v.findViewById(R.id.tvNoteDropChance)
 
-        // Populate spinners
-        spinnerChannel.adapter = makeSpinner((1..16).map { "Ch $it" })
-        spinnerScale.adapter   = makeSpinner(scales)
-        spinnerStyle.adapter   = makeSpinner(styles)
-        spinnerChordType.adapter      = makeSpinner(chordTypeLabels)
+        spinnerScale.adapter         = makeSpinner(scales)
+        spinnerStyle.adapter         = makeSpinner(styles)
+        spinnerChordType.adapter     = makeSpinner(chordTypeLabels)
         spinnerPluckingStyle.adapter  = makeSpinner(pluckingStyleLabels)
         spinnerInversionMode.adapter  = makeSpinner(inversionModeLabels)
         spinnerVoicingDensity.adapter = makeSpinner(voicingDensityLabels)
@@ -236,7 +232,12 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         btnStartStop.setOnClickListener {
             host?.getMidiService()?.togglePlayback()
         }
-        btnTheme.setOnClickListener { ThemeManager.cycleTheme(requireContext(), requireView()) }
+        btnTheme.setOnClickListener {
+            ThemePickerDialog(requireContext()) { preset ->
+                ThemeManager.saveTheme(requireContext(), preset)
+                ThemeManager.applyToView(requireView(), preset)
+            }.show()
+        }
 
         seekBpm.setOnSeekBarChangeListener(simpleSeek { p ->
             currentParams = currentParams.copy(bpm = p + 20)
@@ -251,13 +252,12 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
             val lo = rangeOctave.values[0].toInt()
             val hi = rangeOctave.values[1].toInt()
             currentParams = currentParams.copy(minOctave = lo, maxOctave = hi)
-            tvOctave.text = "Octave range: $lo – $hi"; push()
+            tvOctave.text = "Octave range: $lo \u2013 $hi"; push()
         }
 
         spinnerChannel.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
                 if (isUpdatingFromSync) return
-                // channel: 0 = all channels, 1-16 stored as-is in Voice1Params.channel
                 currentParams = currentParams.copy(channel = pos); push()
             }
             override fun onNothingSelected(p: AdapterView<*>?) {}
@@ -272,10 +272,10 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         spinnerStyle.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
                 if (isUpdatingFromSync) return
-                val style = MidiService.VoiceStyle.entries[pos]
+                val style = VoiceStyle.entries[pos]
                 currentParams = currentParams.copy(style = style)
-                val isDrone = style == MidiService.VoiceStyle.SINGLE_NOTE_DRONE || style == MidiService.VoiceStyle.EVOLVING_DRONE
-                val isChord = style == MidiService.VoiceStyle.CHORDS
+                val isDrone = style == VoiceStyle.SINGLE_NOTE_DRONE || style == VoiceStyle.EVOLVING_DRONE
+                val isChord = style == VoiceStyle.CHORDS
                 layoutDroneTiming.visibility = if (isDrone) View.VISIBLE else View.GONE
                 layoutDroneRange.visibility  = if (isDrone && rgDroneTiming.checkedRadioButtonId == R.id.rbDroneRandom) View.VISIBLE else View.GONE
                 layoutChordSettings.visibility = if (isChord) View.VISIBLE else View.GONE
@@ -288,7 +288,9 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         rgDroneTiming.setOnCheckedChangeListener { _, id ->
             if (isUpdatingFromSync) return@setOnCheckedChangeListener
             val isRandom = id == R.id.rbDroneRandom
-            currentParams = currentParams.copy(droneTiming = if (isRandom) MidiService.DroneTimingMode.RANDOM else MidiService.DroneTimingMode.CONSTANT)
+            currentParams = currentParams.copy(
+                droneTiming = if (isRandom) DroneTimingMode.RANDOM else DroneTimingMode.CONSTANT
+            )
             layoutDroneRange.visibility = if (isRandom) View.VISIBLE else View.GONE
             push()
         }
@@ -338,7 +340,6 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
             if (group == rgRootFree) { rgRootRow1.clearCheck(); rgRootRow2.clearCheck() }
             val tag = requireView().findViewById<RadioButton>(checkedId).tag as? String
             val semitone = tag?.toIntOrNull() ?: -1
-            // rootNote: 0=free, 1-12 = semitone+1
             currentParams = currentParams.copy(rootNote = if (semitone < 0) 0 else semitone + 1)
             push()
         }
@@ -375,7 +376,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
             override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
                 if (isUpdatingFromSync) return
                 currentParams = currentParams.copy(
-                    chordConfig = currentParams.chordConfig.copy(inversionMode = pos)
+                    chordConfig = currentParams.chordConfig.copy(inversionMode = InversionMode.entries[pos])
                 ); push()
             }
             override fun onNothingSelected(p: AdapterView<*>?) {}
@@ -384,20 +385,20 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
             override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
                 if (isUpdatingFromSync) return
                 currentParams = currentParams.copy(
-                    chordConfig = currentParams.chordConfig.copy(voicingDensity = pos)
+                    chordConfig = currentParams.chordConfig.copy(voicingDensity = VoicingDensity.entries[pos])
                 ); push()
             }
             override fun onNothingSelected(p: AdapterView<*>?) {}
         }
         seekTensionLevel.setOnSeekBarChangeListener(simpleSeek { p ->
             currentParams = currentParams.copy(
-                chordConfig = currentParams.chordConfig.copy(tensionLevel = p)
+                chordConfig = currentParams.chordConfig.copy(tensionLevel = TensionLevel.entries[p])
             )
             tvTensionLevel.text = "Tension: ${tensionLabels.getOrNull(p) ?: p}"; push()
         })
         seekMutationChance.setOnSeekBarChangeListener(simpleSeek { p ->
             currentParams = currentParams.copy(
-                chordConfig = currentParams.chordConfig.copy(mutationChance = p)
+                chordConfig = currentParams.chordConfig.copy(mutationChance = p / 100f)
             )
             tvMutationChance.text = "Mutation: $p%"; push()
         })
@@ -405,7 +406,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
             override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
                 if (isUpdatingFromSync) return
                 currentParams = currentParams.copy(
-                    chordConfig = currentParams.chordConfig.copy(buildStrategy = pos)
+                    chordConfig = currentParams.chordConfig.copy(chordBuildStrategy = ChordBuildStrategy.entries[pos])
                 ); push()
             }
             override fun onNothingSelected(p: AdapterView<*>?) {}
@@ -421,7 +422,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         }
         seekNoteDropChance.setOnSeekBarChangeListener(simpleSeek { p ->
             currentParams = currentParams.copy(
-                chordConfig = currentParams.chordConfig.copy(noteDropChance = p)
+                chordConfig = currentParams.chordConfig.copy(noteDropChance = p / 100f)
             )
             tvNoteDropChance.text = "Note drop: $p%"; push()
         })
@@ -446,14 +447,13 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
             seekVelocity.progress = (v1.velocity - 1).coerceIn(0, seekVelocity.max)
             tvVelocity.text       = "Velocity: ${v1.velocity}"
             rangeOctave.values    = listOf(v1.minOctave.toFloat(), v1.maxOctave.toFloat())
-            tvOctave.text         = "Octave range: ${v1.minOctave} – ${v1.maxOctave}"
-            // channel: 0 = all (shown as "Ch 1" in spinner index 0)
+            tvOctave.text         = "Octave range: ${v1.minOctave} \u2013 ${v1.maxOctave}"
             spinnerChannel.setSelection(v1.channel.coerceIn(0, 15))
             spinnerScale.setSelection(v1.scale.coerceIn(0, scales.size - 1))
             spinnerStyle.setSelection(v1.style.ordinal.coerceIn(0, styles.size - 1))
 
-            val isDrone = v1.style == MidiService.VoiceStyle.SINGLE_NOTE_DRONE || v1.style == MidiService.VoiceStyle.EVOLVING_DRONE
-            val isChord = v1.style == MidiService.VoiceStyle.CHORDS
+            val isDrone = v1.style == VoiceStyle.SINGLE_NOTE_DRONE || v1.style == VoiceStyle.EVOLVING_DRONE
+            val isChord = v1.style == VoiceStyle.CHORDS
             layoutDroneTiming.visibility   = if (isDrone) View.VISIBLE else View.GONE
             layoutChordSettings.visibility = if (isChord) View.VISIBLE else View.GONE
             tvChordHint.visibility         = if (isChord) View.VISIBLE else View.GONE
@@ -483,16 +483,16 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
                 spinnerPluckingStyle.setSelection(cc.pluckingStyle.coerceIn(0, pluckingStyleLabels.size - 1))
                 seekPluckDelay.progress = (cc.pluckingDelayMs - 1).coerceIn(0, seekPluckDelay.max.toLong()).toInt()
                 tvPluckDelay.text       = "Pluck delay: ${cc.pluckingDelayMs} ms"
-                spinnerInversionMode.setSelection(cc.inversionMode.coerceIn(0, inversionModeLabels.size - 1))
-                spinnerVoicingDensity.setSelection(cc.voicingDensity.coerceIn(0, voicingDensityLabels.size - 1))
-                seekTensionLevel.progress = cc.tensionLevel.coerceIn(0, seekTensionLevel.max)
-                tvTensionLevel.text       = "Tension: ${tensionLabels.getOrNull(cc.tensionLevel) ?: cc.tensionLevel}"
-                seekMutationChance.progress = cc.mutationChance.coerceIn(0, seekMutationChance.max)
-                tvMutationChance.text       = "Mutation: ${cc.mutationChance}%"
-                spinnerBuildStrategy.setSelection(cc.buildStrategy.coerceIn(0, buildStrategyLabels.size - 1))
+                spinnerInversionMode.setSelection(cc.inversionMode.ordinal.coerceIn(0, inversionModeLabels.size - 1))
+                spinnerVoicingDensity.setSelection(cc.voicingDensity.ordinal.coerceIn(0, voicingDensityLabels.size - 1))
+                seekTensionLevel.progress = cc.tensionLevel.ordinal.coerceIn(0, seekTensionLevel.max)
+                tvTensionLevel.text       = "Tension: ${tensionLabels.getOrNull(cc.tensionLevel.ordinal) ?: cc.tensionLevel.ordinal}"
+                seekMutationChance.progress = (cc.mutationChance * 100).toInt().coerceIn(0, seekMutationChance.max)
+                tvMutationChance.text       = "Mutation: ${(cc.mutationChance * 100).toInt()}%"
+                spinnerBuildStrategy.setSelection(cc.chordBuildStrategy.ordinal.coerceIn(0, buildStrategyLabels.size - 1))
                 spinnerRhythmicFigure.setSelection(cc.rhythmicFigure.ordinal.coerceIn(0, rhythmicFigureLabels.size - 1))
-                seekNoteDropChance.progress = cc.noteDropChance.coerceIn(0, seekNoteDropChance.max)
-                tvNoteDropChance.text       = "Note drop: ${cc.noteDropChance}%"
+                seekNoteDropChance.progress = (cc.noteDropChance * 100).toInt().coerceIn(0, seekNoteDropChance.max)
+                tvNoteDropChance.text       = "Note drop: ${(cc.noteDropChance * 100).toInt()}%"
             }
 
             currentParams      = v1
@@ -506,7 +506,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
             btnStartStop.text = if (playing) "STOP" else "START"
             val accent = if (playing) 0xFF01696F.toInt() else 0xFF4F9AA5.toInt()
             btnStartStop.backgroundTintList = ColorStateList.valueOf(accent)
-            tvStatus.text = if (playing) "Running…" else "Idle"
+            tvStatus.text = if (playing) "Running\u2026" else "Idle"
         }
     }
 
