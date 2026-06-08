@@ -8,6 +8,8 @@ drawable ic_pro_badge
 drawable root_chip_bg
 id btnStartStop
 id btnTheme
+id cardPlayability
+id etOddMeterGrouping
 id layoutCellAuto
 id layoutChordSettings
 id layoutDroneRange
@@ -19,6 +21,8 @@ id layoutLSystem
 id layoutMarkov
 id layoutNarmour
 id layoutNrtMelodic
+id layoutOddMeter
+id layoutPlayabilityControls
 id layoutPwg
 id listViewDevices
 id proFragContainerMelodicV2
@@ -53,6 +57,7 @@ id rgRootRow2
 id rgTiming
 id rootNoteContainer
 id scrollRoot
+id seekAccentDepth
 id seekBpm
 id seekCaBirth
 id seekCaMutation
@@ -61,6 +66,7 @@ id seekCaSurvMin
 id seekEuclideanDensity
 id seekEuclideanRotation
 id seekEuclideanSteps
+id seekGateTime
 id seekGestureDepth
 id seekGravityStrength
 id seekGravityThreshold
@@ -83,6 +89,7 @@ id seekVelocity
 id spinnerBuildStrategy
 id spinnerChannel
 id spinnerChordType
+id spinnerDenominator
 id spinnerGestureDensity
 id spinnerGesturePitch
 id spinnerGestureRegister
@@ -93,18 +100,25 @@ id spinnerLSystemAxiom
 id spinnerLogicStyle
 id spinnerMelodicEngine
 id spinnerNrtCycle
+id spinnerNumerator
+id spinnerPlayabilityFigure
 id spinnerPluckingStyle
 id spinnerPwgMotif
 id spinnerRhythmicFigure
+id spinnerRhythmicModifier
 id spinnerScale
 id spinnerStyle
 id spinnerVelPattern
 id spinnerVoicingDensity
+id switchAccent
 id switchGesture
 id switchGravity
+id switchHarmonicAnchor
 id switchNarmour
+id switchPlayability
 id switchSecondOrder
 id tabLayout
+id tvAccentDepth
 id tvBpm
 id tvCaBirth
 id tvCaMutation
@@ -116,6 +130,7 @@ id tvDroneRange
 id tvEuclideanDensity
 id tvEuclideanRotation
 id tvEuclideanSteps
+id tvGateTime
 id tvGestureDepth
 id tvGravityStrength
 id tvGravityThreshold

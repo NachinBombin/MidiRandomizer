@@ -579,11 +579,18 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             .apply { tag = "chordsPanel"; visibility = View.GONE }
         panel.addView(chordsPanel)
 
-        // Wire Style spinner to show/hide chordsPanel
+        // ── Playability Framework sub-panel ──────────────────────────────
+        val playabilityPanel = buildPlayabilityFrameworkPanel(ctx, "ind", onSync)
+            .apply { tag = "indPlayabilityPanel"; visibility = View.VISIBLE }
+        panel.addView(playabilityPanel)
+
+        // Wire Style spinner to show/hide chordsPanel and playabilityPanel
         panel.findViewWithTag<Spinner>("indStyle")?.onItemSelectedListener =
             object : AdapterView.OnItemSelectedListener {
                 override fun onItemSelected(a: AdapterView<*>?, v: View?, pos: Int, id: Long) {
-                    chordsPanel.visibility = if (pos == VoiceStyle.CHORDS.ordinal) View.VISIBLE else View.GONE
+                    val style = VoiceStyle.entries.getOrElse(pos) { VoiceStyle.GENERATIVE }
+                    chordsPanel.visibility = if (style == VoiceStyle.CHORDS) View.VISIBLE else View.GONE
+                    playabilityPanel.visibility = View.VISIBLE
                     if (!isUpdatingFromSync) onSync()
                 }
                 override fun onNothingSelected(a: AdapterView<*>?) {}
@@ -661,6 +668,11 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         panel.addView(spinnerRow(ctx, "Root", rootNames, "melRootValue", onSync))
             
         panel.addView(spinnerRow(ctx, "Timing", listOf("Metronome","Mixed","Randomized","Euclidean"), "melTiming", onSync))
+
+        // ── Playability Framework sub-panel ──────────────────────────────
+        val playabilityPanel = buildPlayabilityFrameworkPanel(ctx, "mel", onSync)
+            .apply { tag = "melPlayabilityPanel"; visibility = View.VISIBLE }
+        panel.addView(playabilityPanel)
 
         // ── Euclidean settings sub-panel ─────────────────────────────────
         val euclideanPanel = buildEuclideanSettingsSubPanel(ctx, "mel", onSync)
@@ -740,16 +752,157 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
      *   Chord Type | Build Strategy | Tension Level | Inversion | Voicing Density
      *   Plucking Style | Pluck Delay | Strum Length | Note Drop % | Mutation % | Rhythmic Figure
      */
+    private fun buildPlayabilityFrameworkPanel(ctx: Context, prefix: String, onSync: () -> Unit): LinearLayout {
+        val root = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(0x1AFFFFFF.toInt())
+            setPadding(12, 8, 12, 8)
+            visibility = View.GONE
+        }
+        
+        val header = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+        header.addView(TextView(ctx).apply { text = "PLAYABILITY FRAMEWORK"; textSize = 12f; setTextColor(0xFFFFD700.toInt()); layoutParams = LinearLayout.LayoutParams(0, -2, 1f) })
+        val masterSwitch = Switch(ctx).apply { tag = "${prefix}PlayabilityEnabled" }
+        header.addView(masterSwitch)
+        root.addView(header)
+
+        val controls = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; tag = "${prefix}PlayabilityControls"; visibility = View.GONE }
+        
+        // Time Signature
+        controls.addView(TextView(ctx).apply { text = "TIME SIGNATURE"; textSize = 11f; setTextColor(0xFF797876.toInt()); setPadding(0, 8, 0, 4) })
+        val tsRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+        val numLabels = (1..16).map { it.toString() }
+        val denLabels = listOf("2", "4", "8", "16")
+        
+        val numSpinner = Spinner(ctx).apply { tag = "${prefix}TsNum"; layoutParams = LinearLayout.LayoutParams(0, -2, 1f); setBackgroundColor(0xFF262523.toInt()) }
+        numSpinner.adapter = ArrayAdapter(ctx, android.R.layout.simple_spinner_item, numLabels).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        tsRow.addView(numSpinner)
+        
+        tsRow.addView(TextView(ctx).apply { text = "/"; textSize = 24f; setTextColor(0xFFE8E6E1.toInt()); setPadding(12, 0, 12, 0) })
+        
+        val denSpinner = Spinner(ctx).apply { tag = "${prefix}TsDen"; layoutParams = LinearLayout.LayoutParams(0, -2, 1f); setBackgroundColor(0xFF262523.toInt()) }
+        denSpinner.adapter = ArrayAdapter(ctx, android.R.layout.simple_spinner_item, denLabels).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        tsRow.addView(denSpinner)
+        controls.addView(tsRow)
+
+        // Odd Meter Grouping
+        val oddMeterLayout = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; tag = "${prefix}OddMeterLayout"; visibility = View.GONE; setPadding(0, 8, 0, 8) }
+        oddMeterLayout.addView(TextView(ctx).apply { text = "PULSE GROUPING"; textSize = 11f; setTextColor(0xFF797876.toInt()) })
+        val etGrouping = EditText(ctx).apply { tag = "${prefix}OddMeterGrouping"; hint = "e.g. 3,2"; setTextColor(0xFFE8E6E1.toInt()); setBackgroundColor(0xFF262523.toInt()); textSize = 14f }
+        oddMeterLayout.addView(etGrouping)
+        controls.addView(oddMeterLayout)
+
+        // Rhythmic Resolution
+        controls.addView(TextView(ctx).apply { text = "RHYTHMIC RESOLUTION"; textSize = 11f; setTextColor(0xFF797876.toInt()); setPadding(0, 8, 0, 4) })
+        val resRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+        val figLabels = listOf("Whole", "Half", "Quarter", "Eighth", "16th", "32nd", "64th")
+        val modLabels = listOf("Straight", "Dotted", "Triplet")
+        
+        val figSpinner = Spinner(ctx).apply { tag = "${prefix}PlayabilityFigure"; layoutParams = LinearLayout.LayoutParams(0, -2, 1.5f); setBackgroundColor(0xFF262523.toInt()) }
+        figSpinner.adapter = ArrayAdapter(ctx, android.R.layout.simple_spinner_item, figLabels).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        resRow.addView(figSpinner)
+        
+        val modSpinner = Spinner(ctx).apply { tag = "${prefix}PlayabilityModifier"; layoutParams = LinearLayout.LayoutParams(0, -2, 1f); setBackgroundColor(0xFF262523.toInt()); setPadding(8, 0, 0, 0) }
+        modSpinner.adapter = ArrayAdapter(ctx, android.R.layout.simple_spinner_item, modLabels).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        resRow.addView(modSpinner)
+        controls.addView(resRow)
+
+        // Dynamics
+        val accRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL; setPadding(0, 12, 0, 4) }
+        accRow.addView(TextView(ctx).apply { text = "ACCENT LAYER"; textSize = 11f; setTextColor(0xFF797876.toInt()); layoutParams = LinearLayout.LayoutParams(0, -2, 1f) })
+        accRow.addView(Switch(ctx).apply { tag = "${prefix}AccentEnabled"; scaleX = 0.8f; scaleY = 0.8f })
+        controls.addView(accRow)
+        
+        controls.addView(labeledSeekBar(ctx, "Accent Depth", 0, 100, 50, "${prefix}AccentDepth", onSync))
+        controls.addView(labeledSeekBar(ctx, "Gate Time", 10, 100, 90, "${prefix}GateTime", onSync))
+        
+        // Harmonic Anchor
+        val anchorRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL; setPadding(0, 8, 0, 0) }
+        anchorRow.addView(TextView(ctx).apply { text = "Sync Scale Anchor to Downbeats"; textSize = 13f; setTextColor(0xFFE8E6E1.toInt()); layoutParams = LinearLayout.LayoutParams(0, -2, 1f) })
+        anchorRow.addView(Switch(ctx).apply { tag = "${prefix}HarmonicAnchor" })
+        controls.addView(anchorRow)
+
+        root.addView(controls)
+        
+        // Master switch logic
+        masterSwitch.setOnCheckedChangeListener { _, on ->
+            controls.visibility = if (on) View.VISIBLE else View.GONE
+            if (!isUpdatingFromSync) onSync()
+        }
+        
+        numSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(a: AdapterView<*>?, v: View?, pos: Int, id: Long) {
+                val num = pos + 1
+                oddMeterLayout.visibility = if (num % 2 != 0 && num > 1) View.VISIBLE else View.GONE
+                if (!isUpdatingFromSync) onSync()
+            }
+            override fun onNothingSelected(a: AdapterView<*>?) {}
+        }
+        
+        return root
+    }
+
     private fun buildEuclideanSettingsSubPanel(ctx: Context, prefix: String, onSync: () -> Unit): LinearLayout {
         val root = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(0x1AFFFFFF.toInt())
             setPadding(12, 8, 12, 8)
+            visibility = View.GONE
         }
         root.addView(labeledSeekBar(ctx, "Steps", 2, 32, 16, "${prefix}EuclSteps", onSync))
         root.addView(labeledSeekBar(ctx, "Density", 1, 32, 4, "${prefix}EuclDensity", onSync))
         root.addView(labeledSeekBar(ctx, "Rotation", 0, 32, 0, "${prefix}EuclRotation", onSync))
         return root
+    }
+
+    private fun readPlayabilityConfig(panel: LinearLayout, prefix: String): PlayabilityLayerConfig {
+        fun seekVal(tag: String): Int = panel.findViewWithTag<SeekBar>(tag)?.progress ?: 0
+        fun sp(tag: String): Int      = panel.findViewWithTag<Spinner>(tag)?.selectedItemPosition ?: 0
+        
+        val enabled = panel.findViewWithTag<Switch>("${prefix}PlayabilityEnabled")?.isChecked ?: false
+        val num = sp("${prefix}TsNum") + 1
+        val den = listOf(2, 4, 8, 16).getOrNull(sp("${prefix}TsDen")) ?: 4
+        val groupingStr = panel.findViewWithTag<EditText>("${prefix}OddMeterGrouping")?.text?.toString() ?: ""
+        val groups = groupingStr.split(",").mapNotNull { it.trim().toIntOrNull() }.ifEmpty { listOf(2, 2) }
+        
+        val figure = RhythmicFigure.entries.getOrElse(sp("${prefix}PlayabilityFigure")) { RhythmicFigure.QUARTER }
+        val modifier = RhythmicModifier.entries.getOrElse(sp("${prefix}PlayabilityModifier")) { RhythmicModifier.STRAIGHT }
+        
+        val accEnabled = panel.findViewWithTag<Switch>("${prefix}AccentEnabled")?.isChecked ?: false
+        val accDepth = seekVal("${prefix}AccentDepth") / 100f
+        val gate = (seekVal("${prefix}GateTime") + 10) / 100f
+        val anchor = panel.findViewWithTag<Switch>("${prefix}HarmonicAnchor")?.isChecked ?: false
+        
+        return PlayabilityLayerConfig(
+            isEnabled = enabled,
+            timeSignatureNumerator = num,
+            timeSignatureDenominator = den,
+            oddMeterGrouping = groups,
+            rhythmicFigure = figure,
+            rhythmicModifier = modifier,
+            accentConfig = AccentConfig(accEnabled, accDepth),
+            gatePercentage = gate,
+            isHarmonicAnchorEnabled = anchor
+        )
+    }
+
+    private fun applyPlayabilityConfig(panel: LinearLayout, prefix: String, pl: PlayabilityLayerConfig) {
+        isUpdatingFromSync = true
+        panel.findViewWithTag<Switch>("${prefix}PlayabilityEnabled")?.isChecked = pl.isEnabled
+        panel.findViewWithTag<Spinner>("${prefix}TsNum")?.setSelection(pl.timeSignatureNumerator - 1)
+        val denIdx = listOf(2, 4, 8, 16).indexOf(pl.timeSignatureDenominator).coerceAtLeast(0)
+        panel.findViewWithTag<Spinner>("${prefix}TsDen")?.setSelection(denIdx)
+        panel.findViewWithTag<EditText>("${prefix}OddMeterGrouping")?.setText(pl.oddMeterGrouping.joinToString(","))
+        panel.findViewWithTag<Spinner>("${prefix}PlayabilityFigure")?.setSelection(pl.rhythmicFigure.ordinal)
+        panel.findViewWithTag<Spinner>("${prefix}PlayabilityModifier")?.setSelection(pl.rhythmicModifier.ordinal)
+        panel.findViewWithTag<Switch>("${prefix}AccentEnabled")?.isChecked = pl.accentConfig.isEnabled
+        panel.findViewWithTag<SeekBar>("${prefix}AccentDepth")?.progress = (pl.accentConfig.accentDepth * 100).toInt()
+        panel.findViewWithTag<SeekBar>("${prefix}GateTime")?.progress = (pl.gatePercentage * 100 - 10).toInt()
+        panel.findViewWithTag<Switch>("${prefix}HarmonicAnchor")?.isChecked = pl.isHarmonicAnchorEnabled
+        
+        panel.findViewWithTag<View>("${prefix}PlayabilityControls")?.visibility = if (pl.isEnabled) View.VISIBLE else View.GONE
+        panel.findViewWithTag<View>("${prefix}OddMeterLayout")?.visibility = if (pl.timeSignatureNumerator % 2 != 0 && pl.timeSignatureNumerator > 1) View.VISIBLE else View.GONE
+        isUpdatingFromSync = false
     }
 
     private fun buildChordsSubPanel(ctx: Context, prefix: String, onSync: () -> Unit): LinearLayout {
@@ -831,7 +984,7 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             strumLength        = sb("${prefix}StrumLen") + 1,
             noteDropChance     = sb("${prefix}NoteDrop") / 100f,
             mutationChance     = sb("${prefix}Mutation") / 100f,
-            rhythmicFigure     = RhythmicFigure.entries.getOrElse(sp("${prefix}RhythmicFigure")) { RhythmicFigure.SUSTAINED }
+            rhythmicFigure     = ChordRhythmFigure.entries.getOrElse(sp("${prefix}RhythmicFigure")) { ChordRhythmFigure.SUSTAINED }
         )
     }
 
@@ -880,6 +1033,7 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
         val style = VoiceStyle.entries.getOrElse(sp("indStyle")) { VoiceStyle.GENERATIVE }
         val chordCfg = if (!isMelodic && style == VoiceStyle.CHORDS) readChordConfig(panel, "ind")
                        else ChordConfig()
+        val playCfg = readPlayabilityConfig(panel, prefix)
 
         val resolvedPro: ProSettings = if (shared) ProSettings().copy(
             euclideanEnabled = timing == 3,
@@ -902,7 +1056,8 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
             style         = if (isMelodic) VoiceStyle.GENERATIVE else style,
             useSharedPro  = shared,
             proSettings   = resolvedPro,
-            chordConfig   = chordCfg
+            chordConfig   = chordCfg,
+            playability   = playCfg
         )
     }
 
@@ -967,6 +1122,7 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
                 panel.findViewWithTag<View>("chordsPanel")?.visibility =
                     if (ic.style == VoiceStyle.CHORDS) View.VISIBLE else View.GONE
                 applyChordConfigToPanel(panel, ic.chordConfig, "ind")
+                applyPlayabilityConfig(panel, prefix, ic.playability)
                 val shared = ic.useSharedPro
                 panel.findViewWithTag<RadioButton>("sharedPro")?.isChecked = shared
                 panel.findViewWithTag<RadioButton>("customPro")?.isChecked = !shared
@@ -999,6 +1155,8 @@ class VoicesFragment : Fragment(), MidiService.MidiEventListener {
                 panel.findViewWithTag<com.google.android.material.slider.RangeSlider>("${prefix}Octave")?.values = listOf(ic.minOctave.toFloat(), ic.maxOctave.toFloat())
                 panel.findViewWithTag<SeekBar>("${prefix}MidiCh")?.progress = ic.midiChannel
                 panel.findViewWithTag<Spinner>("${prefix}Timing")?.setSelection(ic.timingMode)
+
+                applyPlayabilityConfig(panel, prefix, ic.playability)
 
                 // Sync Euclidean settings
                 panel.findViewWithTag<View>("melEuclideanPanel")?.visibility = if (ic.timingMode == 3) View.VISIBLE else View.GONE

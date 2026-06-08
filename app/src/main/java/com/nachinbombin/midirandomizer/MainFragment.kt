@@ -69,6 +69,22 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
     private lateinit var tvMutationChance:       TextView
     private lateinit var spinnerBuildStrategy:   Spinner
     private lateinit var spinnerRhythmicFigure:  Spinner
+    
+    // ── Playability Layer ──
+    private lateinit var switchPlayability:      Switch
+    private lateinit var layoutPlayabilityControls: View
+    private lateinit var spinnerNumerator:       Spinner
+    private lateinit var spinnerDenominator:     Spinner
+    private lateinit var layoutOddMeter:         View
+    private lateinit var etOddMeterGrouping:     EditText
+    private lateinit var spinnerPlayabilityFigure: Spinner
+    private lateinit var spinnerRhythmicModifier: Spinner
+    private lateinit var switchAccent:           Switch
+    private lateinit var tvAccentDepth:          TextView
+    private lateinit var seekAccentDepth:        SeekBar
+    private lateinit var tvGateTime:             TextView
+    private lateinit var seekGateTime:           SeekBar
+    private lateinit var switchHarmonicAnchor:   Switch
     private lateinit var seekNoteDropChance:     SeekBar
     private lateinit var tvNoteDropChance:       TextView
 
@@ -98,6 +114,11 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
     private val buildStrategyLabels   = listOf("Diatonic Stack", "Modal Snap")
     private val rhythmicFigureLabels  = listOf("Sustained", "Re-Attack", "Broken / Alberti", "Ostinato")
     private val tensionLabels         = listOf("Triad", "Triad + 7th", "Triad + 9th", "Full Extensions (11/13)")
+    
+    private val numeratorLabels       = (1..16).map { it.toString() }
+    private val denominatorLabels     = listOf("2", "4", "8", "16")
+    private val rhythmicFigureLabels_P = listOf("Whole", "Half", "Quarter", "Eighth", "16th", "32nd", "64th")
+    private val rhythmicModifierLabels = listOf("Straight", "Dotted", "Triplet")
 
     // ── Root note helpers ────────────────────────────────────────────────
 
@@ -180,6 +201,26 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         tvEuclideanRotation = v.findViewById(R.id.tvEuclideanRotation)
         seekEuclideanRotation = v.findViewById(R.id.seekEuclideanRotation)
         spinnerChannel    = v.findViewById(R.id.spinnerChannel)
+        
+        switchPlayability      = v.findViewById(R.id.switchPlayability)
+        layoutPlayabilityControls = v.findViewById(R.id.layoutPlayabilityControls)
+        spinnerNumerator       = v.findViewById(R.id.spinnerNumerator)
+        spinnerDenominator     = v.findViewById(R.id.spinnerDenominator)
+        layoutOddMeter         = v.findViewById(R.id.layoutOddMeter)
+        etOddMeterGrouping     = v.findViewById(R.id.etOddMeterGrouping)
+        spinnerPlayabilityFigure = v.findViewById(R.id.spinnerPlayabilityFigure)
+        spinnerRhythmicModifier = v.findViewById(R.id.spinnerRhythmicModifier)
+        switchAccent           = v.findViewById(R.id.switchAccent)
+        tvAccentDepth          = v.findViewById(R.id.tvAccentDepth)
+        seekAccentDepth        = v.findViewById(R.id.seekAccentDepth)
+        tvGateTime             = v.findViewById(R.id.tvGateTime)
+        seekGateTime           = v.findViewById(R.id.seekGateTime)
+        switchHarmonicAnchor   = v.findViewById(R.id.switchHarmonicAnchor)
+
+        spinnerNumerator.adapter = makeSpinner(numeratorLabels)
+        spinnerDenominator.adapter = makeSpinner(denominatorLabels)
+        spinnerPlayabilityFigure.adapter = makeSpinner(rhythmicFigureLabels_P)
+        spinnerRhythmicModifier.adapter = makeSpinner(rhythmicModifierLabels)
         spinnerScale      = v.findViewById(R.id.spinnerScale)
         spinnerStyle      = v.findViewById(R.id.spinnerStyle)
         layoutDroneTiming = v.findViewById(R.id.layoutDroneTiming)
@@ -304,7 +345,7 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
             voicingDensity     = VoicingDensity.entries[spinnerVoicingDensity.selectedItemPosition],
             tensionLevel       = TensionLevel.entries[seekTensionLevel.progress.coerceIn(0, 3)],
             mutationChance     = seekMutationChance.progress / 100f,
-            rhythmicFigure     = RhythmicFigure.entries[spinnerRhythmicFigure.selectedItemPosition]
+            rhythmicFigure     = ChordRhythmFigure.entries[spinnerRhythmicFigure.selectedItemPosition]
         )
     }
 
@@ -340,6 +381,73 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
             val vals = slider.values
             currentParams = currentParams.copy(minOctave = vals[0].toInt(), maxOctave = vals[1].toInt())
             tvOctave.text = getString(R.string.label_octave_range, vals[0].toInt(), vals[1].toInt())
+            push()
+        }
+
+        switchPlayability.setOnCheckedChangeListener { _, on ->
+            currentParams = currentParams.copy(playability = currentParams.playability.copy(isEnabled = on))
+            updateUiVisibility()
+            push()
+        }
+        
+        spinnerNumerator.onItemSelectedListener = simpleSpinner { pos ->
+            val num = pos + 1
+            currentParams = currentParams.copy(playability = currentParams.playability.copy(timeSignatureNumerator = num))
+            updateUiVisibility()
+            push()
+        }
+        
+        spinnerDenominator.onItemSelectedListener = simpleSpinner { pos ->
+            val den = denominatorLabels[pos].toInt()
+            currentParams = currentParams.copy(playability = currentParams.playability.copy(timeSignatureDenominator = den))
+            push()
+        }
+        
+        etOddMeterGrouping.addTextChangedListener(object : android.text.TextWatcher {
+            override fun afterTextChanged(s: android.text.Editable?) {
+                val groups = s.toString().split(",").mapNotNull { it.trim().toIntOrNull() }
+                if (groups.isNotEmpty()) {
+                    currentParams = currentParams.copy(playability = currentParams.playability.copy(oddMeterGrouping = groups))
+                    push()
+                }
+            }
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+        })
+        
+        spinnerPlayabilityFigure.onItemSelectedListener = simpleSpinner { pos ->
+            currentParams = currentParams.copy(playability = currentParams.playability.copy(rhythmicFigure = RhythmicFigure.entries[pos]))
+            push()
+        }
+        
+        spinnerRhythmicModifier.onItemSelectedListener = simpleSpinner { pos ->
+            currentParams = currentParams.copy(playability = currentParams.playability.copy(rhythmicModifier = RhythmicModifier.entries[pos]))
+            push()
+        }
+        
+        switchAccent.setOnCheckedChangeListener { _, on ->
+            currentParams = currentParams.copy(playability = currentParams.playability.copy(
+                accentConfig = currentParams.playability.accentConfig.copy(isEnabled = on)
+            ))
+            push()
+        }
+        
+        seekAccentDepth.setOnSeekBarChangeListener(simpleSeek { p ->
+            currentParams = currentParams.copy(playability = currentParams.playability.copy(
+                accentConfig = currentParams.playability.accentConfig.copy(accentDepth = p / 100f)
+            ))
+            tvAccentDepth.text = "Accent Depth: $p%"
+            push()
+        })
+        
+        seekGateTime.setOnSeekBarChangeListener(simpleSeek { p ->
+            currentParams = currentParams.copy(playability = currentParams.playability.copy(gatePercentage = (p + 10) / 100f))
+            tvGateTime.text = "Gate Time: ${p + 10}%"
+            push()
+        })
+        
+        switchHarmonicAnchor.setOnCheckedChangeListener { _, on ->
+            currentParams = currentParams.copy(playability = currentParams.playability.copy(isHarmonicAnchorEnabled = on))
             push()
         }
 
@@ -476,6 +584,10 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         
         layoutEuclideanSettings.visibility = if (isEuclidean) View.VISIBLE else View.GONE
         
+        val pl = currentParams.playability
+        layoutPlayabilityControls.visibility = if (pl.isEnabled) View.VISIBLE else View.GONE
+        layoutOddMeter.visibility = if (pl.timeSignatureNumerator % 2 != 0 && pl.timeSignatureNumerator > 1) View.VISIBLE else View.GONE
+        
         // Show chord settings panel only when CHORDS is selected
         layoutChordSettings.visibility = if (isChords) View.VISIBLE else View.GONE
         tvChordHint.visibility = if (isChords) View.VISIBLE else View.GONE
@@ -535,6 +647,24 @@ class MainFragment : Fragment(), MidiService.MidiEventListener {
         tvEuclideanRotation.text = "Rotation: ${v1ps.euclideanRotation}"
 
         syncChordPanelFromParams(v1.chordConfig)
+        
+        val pl = v1.playability
+        isUpdatingFromSync = true
+        switchPlayability.isChecked = pl.isEnabled
+        spinnerNumerator.setSelection(pl.timeSignatureNumerator - 1)
+        spinnerDenominator.setSelection(denominatorLabels.indexOf(pl.timeSignatureDenominator.toString()).coerceAtLeast(0))
+        etOddMeterGrouping.setText(pl.oddMeterGrouping.joinToString(","))
+        spinnerPlayabilityFigure.setSelection(pl.rhythmicFigure.ordinal)
+        spinnerRhythmicModifier.setSelection(pl.rhythmicModifier.ordinal)
+        switchAccent.isChecked = pl.accentConfig.isEnabled
+        seekAccentDepth.progress = (pl.accentConfig.accentDepth * 100).toInt()
+        tvAccentDepth.text = "Accent Depth: ${seekAccentDepth.progress}%"
+        seekGateTime.progress = (pl.gatePercentage * 100 - 10).toInt()
+        tvGateTime.text = "Gate Time: ${(pl.gatePercentage * 100).toInt()}%"
+        switchHarmonicAnchor.isChecked = pl.isHarmonicAnchorEnabled
+        isUpdatingFromSync = false
+        
+        updateUiVisibility()
         updateUiVisibility()
         isUpdatingFromSync = false
     }

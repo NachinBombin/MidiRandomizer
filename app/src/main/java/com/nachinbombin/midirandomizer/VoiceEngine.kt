@@ -137,22 +137,115 @@ class VoiceEngine(
 
     private val independentLoop = Runnable {
         try {
+            var currentStep = 0
             while (running) {
                 try {
                     val cfg = config
                     val ic = cfg.independentConfig
+                    val playCfg = ic.playability
                     val isMelodic = cfg.mode == VoiceMode.MELODIC
 
-                    if (ic.style == VoiceStyle.SINGLE_NOTE_DRONE) {
+                    val isSingleDrone = ic.style == VoiceStyle.SINGLE_NOTE_DRONE
+                    val isEvolvingDrone = ic.style == VoiceStyle.EVOLVING_DRONE
+
+                    if (isSingleDrone && !playCfg.isEnabled) {
                         fireIndependentNote(ic)
                         try { Thread.sleep(Long.MAX_VALUE) } catch (_: InterruptedException) { }
                         break
                     }
 
-                    if (isMelodic) {
-                        playMelodicPhrase(cfg)
+                    // ── Timing Calculation ──
+                    val intervalMs = if (playCfg.isEnabled) {
+                        calculateStepDurationMs(ic.bpm, playCfg.rhythmicFigure, playCfg.rhythmicModifier)
+                    } else if (isMelodic) {
+                        calculateMelodicInterval(ic)
                     } else {
-                        playIndependentBeat(ic)
+                        calcInterval(ic)
+                    }
+
+                    // ── Metric Tracking ──
+                    val stepsPerMeasure = if (playCfg.isEnabled) {
+                        val figureDenominator = when (playCfg.rhythmicFigure) {
+                            RhythmicFigure.WHOLE -> 1; RhythmicFigure.HALF -> 2; RhythmicFigure.QUARTER -> 4
+                            RhythmicFigure.EIGHTH -> 8; RhythmicFigure.SIXTEENTH -> 16
+                            RhythmicFigure.THIRTY_SECOND -> 32; RhythmicFigure.SIXTY_FOURTH -> 64
+                        }
+                        (playCfg.timeSignatureNumerator * figureDenominator) / playCfg.timeSignatureDenominator
+                    } else 1
+
+                    val accentPositions = if (playCfg.isEnabled) {
+                        val positions = mutableListOf(0)
+                        var sum = 0
+                        for (group in playCfg.oddMeterGrouping) {
+                            sum += group
+                            if (sum < stepsPerMeasure) positions.add(sum)
+                        }
+                        positions
+                    } else listOf(0)
+
+                    val ps = ic.proSettings
+                    val euclidOn = ps.euclideanEnabled && ic.timingMode == MidiService.TIMING_EUCLIDEAN
+                    val isOnset = if (euclidOn) {
+                        val pattern = euclideanPattern
+                        val hit = pattern.getOrElse(euclideanStep) { false }
+                        if (pattern.isNotEmpty()) {
+                            euclideanStep = (euclideanStep + 1) % pattern.size
+                        }
+                        hit
+                    } else true
+
+                if (isOnset) {
+                        dispatcher?.advanceBeat()
+                        
+                        // ── Expression: Velocity Shaping ──
+                        val baseVel = velocityShaper.next()
+                        val shapedVel = if (playCfg.isEnabled) {
+                            calculateVelocity(baseVel, currentStep, accentPositions, playCfg.accentConfig)
+                        } else baseVel
+                        
+                        // Harmonic Anchor check
+                        val isAnchor = playCfg.isEnabled && playCfg.isHarmonicAnchorEnabled && currentStep == 0
+                        
+                        if (ic.style == VoiceStyle.CHORDS) {
+                            fireChordNotes(ic, shapedVel, isAnchor) 
+                        } else {
+                            fireIndependentNote(ic, shapedVel, isAnchor) 
+                        }
+                    }
+
+                    // ── Gating ──
+                    if (playCfg.isEnabled) {
+                        if (isEvolvingDrone) {
+                            var accumulatedMs = 0L
+                            val droneDurMs = calcInterval(ic)
+                            val pulseHold = (intervalMs * playCfg.gatePercentage).toLong()
+                            val pulseRest = intervalMs - pulseHold
+                            
+                            // First pulse already fired above
+                            Thread.sleep(pulseHold.coerceAtLeast(10L))
+                            Thread.sleep(pulseRest.coerceAtLeast(10L))
+                            accumulatedMs += intervalMs
+                            currentStep = (currentStep + 1) % stepsPerMeasure
+                            
+                            while (accumulatedMs < droneDurMs && running) {
+                                val pVel = calculateVelocity(velocityShaper.next(), currentStep, accentPositions, playCfg.accentConfig)
+                                fireIndependentNote(ic, pVel)
+                                
+                                Thread.sleep(pulseHold.coerceAtLeast(10L))
+                                Thread.sleep(pulseRest.coerceAtLeast(10L))
+                                accumulatedMs += intervalMs
+                                currentStep = (currentStep + 1) % stepsPerMeasure
+                            }
+                        } else {
+                            val holdMs = (intervalMs * playCfg.gatePercentage).toLong()
+                            val restMs = intervalMs - holdMs
+                            Thread.sleep(holdMs.coerceAtLeast(10L))
+                            Thread.sleep(restMs.coerceAtLeast(10L))
+                            currentStep = (currentStep + 1) % stepsPerMeasure
+                        }
+                    } else {
+                        Thread.sleep(intervalMs.coerceAtLeast(10L))
+                        currentStep = (currentStep + 1) % stepsPerMeasure
                     }
                 } catch (e: InterruptedException) {
                     break
@@ -164,6 +257,45 @@ class VoiceEngine(
         } finally {
             silenceCurrentNote()
             running = false
+        }
+    }
+
+    private fun calculateStepDurationMs(bpm: Int, figure: RhythmicFigure, modifier: RhythmicModifier): Long {
+        val quarterNoteMs = 60000.0 / bpm.coerceAtLeast(1)
+        val figureFraction = when (figure) {
+            RhythmicFigure.WHOLE -> 4.0
+            RhythmicFigure.HALF -> 2.0
+            RhythmicFigure.QUARTER -> 1.0
+            RhythmicFigure.EIGHTH -> 0.5
+            RhythmicFigure.SIXTEENTH -> 0.25
+            RhythmicFigure.THIRTY_SECOND -> 0.125
+            RhythmicFigure.SIXTY_FOURTH -> 0.0625
+        }
+        val modifierCoefficient = when (modifier) {
+            RhythmicModifier.STRAIGHT -> 1.0
+            RhythmicModifier.DOTTED -> 1.5
+            RhythmicModifier.TRIPLET -> 2.0 / 3.0
+        }
+        return (quarterNoteMs * figureFraction * modifierCoefficient).toLong()
+    }
+
+    private fun calculateVelocity(baseVelocity: Int, currentStep: Int, accentPositions: List<Int>, config: AccentConfig): Int {
+        if (!config.isEnabled) return baseVelocity
+        val isDownbeat = (currentStep == 0)
+        val isMicroAccent = accentPositions.contains(currentStep) && !isDownbeat
+        return when {
+            isDownbeat -> {
+                val boost = ((127 - baseVelocity) * config.accentDepth).toInt()
+                (baseVelocity + boost).coerceAtMost(127)
+            }
+            isMicroAccent -> {
+                val boost = ((110 - baseVelocity) * (config.accentDepth * 0.7f)).toInt()
+                (baseVelocity + boost).coerceAtMost(115)
+            }
+            else -> {
+                val attenuation = (baseVelocity * (config.accentDepth * 0.4f)).toInt()
+                (baseVelocity - attenuation).coerceAtLeast(40)
+            }
         }
     }
 
@@ -238,7 +370,18 @@ class VoiceEngine(
      * For MELODIC mode with contrast enabled: filters the candidate note pool
      * through DiatonicHarmony.applyMelodicRelation before picking a pitch.
      */
-    private fun fireIndependentNote(ic: IndependentConfig) {
+    private fun calculateMelodicInterval(ic: IndependentConfig): Long {
+        val base = (60_000.0 / ic.bpm.coerceAtLeast(1)).toLong()
+        
+        // Musically coherent phrase timing
+        // Pick a duration from a set of common subdivisions
+        val subdivisions = listOf(0.25f, 0.5f, 1.0f, 1.0f, 1.5f, 2.0f)
+        val multiplier = subdivisions.random()
+        
+        return (base * multiplier).toLong()
+    }
+
+    private fun fireIndependentNote(ic: IndependentConfig, overrideVel: Int = -1, isAnchor: Boolean = false) {
         try {
             val isDrone = ic.style == VoiceStyle.SINGLE_NOTE_DRONE || ic.style == VoiceStyle.EVOLVING_DRONE
             val isChords = ic.style == VoiceStyle.CHORDS
@@ -248,7 +391,7 @@ class VoiceEngine(
             if (!isDrone && !isChords && prevNote >= 0) onNoteOffRaw(prevNote, prevCh)
 
             if (isChords) {
-                fireChordNotes(ic)
+                fireChordNotes(ic, overrideVel, isAnchor)
                 return
             }
 
@@ -258,7 +401,11 @@ class VoiceEngine(
 
             val noteNumber: Int
 
-            if (ic.style == VoiceStyle.SINGLE_NOTE_DRONE) {
+            if (isAnchor) {
+                val scaleIntervals = getScales().getOrNull(ic.selectedScale) ?: listOf(0)
+                val rootOffset = if (ic.rootNote > 0) ic.rootNote - 1 else 0
+                noteNumber = ((octMin + 1) * 12 + scaleIntervals[0] + rootOffset).coerceIn(0, 127)
+            } else if (ic.style == VoiceStyle.SINGLE_NOTE_DRONE) {
                 val selectedOctave = if (octRange <= 1) octMin else octMin + Random.nextInt(octRange)
                 val rootOffset = if (ic.rootNote > 0) ic.rootNote - 1 else 0
                 noteNumber = ((selectedOctave + 1) * 12 + rootOffset).coerceIn(0, 127)
@@ -303,7 +450,7 @@ class VoiceEngine(
                 noteNumber = candidate
             }
 
-            val baseVel = velocityShaper.next()
+            val baseVel = if (overrideVel > 0) overrideVel else velocityShaper.next()
             val gScale = dispatcher?.gestureVelocityScale() ?: 1f
             val vel = (baseVel * gScale).toInt().coerceIn(1, 127)
 
@@ -323,7 +470,7 @@ class VoiceEngine(
     /**
      * Chord emission for V2/V3 CHORDS style.
      */
-    private fun fireChordNotes(ic: IndependentConfig) {
+    private fun fireChordNotes(ic: IndependentConfig, overrideVel: Int = -1, isAnchor: Boolean = false) {
         try {
             val cc = ic.chordConfig
             val scaleIdx = ic.selectedScale
@@ -334,8 +481,13 @@ class VoiceEngine(
             val octMax = ic.maxOctave.coerceAtLeast(octMin)
             val octRange = octMax - octMin + 1
             val oct = if (octRange <= 1) octMin else octMin + Random.nextInt(octRange)
-            val rootMidi = ((oct + 1) * 12 + scaleIntervals[Random.nextInt(scaleIntervals.size)] + rootOffset)
-                .coerceIn(0, 127)
+            
+            val rootMidi = if (isAnchor) {
+                ((oct + 1) * 12 + scaleIntervals[0] + rootOffset).coerceIn(0, 127)
+            } else {
+                ((oct + 1) * 12 + scaleIntervals[Random.nextInt(scaleIntervals.size)] + rootOffset)
+                    .coerceIn(0, 127)
+            }
 
             var chordNotes = DiatonicHarmony.buildChordNotes(rootMidi, scaleIntervals, ic.rootNote, cc)
             chordNotes = DiatonicHarmony.applyInversion(chordNotes, cc.inversionMode, lastChordNotes.toList())
@@ -343,7 +495,7 @@ class VoiceEngine(
 
             if (currentNote >= 0) onNoteOffRaw(currentNote, currentNoteCh)
 
-            val baseVel = velocityShaper.next()
+            val baseVel = if (overrideVel > 0) overrideVel else velocityShaper.next()
             val gScale = dispatcher?.gestureVelocityScale() ?: 1f
             val vel = (baseVel * gScale).toInt().coerceIn(1, 127)
             val ch = ic.midiChannel
@@ -372,7 +524,7 @@ class VoiceEngine(
                     }
                 }
                 if (orderedNotes.size > strumSize) {
-                    val lastDelay = delayMs * strumSize
+                    val lastDelay = delayMs * (strumSize - 1)
                     orderedNotes.drop(strumSize).forEach { note ->
                         mainHandler.postDelayed({
                             if (running) onNoteOnRaw(note, vel, ch)

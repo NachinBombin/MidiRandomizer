@@ -66,7 +66,9 @@ class MelodicEngineDispatcher(
      * Applies gesture density gate internally; returns -1 if the note
      * should be suppressed (caller must handle skip).
      */
-    fun nextDegree(): Int {
+    fun nextDegree(isAnchorStep: Boolean = false): Int {
+        if (isAnchorStep) return 0 // Root note for anchor steps
+
         val gestureFrame = GestureEngine.frame(gestureCfg, beatInPhrase, phraseLen)
         
         // Context awareness

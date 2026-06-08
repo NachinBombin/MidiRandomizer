@@ -30,7 +30,7 @@ enum class VoicingDensity : Parcelable { FULL, DROP5, SHELL, DROP_ROOT }
 enum class TensionLevel : Parcelable { TRIAD, SEVENTH, NINTH, ELEVENTH_THIRTEENTH }
 
 @Parcelize
-enum class RhythmicFigure : Parcelable { SUSTAINED, REATTACK, BROKEN, OSTINATO }
+enum class ChordRhythmFigure : Parcelable { SUSTAINED, REATTACK, BROKEN, OSTINATO }
 
 /**
  * All chord-exclusive parameters.  Defaults reproduce naïve strum behaviour so
@@ -52,7 +52,36 @@ data class ChordConfig(
     val voicingDensity:      VoicingDensity   = VoicingDensity.FULL,
     val tensionLevel:        TensionLevel     = TensionLevel.TRIAD,
     val mutationChance:      Float            = 0f,  // 0..0.30 probability to shift one non-root tone ±1 scale degree
-    val rhythmicFigure:      RhythmicFigure   = RhythmicFigure.SUSTAINED
+    val rhythmicFigure:      ChordRhythmFigure = ChordRhythmFigure.SUSTAINED
+) : Parcelable
+
+// ── Playability Layer ────────────────────────────────────────────────────────
+
+@Parcelize
+enum class RhythmicFigure : Parcelable {
+    WHOLE, HALF, QUARTER, EIGHTH, SIXTEENTH, THIRTY_SECOND, SIXTY_FOURTH
+}
+
+@Parcelize
+enum class RhythmicModifier : Parcelable { STRAIGHT, DOTTED, TRIPLET }
+
+@Parcelize
+data class AccentConfig(
+    val isEnabled: Boolean = false,
+    val accentDepth: Float = 0.5f                // 0.0f (flat dynamics) to 1.0f (extreme volume difference)
+) : Parcelable
+
+@Parcelize
+data class PlayabilityLayerConfig(
+    val isEnabled: Boolean = false,              // The master switch. If false, bypass everything below.
+    val timeSignatureNumerator: Int = 4,         // Beats per measure (e.g., 3, 4, 5, 7, 11)
+    val timeSignatureDenominator: Int = 4,       // Beat unit (4 = Quarter, 8 = Eighth, 16 = Sixteenth)
+    val rhythmicFigure: RhythmicFigure = RhythmicFigure.QUARTER, // Base step resolution
+    val rhythmicModifier: RhythmicModifier = RhythmicModifier.STRAIGHT, // Straight, Dotted, Triplet
+    val oddMeterGrouping: List<Int> = listOf(2, 2), // Asymmetrical groupings (e.g., [3, 2, 2] for 7/8)
+    val accentConfig: AccentConfig = AccentConfig(),
+    val gatePercentage: Float = 0.90f,           // Note length/sustain (0.10f to 1.0f)
+    val isHarmonicAnchorEnabled: Boolean = false // Syncs melodic theory engine to downbeats
 ) : Parcelable
 
 // ── Melodic relation mode (V2/V3 MELODIC mode only) ────────────────────────
@@ -115,7 +144,8 @@ data class IndependentConfig(
     val droneOctaveMin:   Int              = 3,
     val droneOctaveMax:   Int              = 5,
     // Full chord config for V2/V3 CHORDS style
-    val chordConfig:      ChordConfig      = ChordConfig()
+    val chordConfig:      ChordConfig      = ChordConfig(),
+    val playability:      PlayabilityLayerConfig = PlayabilityLayerConfig()
 ) : Parcelable
 
 @Parcelize

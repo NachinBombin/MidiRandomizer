@@ -493,6 +493,259 @@
             android:layout_marginBottom="8dp"/>
 
         <!-- ════════════════════════════════════════════════════════════════
+             PLAYABILITY FRAMEWORK (Optional)
+             ════════════════════════════════════════════════════════════════ -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardPlayability"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="12dp"
+            app:cardBackgroundColor="#1C1B19"
+            app:cardCornerRadius="12dp"
+            app:strokeColor="#393836"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="12dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="PLAYABILITY FRAMEWORK"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:textColor="#FFD700"
+                        android:letterSpacing="0.05"/>
+
+                    <Switch
+                        android:id="@+id/switchPlayability"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:thumbTint="#4F9AA5"
+                        android:trackTint="#262523"/>
+
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/layoutPlayabilityControls"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <!-- Time Signature -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="TIME SIGNATURE"
+                        android:textSize="11sp"
+                        android:textColor="#797876"
+                        android:layout_marginBottom="8dp"/>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="12dp">
+
+                        <Spinner
+                            android:id="@+id/spinnerNumerator"
+                            android:layout_width="0dp"
+                            android:layout_height="48dp"
+                            android:layout_weight="1"
+                            android:background="#262523"/>
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="/"
+                            android:textSize="24sp"
+                            android:textColor="#E8E6E1"
+                            android:paddingStart="12dp"
+                            android:paddingEnd="12dp"/>
+
+                        <Spinner
+                            android:id="@+id/spinnerDenominator"
+                            android:layout_width="0dp"
+                            android:layout_height="48dp"
+                            android:layout_weight="1"
+                            android:background="#262523"/>
+
+                    </LinearLayout>
+
+                    <!-- Odd Meter Grouping -->
+                    <LinearLayout
+                        android:id="@+id/layoutOddMeter"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone"
+                        android:layout_marginBottom="16dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="PULSE GROUPING (ASYYMETRIC)"
+                            android:textSize="11sp"
+                            android:textColor="#797876"
+                            android:layout_marginBottom="6dp"/>
+
+                        <EditText
+                            android:id="@+id/etOddMeterGrouping"
+                            android:layout_width="match_parent"
+                            android:layout_height="48dp"
+                            android:background="#262523"
+                            android:textColor="#E8E6E1"
+                            android:textSize="14sp"
+                            android:paddingStart="12dp"
+                            android:paddingEnd="12dp"
+                            android:hint="e.g. 3,2,2"
+                            android:textColorHint="#4F4E4C"
+                            android:inputType="text"/>
+
+                    </LinearLayout>
+
+                    <!-- Rhythm Resolution -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="RHYTHMIC RESOLUTION"
+                        android:textSize="11sp"
+                        android:textColor="#797876"
+                        android:layout_marginBottom="8dp"/>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginBottom="16dp">
+
+                        <Spinner
+                            android:id="@+id/spinnerPlayabilityFigure"
+                            android:layout_width="0dp"
+                            android:layout_height="48dp"
+                            android:layout_weight="1.5"
+                            android:background="#262523"
+                            android:layout_marginEnd="8dp"/>
+
+                        <Spinner
+                            android:id="@+id/spinnerRhythmicModifier"
+                            android:layout_width="0dp"
+                            android:layout_height="48dp"
+                            android:layout_weight="1"
+                            android:background="#262523"/>
+
+                    </LinearLayout>
+
+                    <!-- Dynamics -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="4dp">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="ACCENT LAYER"
+                            android:textSize="11sp"
+                            android:textColor="#797876"/>
+
+                        <Switch
+                            android:id="@+id/switchAccent"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:scaleX="0.8"
+                            android:scaleY="0.8"
+                            android:thumbTint="#4F9AA5"
+                            android:trackTint="#262523"/>
+
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvAccentDepth"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Accent Depth: 50%"
+                        android:textSize="13sp"
+                        android:textColor="#CDCCCA"
+                        android:layout_marginBottom="4dp"/>
+
+                    <SeekBar
+                        android:id="@+id/seekAccentDepth"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:max="100"
+                        android:progress="50"
+                        android:progressTint="#4F9AA5"
+                        android:thumbTint="#4F9AA5"
+                        android:layout_marginBottom="12dp"/>
+
+                    <TextView
+                        android:id="@+id/tvGateTime"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Gate Time: 90%"
+                        android:textSize="13sp"
+                        android:textColor="#CDCCCA"
+                        android:layout_marginBottom="4dp"/>
+
+                    <SeekBar
+                        android:id="@+id/seekGateTime"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:max="90"
+                        android:progress="80"
+                        android:progressTint="#4F9AA5"
+                        android:thumbTint="#4F9AA5"
+                        android:layout_marginBottom="16dp"/>
+
+                    <!-- Harmonic Anchor -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Sync Scale Anchor to Downbeats"
+                            android:textSize="13sp"
+                            android:textColor="#E8E6E1"/>
+
+                        <Switch
+                            android:id="@+id/switchHarmonicAnchor"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:thumbTint="#4F9AA5"
+                            android:trackTint="#262523"/>
+
+                    </LinearLayout>
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- ════════════════════════════════════════════════════════════════
              CHORD SETTINGS PANEL  (visible only when Style = Chords)
              ════════════════════════════════════════════════════════════════ -->
         <LinearLayout

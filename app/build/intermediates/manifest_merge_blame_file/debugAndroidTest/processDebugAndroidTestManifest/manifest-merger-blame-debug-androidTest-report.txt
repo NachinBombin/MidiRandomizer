@@ -3,24 +3,24 @@
 3    package="com.nachinbombin.midirandomizer.test" >
 4
 5    <uses-sdk
-5-->C:\Users\solid\StudioProjects\MidiRandomizer11\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest16550972395944828531.xml:5:5-74
+5-->C:\Users\solid\StudioProjects\MidiRandomizer11\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest9570016870634469842.xml:5:5-74
 6        android:minSdkVersion="24"
-6-->C:\Users\solid\StudioProjects\MidiRandomizer11\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest16550972395944828531.xml:5:15-41
+6-->C:\Users\solid\StudioProjects\MidiRandomizer11\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest9570016870634469842.xml:5:15-41
 7        android:targetSdkVersion="34" />
-7-->C:\Users\solid\StudioProjects\MidiRandomizer11\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest16550972395944828531.xml:5:42-71
+7-->C:\Users\solid\StudioProjects\MidiRandomizer11\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest9570016870634469842.xml:5:42-71
 8
 9    <instrumentation
-9-->C:\Users\solid\StudioProjects\MidiRandomizer11\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest16550972395944828531.xml:7:5-11:81
+9-->C:\Users\solid\StudioProjects\MidiRandomizer11\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest9570016870634469842.xml:7:5-11:81
 10        android:name="androidx.test.runner.AndroidJUnitRunner"
-10-->C:\Users\solid\StudioProjects\MidiRandomizer11\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest16550972395944828531.xml:7:22-76
+10-->C:\Users\solid\StudioProjects\MidiRandomizer11\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest9570016870634469842.xml:7:22-76
 11        android:functionalTest="false"
-11-->C:\Users\solid\StudioProjects\MidiRandomizer11\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest16550972395944828531.xml:10:22-52
+11-->C:\Users\solid\StudioProjects\MidiRandomizer11\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest9570016870634469842.xml:10:22-52
 12        android:handleProfiling="false"
-12-->C:\Users\solid\StudioProjects\MidiRandomizer11\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest16550972395944828531.xml:9:22-53
+12-->C:\Users\solid\StudioProjects\MidiRandomizer11\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest9570016870634469842.xml:9:22-53
 13        android:label="Tests for com.nachinbombin.midirandomizer"
-13-->C:\Users\solid\StudioProjects\MidiRandomizer11\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest16550972395944828531.xml:11:22-79
+13-->C:\Users\solid\StudioProjects\MidiRandomizer11\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest9570016870634469842.xml:11:22-79
 14        android:targetPackage="com.nachinbombin.midirandomizer" />
-14-->C:\Users\solid\StudioProjects\MidiRandomizer11\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest16550972395944828531.xml:8:22-77
+14-->C:\Users\solid\StudioProjects\MidiRandomizer11\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest9570016870634469842.xml:8:22-77
 15
 16    <application
 16-->INJECTED

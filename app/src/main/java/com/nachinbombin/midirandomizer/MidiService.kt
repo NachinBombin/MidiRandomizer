@@ -65,7 +65,8 @@ class MidiService : Service() {
         val droneMinBeats: Int              = 16,
         val droneMaxBeats: Int              = 64,
         // Full chord configuration – defaults reproduce naïve behaviour
-        val chordConfig:   ChordConfig      = ChordConfig()
+        val chordConfig:   ChordConfig      = ChordConfig(),
+        val playability:   PlayabilityLayerConfig = PlayabilityLayerConfig()
     )
 
     private var voice2Engine: VoiceEngine? = null
@@ -176,7 +177,7 @@ class MidiService : Service() {
         rebuildV1ProHelpers()
 
         if (isPlaying && (styleChanged || (p.style == VoiceStyle.SINGLE_NOTE_DRONE &&
-                (rootChanged || scaleChanged || octaveChanged)))) {
+                (rootChanged || scaleChanged || octaveChanged || p.playability.isEnabled)))) {
             val old = scheduler
             scheduler = null
             old?.shutdownNow()
@@ -481,27 +482,68 @@ class MidiService : Service() {
     }
 
     private val noteLoop = Runnable {
+        var currentStep = 0
         while (isPlaying) {
             try {
                 val p = v1Params
+                val playCfg = p.playability
                 
+                // ── Timing Calculation ──
+                val intervalMs = if (playCfg.isEnabled) {
+                    calculateStepDurationMs(p.bpm, playCfg.rhythmicFigure, playCfg.rhythmicModifier)
+                } else {
+                    calculateV1Interval()
+                }
+
+                // ── Metric Tracking ──
+                val stepsPerMeasure = if (playCfg.isEnabled) {
+                    val figureDenominator = when (playCfg.rhythmicFigure) {
+                        RhythmicFigure.WHOLE -> 1; RhythmicFigure.HALF -> 2; RhythmicFigure.QUARTER -> 4
+                        RhythmicFigure.EIGHTH -> 8; RhythmicFigure.SIXTEENTH -> 16
+                        RhythmicFigure.THIRTY_SECOND -> 32; RhythmicFigure.SIXTY_FOURTH -> 64
+                    }
+                    (playCfg.timeSignatureNumerator * figureDenominator) / playCfg.timeSignatureDenominator
+                } else 1
+
+                val accentPositions = if (playCfg.isEnabled) {
+                    val positions = mutableListOf(0)
+                    var sum = 0
+                    for (group in playCfg.oddMeterGrouping) {
+                        sum += group
+                        if (sum < stepsPerMeasure) positions.add(sum)
+                    }
+                    positions
+                } else listOf(0)
+
                 // ── Look-ahead ──
                 while (v1FutureBuffer.size < futureBufferLimit) {
                     val lastNotes = if (v1FutureBuffer.isNotEmpty()) v1FutureBuffer.last().notes else lastChordNotes
-                    val nextNoteOrChord = generateNextV1Notes(lastNotes)
+                    val isAnchor = playCfg.isEnabled && playCfg.isHarmonicAnchorEnabled && currentStep == 0
+                    val nextNoteOrChord = generateNextV1Notes(lastNotes, isAnchor)
                     val nextInterval = calculateV1Interval()
                     v1FutureBuffer.add(MelodicEvent(nextNoteOrChord, 0, nextInterval))
                 }
                 
                 val currentEvent = v1FutureBuffer.removeAt(0)
                 
-                if (p.style == VoiceStyle.SINGLE_NOTE_DRONE) {
+                val isSingleDrone = p.style == VoiceStyle.SINGLE_NOTE_DRONE
+                val isEvolvingDrone = p.style == VoiceStyle.EVOLVING_DRONE
+                val isDrone = isSingleDrone || isEvolvingDrone
+
+                if (isDrone && !playCfg.isEnabled) {
                     sendV1NotesRaw(currentEvent.notes)
-                    try { Thread.sleep(Long.MAX_VALUE) } catch (_: InterruptedException) { break }
-                    break
+                    if (isSingleDrone) {
+                        try { Thread.sleep(Long.MAX_VALUE) } catch (_: InterruptedException) { break }
+                        break
+                    } else {
+                        // Evolving drone with playability OFF: play full duration
+                        Thread.sleep(currentEvent.durationMs.coerceAtLeast(10L))
+                        continue
+                    }
                 }
 
-                val euclidOn = p.timingMode == TIMING_EUCLIDEAN
+                val ps = p.proSettings
+                val euclidOn = ps.euclideanEnabled && p.timingMode == TIMING_EUCLIDEAN
                 val isOnset = if (euclidOn) {
                     val pattern = v1Euclidean
                     val hit = pattern.getOrElse(v1EuclideanStep) { false }
@@ -513,10 +555,52 @@ class MidiService : Service() {
 
                 if (isOnset) {
                     v1MelodicDispatcher?.advanceBeat()
-                    sendV1NotesRaw(currentEvent.notes)
+                    
+                    // ── Expression: Velocity Shaping ──
+                    val baseVel = v1VelocityShaper.next()
+                    val shapedVel = if (playCfg.isEnabled) {
+                        calculateVelocity(baseVel, currentStep, accentPositions, playCfg.accentConfig)
+                    } else baseVel
+                    
+                    sendV1NotesRaw(currentEvent.notes, shapedVel)
                 }
 
-                Thread.sleep(currentEvent.durationMs.coerceAtLeast(10L))
+                // ── Gating: Note On -> Delay -> Note Off ──
+                if (playCfg.isEnabled) {
+                    // For Evolving Drones, we need to track if we're still within the "beat duration" of the drone note
+                    if (isEvolvingDrone) {
+                        var accumulatedMs = 0L
+                        // The first pulse already fired with sendV1NotesRaw above.
+                        // We wait for the first pulse duration.
+                        val pulseHold = (intervalMs * playCfg.gatePercentage).toLong()
+                        val pulseRest = intervalMs - pulseHold
+                        Thread.sleep(pulseHold.coerceAtLeast(10L))
+                        Thread.sleep(pulseRest.coerceAtLeast(10L))
+                        accumulatedMs += intervalMs
+                        currentStep = (currentStep + 1) % stepsPerMeasure
+
+                        while (accumulatedMs < currentEvent.durationMs && isPlaying) {
+                            // Re-calculate velocity for each subsequent pulse
+                            val pVel = calculateVelocity(v1VelocityShaper.next(), currentStep, accentPositions, playCfg.accentConfig)
+                            sendV1NotesRaw(currentEvent.notes, pVel)
+
+                            Thread.sleep(pulseHold.coerceAtLeast(10L))
+                            Thread.sleep(pulseRest.coerceAtLeast(10L))
+                            
+                            accumulatedMs += intervalMs
+                            currentStep = (currentStep + 1) % stepsPerMeasure
+                        }
+                    } else {
+                        val holdMs = (intervalMs * playCfg.gatePercentage).toLong()
+                        val restMs = intervalMs - holdMs
+                        Thread.sleep(holdMs.coerceAtLeast(10L))
+                        Thread.sleep(restMs.coerceAtLeast(10L))
+                        currentStep = (currentStep + 1) % stepsPerMeasure
+                    }
+                } else {
+                    Thread.sleep(intervalMs.coerceAtLeast(10L))
+                    currentStep = (currentStep + 1) % stepsPerMeasure
+                }
             } catch (e: InterruptedException) {
                 break
             } catch (e: Exception) {
@@ -526,11 +610,52 @@ class MidiService : Service() {
         }
     }
 
-    private fun generateNextV1Notes(lastNotes: List<Int>): List<Int> {
+    private fun calculateStepDurationMs(bpm: Int, figure: RhythmicFigure, modifier: RhythmicModifier): Long {
+        val quarterNoteMs = 60000.0 / bpm.coerceAtLeast(1)
+        val figureFraction = when (figure) {
+            RhythmicFigure.WHOLE -> 4.0
+            RhythmicFigure.HALF -> 2.0
+            RhythmicFigure.QUARTER -> 1.0
+            RhythmicFigure.EIGHTH -> 0.5
+            RhythmicFigure.SIXTEENTH -> 0.25
+            RhythmicFigure.THIRTY_SECOND -> 0.125
+            RhythmicFigure.SIXTY_FOURTH -> 0.0625
+        }
+        val modifierCoefficient = when (modifier) {
+            RhythmicModifier.STRAIGHT -> 1.0
+            RhythmicModifier.DOTTED -> 1.5
+            RhythmicModifier.TRIPLET -> 2.0 / 3.0
+        }
+        return (quarterNoteMs * figureFraction * modifierCoefficient).toLong()
+    }
+
+    private fun calculateVelocity(baseVelocity: Int, currentStep: Int, accentPositions: List<Int>, config: AccentConfig): Int {
+        if (!config.isEnabled) return baseVelocity
+
+        val isDownbeat = (currentStep == 0)
+        val isMicroAccent = accentPositions.contains(currentStep) && !isDownbeat
+
+        return when {
+            isDownbeat -> {
+                val boost = ((127 - baseVelocity) * config.accentDepth).toInt()
+                (baseVelocity + boost).coerceAtMost(127)
+            }
+            isMicroAccent -> {
+                val boost = ((110 - baseVelocity) * (config.accentDepth * 0.7f)).toInt()
+                (baseVelocity + boost).coerceAtMost(115)
+            }
+            else -> {
+                val attenuation = (baseVelocity * (config.accentDepth * 0.4f)).toInt()
+                (baseVelocity - attenuation).coerceAtLeast(40)
+            }
+        }
+    }
+
+    private fun generateNextV1Notes(lastNotes: List<Int>, isAnchor: Boolean = false): List<Int> {
         val p = v1Params
         if (p.style == VoiceStyle.CHORDS) {
             val intervals = scales.getOrNull(p.scale) ?: return listOf(60)
-            val rawDegree = v1MelodicDispatcher?.nextDegree() ?: Random.nextInt(intervals.size)
+            val rawDegree = if (isAnchor) 0 else (v1MelodicDispatcher?.nextDegree() ?: Random.nextInt(intervals.size))
             if (rawDegree < 0) return emptyList()
             val degreeIdx      = rawDegree.coerceIn(0, intervals.size - 1)
             val interval       = intervals[degreeIdx]
@@ -543,7 +668,7 @@ class MidiService : Service() {
             
             // Handle Rhythmic Figure (Broken, Ostinato, etc.)
             return when (p.chordConfig.rhythmicFigure) {
-                RhythmicFigure.BROKEN -> {
+                ChordRhythmFigure.BROKEN -> {
                     val bs = if (chordNotes.size >= 3) {
                         listOf(chordNotes[0], chordNotes[chordNotes.lastIndex], chordNotes[1], chordNotes[chordNotes.lastIndex])
                     } else chordNotes
@@ -551,7 +676,7 @@ class MidiService : Service() {
                     ostinatoStep++
                     listOf(note)
                 }
-                RhythmicFigure.OSTINATO -> {
+                ChordRhythmFigure.OSTINATO -> {
                     val pattern = booleanArrayOf(true, false, true, true)
                     val hit = pattern[ostinatoStep % pattern.size]
                     ostinatoStep++
@@ -564,7 +689,7 @@ class MidiService : Service() {
             return listOf(((p.minOctave + 1) * 12 + rootOffset).coerceIn(0, 127))
         } else {
             val intervals = scales.getOrNull(p.scale) ?: return listOf(60)
-            val rawDegree = v1MelodicDispatcher?.nextDegree() ?: Random.nextInt(intervals.size)
+            val rawDegree = if (isAnchor) 0 else (v1MelodicDispatcher?.nextDegree() ?: Random.nextInt(intervals.size))
             if (rawDegree < 0) return emptyList()
             val degreeIdx      = rawDegree.coerceIn(0, intervals.size - 1)
             val interval       = intervals[degreeIdx]
@@ -575,7 +700,7 @@ class MidiService : Service() {
         }
     }
 
-    private fun sendV1NotesRaw(notes: List<Int>) {
+    private fun sendV1NotesRaw(notes: List<Int>, overrideVel: Int = -1) {
         if (notes.isEmpty()) return
         val p = v1Params
         
@@ -583,7 +708,7 @@ class MidiService : Service() {
             val cc = p.chordConfig
             lastChordNotes.forEach { sendNoteOffRaw(1, it, p.channel) }
             
-            val baseVel = v1VelocityShaper.next()
+            val baseVel = if (overrideVel > 0) overrideVel else v1VelocityShaper.next()
             val gestureScale = v1MelodicDispatcher?.gestureVelocityScale() ?: 1f
             val vel = (baseVel * gestureScale).toInt().coerceIn(1, 127)
 
@@ -628,7 +753,7 @@ class MidiService : Service() {
             v1CurrentNote = note
             updateContextBuffer(1, notes)
             
-            val baseVel = v1VelocityShaper.next()
+            val baseVel = if (overrideVel > 0) overrideVel else v1VelocityShaper.next()
             val gestureScale = v1MelodicDispatcher?.gestureVelocityScale() ?: 1f
             val vel = (baseVel * gestureScale).toInt().coerceIn(1, 127)
             
